@@ -1,0 +1,216 @@
+namespace Lazy_App_Codex_Core
+{
+    public partial class Form1 : Form
+    {
+        private readonly HotkeyManager _hotkeys = new HotkeyManager();
+        private readonly ScriptConfigRepository _configRepository = new ScriptConfigRepository("config.json");
+        private readonly ScriptRunner _runner = new ScriptRunner();
+
+        private Dictionary<string, ScriptModel> _scripts = new Dictionary<string, ScriptModel>();
+        private CancellationTokenSource _runCts;
+        private Task _runTask;
+        private bool _isRunning;
+
+        public Form1()
+        {
+            InitializeComponent();
+
+            Load += OnLoad;
+            Resize += OnResize;
+
+            ddlOffset.SelectedIndex = 2;
+
+            LoadConfig();
+            _hotkeys.LoadFromConfig();
+            SetRunningState(false);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            HotkeyAction action = _hotkeys.HandleMessage(m);
+            if (action == HotkeyAction.Toggle)
+            {
+                btnRun.PerformClick();
+            }
+            else if (action == HotkeyAction.Stop)
+            {
+                _ = StopRunAsync();
+            }
+
+            base.WndProc(ref m);
+        }
+
+        private void OnLoad(object sender, EventArgs e)
+        {
+            RegisterHotkeysForWindowState();
+        }
+
+        private void OnResize(object sender, EventArgs e)
+        {
+            if (WindowState == FormWindowState.Minimized)
+            {
+                _hotkeys.UnregisterAll(Handle);
+                UpdateHotkeyStatus(false);
+                return;
+            }
+
+            RegisterHotkeysForWindowState();
+        }
+
+        private void RegisterHotkeysForWindowState()
+        {
+            bool success = _hotkeys.RegisterIfActive(Handle, WindowState == FormWindowState.Minimized);
+            UpdateHotkeyStatus(success);
+        }
+
+        private void LoadConfig()
+        {
+            _scripts = _configRepository.Load();
+
+            ddlScript.Items.Clear();
+            ddlScript.Items.Insert(0, "Choose a script");
+            ddlScript.SelectedIndex = 0;
+
+            foreach (var key in _scripts.Keys)
+            {
+                ddlScript.Items.Add(key);
+            }
+        }
+
+        private async void btnRun_Click(object sender, EventArgs e)
+        {
+            if (_isRunning)
+            {
+                await StopRunAsync();
+                return;
+            }
+
+            if (ddlScript.SelectedIndex <= 0)
+            {
+                MessageBox.Show("Select a script before run");
+                return;
+            }
+
+            await StartRunAsync();
+        }
+
+        private async Task StartRunAsync()
+        {
+            string selectedScriptName = ddlScript.SelectedItem.ToString();
+            if (!_scripts.ContainsKey(selectedScriptName))
+            {
+                MessageBox.Show($"Missing config ({selectedScriptName})");
+                return;
+            }
+
+            ScriptModel selectedScript = _scripts[selectedScriptName];
+            _runCts = new CancellationTokenSource();
+            SetRunningState(true);
+            taLog.Clear();
+
+            _runTask = RunSelectedScriptAsync(selectedScript, _runCts.Token);
+            try
+            {
+                await _runTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                _runTask = null;
+                SetRunningState(false);
+            }
+        }
+
+        private async Task RunSelectedScriptAsync(ScriptModel script, CancellationToken token)
+        {
+            int yOffset = GetSelectedYOffset();
+            await _runner.RunAsync(script, ddlOffset.SelectedIndex, yOffset, token, UpdateLabelStatus);
+        }
+
+        private int GetSelectedYOffset()
+        {
+            int value;
+            if (ddlOffset.SelectedItem != null && int.TryParse(ddlOffset.SelectedItem.ToString(), out value))
+            {
+                return value * 5;
+            }
+
+            return 0;
+        }
+
+        private async Task StopRunAsync()
+        {
+            if (!_isRunning)
+            {
+                return;
+            }
+
+            _runCts?.Cancel();
+            try
+            {
+                if (_runTask != null)
+                {
+                    await _runTask;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private void SetRunningState(bool isRunning)
+        {
+            _isRunning = isRunning;
+            ddlScript.Enabled = !isRunning;
+            ddlOffset.Enabled = !isRunning;
+            btnRun.Text = isRunning ? "Stop" : "Run (F3)";
+
+            if (isRunning)
+            {
+                UpdateLabelStatus("CLICKING NOW", Color.Red);
+            }
+            else
+            {
+                UpdateLabelStatus("STOP WORKING", Color.Blue);
+            }
+        }
+
+        private void UpdateLabelStatus(string text, Color color)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => UpdateLabelStatus(text, color)));
+                return;
+            }
+
+            lblStatus.Text = text;
+            lblStatus.ForeColor = color;
+            WriteLog(text);
+        }
+
+        public void WriteLog(string text)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => WriteLog(text)));
+                return;
+            }
+
+            taLog.AppendText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + ": " + text + Environment.NewLine);
+            taLog.ScrollToCaret();
+        }
+
+        private void UpdateHotkeyStatus(bool success)
+        {
+            btnStatus.BackColor = success ? Color.Green : Color.Red;
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            _hotkeys.UnregisterAll(Handle);
+            _runCts?.Cancel();
+        }
+    }
+}
