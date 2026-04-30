@@ -69,7 +69,8 @@ namespace Lazy_App_Codex_Core
             foreach (var property in scriptsNode.Properties())
             {
                 if (property.Name.Equals("settings", StringComparison.OrdinalIgnoreCase) ||
-                    property.Name.Equals("scripts", StringComparison.OrdinalIgnoreCase))
+                    property.Name.Equals("scripts", StringComparison.OrdinalIgnoreCase) ||
+                    property.Name.Equals("offset", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -97,7 +98,7 @@ namespace Lazy_App_Codex_Core
                 return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? Offset13X : Offset13Y;
             }
 
-            return 0;
+            return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? OffsetX : OffsetY;
         }
 
         private static ScriptModel ParseScript(JObject scriptObj)
@@ -153,10 +154,10 @@ namespace Lazy_App_Codex_Core
             return new JObject
             {
                 [nameof(StepAction.Act)] = NormalizeAction(ReadString(stepObj, defaults, "leftclick", "act", "a")),
-                [nameof(StepAction.ScrX)] = ReadInt(stepObj, defaults, 0, "scrX", "sx", "scr", "s"),
-                [nameof(StepAction.ScrY)] = ReadInt(stepObj, defaults, 1, "scrY", "sy", "scr", "s"),
-                [nameof(StepAction.ScrX2)] = ReadNullableInt(stepObj, defaults, 0, "scrX2", "sx2", "scr2", "s2"),
-                [nameof(StepAction.ScrY2)] = ReadNullableInt(stepObj, defaults, 1, "scrY2", "sy2", "scr2", "s2"),
+                [nameof(StepAction.ScrX)] = ReadInt(stepObj, defaults, 0, "scrX", "sx", "x", "posX", "px", "scr", "s", "p"),
+                [nameof(StepAction.ScrY)] = ReadInt(stepObj, defaults, 1, "scrY", "sy", "y", "posY", "py", "scr", "s", "p"),
+                [nameof(StepAction.ScrX2)] = ReadNullableInt(stepObj, defaults, 0, "scrX2", "sx2", "x2", "posX2", "px2", "scr2", "s2", "p2"),
+                [nameof(StepAction.ScrY2)] = ReadNullableInt(stepObj, defaults, 1, "scrY2", "sy2", "y2", "posY2", "py2", "scr2", "s2", "p2"),
                 [nameof(StepAction.RandX)] = ReadInt(stepObj, defaults, 0, "randX", "rx", "rand", "r"),
                 [nameof(StepAction.RandY)] = ReadInt(stepObj, defaults, 1, "randY", "ry", "rand", "r"),
                 [nameof(StepAction.Sleep_Min)] = ReadInt(stepObj, defaults, 0, "sleep_min", "smin", "sleep", "t"),
@@ -182,7 +183,7 @@ namespace Lazy_App_Codex_Core
             {
                 "left" => "leftclick",
                 "right" => "rightclick",
-                "drag" => "leftdrag",
+                "drag" => "drag",
                 _ => action.Trim().ToLowerInvariant()
             };
         }

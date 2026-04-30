@@ -149,10 +149,11 @@ namespace Lazy_App_Codex_Core
 
             if (step.Act == "drag" || step.Act == "leftdrag" || step.Act == "rightdrag" || step.Act == "updrag" || step.Act == "downdrag")
             {
-                var p1 = MouseHelper.WithRandomDrag(step.ScrX, step.ScrY, step.RandX, step.RandY, false);
-                var p2 = MouseHelper.WithRandomDrag(step.ScrX2 ?? step.ScrX, step.ScrY2 ?? step.ScrY, step.RandX, step.RandY, false);
+                var p1 = MouseHelper.WithRandom(step.ScrX, step.ScrY, step.RandX, step.RandY);
+                var end = GetDragEndPoint(step);
+                var p2 = MouseHelper.WithRandom(end.x, end.y, step.RandX, step.RandY);
                 return new PlannedStep(
-                    $"DRAG ({p1.Item1},{p1.Item2}):({p2.Item1},{p2.Item2}):{randSleep}(s)",
+                    $"{step.Act.ToUpperInvariant()} ({p1.Item1},{p1.Item2}):({p2.Item1},{p2.Item2}):{randSleep}(s)",
                     $"shell input swipe {p1.Item1} {p1.Item2} {p2.Item1} {p2.Item2} 150",
                     "swipe",
                     "ADB OFF: SKIP SWIPE",
@@ -160,6 +161,25 @@ namespace Lazy_App_Codex_Core
             }
 
             return new PlannedStep($"UNKNOWN ACTION {step.Act}:{randSleep}(s)", "", "", "ADB OFF: SKIP UNKNOWN", randSleep);
+        }
+
+        private static (int x, int y) GetDragEndPoint(StepAction step)
+        {
+            if (step.ScrX2.HasValue || step.ScrY2.HasValue)
+            {
+                return (step.ScrX2 ?? step.ScrX, step.ScrY2 ?? step.ScrY);
+            }
+
+            int distanceX = Math.Max(1, Math.Abs(step.RandX));
+            int distanceY = Math.Max(1, Math.Abs(step.RandY));
+            return step.Act switch
+            {
+                "leftdrag" => (step.ScrX - distanceX, step.ScrY),
+                "rightdrag" => (step.ScrX + distanceX, step.ScrY),
+                "updrag" => (step.ScrX, step.ScrY - distanceY),
+                "downdrag" => (step.ScrX, step.ScrY + distanceY),
+                _ => (step.ScrX, step.ScrY)
+            };
         }
 
         private static async Task ExecutePlannedStepAsync(
