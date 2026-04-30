@@ -19,10 +19,6 @@ namespace Lazy_App_Codex_Core
     public class StepAction
     {
         public string Act { get; set; } = "";   // e.g. leftclick, leftdrag, rightclick
-        public int PosX { get; set; }
-        public int PosY { get; set; }
-        public int? PosX2 { get; set; } // FOR DRAGGING
-        public int? PosY2 { get; set; } // FOR DRAGGING
         public int ScrX { get; set; }
         public int ScrY { get; set; }
         public int? ScrX2 { get; set; } // FOR DRAGGING

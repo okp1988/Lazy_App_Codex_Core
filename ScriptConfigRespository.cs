@@ -116,10 +116,6 @@ namespace Lazy_App_Codex_Core
             return new JObject
             {
                 [nameof(StepAction.Act)] = NormalizeAction(ReadString(stepObj, defaults, "leftclick", "act", "a")),
-                [nameof(StepAction.PosX)] = ReadInt(stepObj, defaults, 0, "posX", "x", "pos", "p"),
-                [nameof(StepAction.PosY)] = ReadInt(stepObj, defaults, 1, "posY", "y", "pos", "p"),
-                [nameof(StepAction.PosX2)] = ReadNullableInt(stepObj, defaults, 0, "posX2", "x2", "pos2", "p2"),
-                [nameof(StepAction.PosY2)] = ReadNullableInt(stepObj, defaults, 1, "posY2", "y2", "pos2", "p2"),
                 [nameof(StepAction.ScrX)] = ReadInt(stepObj, defaults, 0, "scrX", "sx", "scr", "s"),
                 [nameof(StepAction.ScrY)] = ReadInt(stepObj, defaults, 1, "scrY", "sy", "scr", "s"),
                 [nameof(StepAction.ScrX2)] = ReadNullableInt(stepObj, defaults, 0, "scrX2", "sx2", "scr2", "s2"),
