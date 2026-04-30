@@ -19,36 +19,79 @@ namespace Lazy_App_Codex_Core
             bool isAdbEnabled)
         {
             var adb = new AdbShellController();
-            int randSleep;
 
-            int maxLoop = script.Duration == 0 ? short.MaxValue : script.Duration;
-            for (int loop = 1; loop <= maxLoop; loop++)
+            if (script.Duration <= 0)
             {
-                token.ThrowIfCancellationRequested();
-                onStatus($"CLICKING {loop}/{maxLoop}", Color.Red);
-
-                for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
+                long loop = 1;
+                while (true)
                 {
-                    var step = script.Config[stepIndex];
-                    token.ThrowIfCancellationRequested();
-                    randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
-
-                    int stepOffset = stepIndex == 0 ? selectedOffset : 0;
-                    await ExecuteStepAsync(step, stepOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
-
-                    if (randSleep > 0)
-                    {
-                        await Task.Delay(randSleep * 1000, token);
-                    }
+                    await RunLoopAsync(script, loop, "unlimited", selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+                    loop++;
                 }
+            }
 
-                randSleep = script.Interval_Max > 0 ? RandomBetween(script.Interval_Min, script.Interval_Max) : 0;
-                onStatus($"DONE {loop}/{maxLoop}:{randSleep}(s)", Color.Red);
+            for (long loop = 1; loop <= script.Duration; loop++)
+            {
+                await RunLoopAsync(script, loop, script.Duration.ToString(), selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+            }
+        }
+
+        private async Task RunLoopAsync(
+            ScriptModel script,
+            long loop,
+            string loopTotal,
+            int selectedOffset,
+            string selectedOffsetAxis,
+            AdbShellController adb,
+            CancellationToken token,
+            Action<string, Color> onStatus,
+            bool isAdbEnabled)
+        {
+            token.ThrowIfCancellationRequested();
+            onStatus($"CLICKING {loop}/{loopTotal}", Color.Red);
+
+            for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
+            {
+                var step = script.Config[stepIndex];
+                token.ThrowIfCancellationRequested();
+                int randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
+
+                int stepOffset = stepIndex == 0 ? selectedOffset : 0;
+                await ExecuteStepAsync(step, stepOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
 
                 if (randSleep > 0)
                 {
                     await Task.Delay(randSleep * 1000, token);
                 }
+            }
+
+            int intervalSleep = script.Interval_Max > 0 ? RandomBetween(script.Interval_Min, script.Interval_Max) : 0;
+            onStatus($"DONE {loop}/{loopTotal}:{intervalSleep}(s)", Color.Red);
+
+            if (intervalSleep > 0)
+            {
+                await Task.Delay(intervalSleep * 1000, token);
+            }
+        }
+
+        private static async Task RunAdbCommandAsync(
+            AdbShellController adb,
+            string args,
+            string action,
+            CancellationToken token)
+        {
+            var (exitCode, stdout, stderr) = await adb.RunCaptureAsync(args, token);
+            token.ThrowIfCancellationRequested();
+            EnsureAdbSucceeded(exitCode, action, stdout, stderr);
+        }
+
+        private static void EnsureAdbSucceeded(int exitCode, string action, string stdout, string stderr)
+        {
+            if (exitCode != 0)
+            {
+                string detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                detail = string.IsNullOrWhiteSpace(detail) ? "No ADB error output." : detail.Trim();
+                throw new InvalidOperationException($"ADB {action} failed with exit code {exitCode}: {detail}");
             }
         }
 
@@ -84,7 +127,7 @@ namespace Lazy_App_Codex_Core
                     return;
                 }
 
-                await adb.TapAsync(x, y, token);
+                await RunAdbCommandAsync(adb, $"shell input tap {x} {y}", "tap", token);
                 return;
             }
 
@@ -97,7 +140,7 @@ namespace Lazy_App_Codex_Core
                     return;
                 }
 
-                await adb.KeyAsync(AndroidKeys.BACK, token);
+                await RunAdbCommandAsync(adb, $"shell input keyevent {AndroidKeys.BACK}", "key back", token);
                 return;
             }
 
@@ -112,7 +155,7 @@ namespace Lazy_App_Codex_Core
                     return;
                 }
 
-                await adb.SwipeAsync(p1.Item1, p1.Item2, p2.Item1, p2.Item2, 150, token);
+                await RunAdbCommandAsync(adb, $"shell input swipe {p1.Item1} {p1.Item2} {p2.Item1} {p2.Item2} 150", "swipe", token);
             }
         }
 

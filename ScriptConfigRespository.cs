@@ -16,6 +16,10 @@ namespace Lazy_App_Codex_Core
         public AppSettings Settings { get; private set; } = new AppSettings();
         public int OffsetX { get; private set; } = 5;
         public int OffsetY { get; private set; } = 5;
+        public int Offset26X { get; private set; } = 5;
+        public int Offset26Y { get; private set; } = 5;
+        public int Offset13X { get; private set; } = 5;
+        public int Offset13Y { get; private set; } = 5;
 
         public ScriptConfigRepository(string configPath)
         {
@@ -27,6 +31,10 @@ namespace Lazy_App_Codex_Core
             Settings = new AppSettings();
             OffsetX = 5;
             OffsetY = 5;
+            Offset26X = 5;
+            Offset26Y = 5;
+            Offset13X = 5;
+            Offset13Y = 5;
 
             if (!File.Exists(_configPath))
             {
@@ -51,6 +59,10 @@ namespace Lazy_App_Codex_Core
             {
                 OffsetX = ReadIntOrFallback(offsetObj, 5, 0, "offsetX", "ox", "x", "s");
                 OffsetY = ReadIntOrFallback(offsetObj, 5, 1, "offsetY", "oy", "y", "s");
+                Offset26X = ReadIntOrFallback(offsetObj, OffsetX, 0, "s26");
+                Offset26Y = ReadIntOrFallback(offsetObj, OffsetY, 1, "s26");
+                Offset13X = ReadIntOrFallback(offsetObj, OffsetX, 0, "s13");
+                Offset13Y = ReadIntOrFallback(offsetObj, OffsetY, 1, "s13");
             }
 
             var scripts = new Dictionary<string, ScriptModel>(StringComparer.OrdinalIgnoreCase);
@@ -71,6 +83,21 @@ namespace Lazy_App_Codex_Core
             }
 
             return scripts;
+        }
+
+        public int GetOffsetUnitForScript(string scriptName, string axis)
+        {
+            if (scriptName.Contains("26", StringComparison.OrdinalIgnoreCase))
+            {
+                return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? Offset26X : Offset26Y;
+            }
+
+            if (scriptName.Contains("13", StringComparison.OrdinalIgnoreCase))
+            {
+                return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? Offset13X : Offset13Y;
+            }
+
+            return 0;
         }
 
         private static ScriptModel ParseScript(JObject scriptObj)
