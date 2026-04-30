@@ -16,7 +16,8 @@ namespace Lazy_App_Codex_Core
             int selectedOffset,
             string selectedOffsetAxis,
             CancellationToken token,
-            Action<string, Color> onStatus)
+            Action<string, Color> onStatus,
+            bool isAdbEnabled)
         {
             var adb = new AdbShellController();
             int randSleep;
@@ -32,7 +33,7 @@ namespace Lazy_App_Codex_Core
                     token.ThrowIfCancellationRequested();
                     randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
 
-                    await ExecuteStepAsync(step, clickType, selectedOffset, selectedOffsetAxis, adb, randSleep, token, onStatus);
+                    await ExecuteStepAsync(step, clickType, selectedOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
 
                     if (randSleep > 0)
                     {
@@ -58,7 +59,8 @@ namespace Lazy_App_Codex_Core
             AdbShellController adb,
             int randSleep,
             CancellationToken token,
-            Action<string, Color> onStatus)
+            Action<string, Color> onStatus,
+            bool isAdbEnabled)
         {
             if (step.Act == "leftclick" || step.Act == "left")
             {
@@ -76,6 +78,12 @@ namespace Lazy_App_Codex_Core
                 }
 
                 onStatus($"LEFT CLICK ({x},{y}):{randSleep}(s)", Color.Red);
+                if (!isAdbEnabled)
+                {
+                    onStatus("ADB OFF: SKIP TAP", Color.DarkOrange);
+                    return;
+                }
+
                 await adb.TapAsync(x, y, token);
                 return;
             }
@@ -83,6 +91,12 @@ namespace Lazy_App_Codex_Core
             if (step.Act == "rightclick" || step.Act == "right")
             {
                 onStatus("BACK BUTTON CLICK", Color.Red);
+                if (!isAdbEnabled)
+                {
+                    onStatus("ADB OFF: SKIP KEY BACK", Color.DarkOrange);
+                    return;
+                }
+
                 await adb.KeyAsync(AndroidKeys.BACK, token);
                 return;
             }
@@ -94,6 +108,12 @@ namespace Lazy_App_Codex_Core
                 int y1 = p1.Item2 + selectedOffset;
                 int y2 = p2.Item2 + selectedOffset;
                 onStatus($"DRAG ({p1.Item1},{y1}):({p2.Item1},{y2}):{randSleep}(s)", Color.Red);
+                if (!isAdbEnabled)
+                {
+                    onStatus("ADB OFF: SKIP SWIPE", Color.DarkOrange);
+                    return;
+                }
+
                 await adb.SwipeAsync(p1.Item1, y1, p2.Item1, y2, 150, token);
             }
         }

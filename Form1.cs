@@ -11,6 +11,8 @@ namespace Lazy_App_Codex_Core
         private Task _runTask;
         private bool _isRunning;
 
+        private static bool IsAdbActionEnabled = true;
+
         public Form1()
         {
             InitializeComponent();
@@ -126,7 +128,7 @@ namespace Lazy_App_Codex_Core
         private async Task RunSelectedScriptAsync(ScriptModel script, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset();
-            await _runner.RunAsync(script, ddlOffset.SelectedIndex, offsetValue, offsetAxis, token, UpdateLabelStatus);
+            await _runner.RunAsync(script, ddlOffset.SelectedIndex, offsetValue, offsetAxis, token, UpdateLabelStatus, IsAdbActionEnabled);
         }
 
         private (int value, string axis) GetSelectedOffset()
