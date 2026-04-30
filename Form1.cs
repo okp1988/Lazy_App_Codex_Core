@@ -21,7 +21,7 @@ namespace Lazy_App_Codex_Core
             ddlOffset.SelectedIndex = 2;
 
             LoadConfig();
-            _hotkeys.LoadFromConfig();
+            _hotkeys.Configure(_configRepository.Settings.HotkeyStartStopToggle, _configRepository.Settings.HotkeyStop);
             SetRunningState(false);
         }
 
@@ -165,7 +165,7 @@ namespace Lazy_App_Codex_Core
             _isRunning = isRunning;
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
-            btnRun.Text = isRunning ? "Stop" : "Run (F3)";
+            btnRun.Text = isRunning ? "Stop" : "Run";
 
             if (isRunning)
             {

@@ -66,7 +66,7 @@
             splitContainer1.Panel2.Controls.Add(ddlOffset);
             splitContainer1.Panel2.Controls.Add(btnRun);
             splitContainer1.Size = new Size(576, 112);
-            splitContainer1.SplitterDistance = 427;
+            splitContainer1.SplitterDistance = 426;
             splitContainer1.SplitterWidth = 5;
             splitContainer1.TabIndex = 0;
             // 
@@ -117,7 +117,7 @@
             // 
             ddlOffset.DropDownStyle = ComboBoxStyle.DropDownList;
             ddlOffset.FormattingEnabled = true;
-            ddlOffset.Items.AddRange(new object[] { "-2", "-1", "0", "1", "2" });
+            ddlOffset.Items.AddRange(new object[] { "-2:y", "-1:y", "0", "1:y", "2:y", "-2:x", "-1:x", "1:x", "2:x" });
             ddlOffset.Location = new Point(4, 60);
             ddlOffset.Margin = new Padding(4, 5, 4, 5);
             ddlOffset.Name = "ddlOffset";

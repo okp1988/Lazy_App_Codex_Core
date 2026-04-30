@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace Lazy_App_Codex_Core
 {
@@ -41,28 +38,44 @@ namespace Lazy_App_Codex_Core
         private int _stopHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _stopHotkeyKey = DEFAULT_HOTKEY_STOP;
 
-        public void LoadFromConfig()
+        public string ToggleHotkeyText => ToDisplayText(_startHotkeyModifiers, _startHotkeyKey);
+        public string StopHotkeyText => ToDisplayText(_stopHotkeyModifiers, _stopHotkeyKey);
+
+        public void Configure(string? startStopHotkey, string? stopHotkey)
         {
             ParseHotkey(
-                ConfigurationManager.AppSettings["HotkeyStartStopToggle"],
+                startStopHotkey,
                 DEFAULT_HOTKEY_MODIFIERS,
                 DEFAULT_HOTKEY_START,
                 out _startHotkeyModifiers,
                 out _startHotkeyKey);
 
             ParseHotkey(
-                ConfigurationManager.AppSettings["HotkeyStop"],
+                stopHotkey,
                 DEFAULT_HOTKEY_MODIFIERS,
                 DEFAULT_HOTKEY_STOP,
                 out _stopHotkeyModifiers,
                 out _stopHotkeyKey);
         }
 
+        /// <summary>Registers global hotkeys for the current window when active.</summary>
         public bool RegisterIfActive(IntPtr handle, bool isMinimized)
         {
+            if (handle == IntPtr.Zero)
+            {
+                _registered = false;
+                _secondaryRegistered = false;
+                return false;
+            }
+
             if (isMinimized)
             {
-                return _registered;
+                if (_registered || _secondaryRegistered)
+                {
+                    UnregisterAll(handle);
+                }
+
+                return false;
             }
 
             UnregisterAll(handle);
@@ -90,6 +103,7 @@ namespace Lazy_App_Codex_Core
             return _registered;
         }
 
+        /// <summary>Unregisters all hotkeys owned by this window handle.</summary>
         public void UnregisterAll(IntPtr handle)
         {
             UnregisterHotKey(handle, HOTKEY_ID_PRIMARY);
@@ -98,6 +112,7 @@ namespace Lazy_App_Codex_Core
             _secondaryRegistered = false;
         }
 
+        /// <summary>Handles WM_HOTKEY window messages and maps to app actions.</summary>
         public HotkeyAction HandleMessage(Message m)
         {
             if (m.Msg != WM_HOTKEY)
@@ -124,7 +139,7 @@ namespace Lazy_App_Codex_Core
             return _startHotkeyModifiers == _stopHotkeyModifiers && _startHotkeyKey == _stopHotkeyKey;
         }
 
-        private static void ParseHotkey(string hotkeySetting, int defaultModifiers, int defaultKey, out int modifiers, out int key)
+        private static void ParseHotkey(string? hotkeySetting, int defaultModifiers, int defaultKey, out int modifiers, out int key)
         {
             modifiers = defaultModifiers;
             key = defaultKey;
@@ -160,14 +175,10 @@ namespace Lazy_App_Codex_Core
                 {
                     parsedModifiers |= HOTKEY_ID_WIN;
                 }
-                else
+                else if (Enum.TryParse(token, true, out Keys parsed))
                 {
-                    Keys parsed;
-                    if (Enum.TryParse(token, true, out parsed))
-                    {
-                        parsedKey = (int)parsed;
-                        hasKey = true;
-                    }
+                    parsedKey = (int)parsed;
+                    hasKey = true;
                 }
             }
 
@@ -176,6 +187,17 @@ namespace Lazy_App_Codex_Core
                 modifiers = parsedModifiers;
                 key = parsedKey;
             }
+        }
+
+        private static string ToDisplayText(int modifiers, int key)
+        {
+            var parts = new List<string>();
+            if ((modifiers & HOTKEY_ID_CTRL) != 0) parts.Add("Ctrl");
+            if ((modifiers & HOTKEY_ID_ALT) != 0) parts.Add("Alt");
+            if ((modifiers & HOTKEY_ID_SHIFT) != 0) parts.Add("Shift");
+            if ((modifiers & HOTKEY_ID_WIN) != 0) parts.Add("Win");
+            parts.Add(((Keys)key).ToString());
+            return string.Join("+", parts);
         }
     }
 }
