@@ -80,3 +80,15 @@ If you have the same sequence repeated many times, use a group object with `step
 ```
 
 This expands to 8 real steps at runtime, so behavior stays the same but `config.json` is much shorter.
+
+### Left click offset axis
+
+Each step can define `offset` (or `o`) as `"x"` or `"y"`.
+Only left click uses this axis to apply UI offset (`ddlOffset`).
+If omitted, the axis selected in `ddlOffset` (for example `-1:y`, `2:x`) is used.
+
+### Action aliases
+
+- `leftclick` = `left`
+- `rightclick` = `right`
+- `updrag` / `downdrag` / `leftdrag` / `rightdrag` = `drag`

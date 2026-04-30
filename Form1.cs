@@ -125,19 +125,31 @@ namespace Lazy_App_Codex_Core
 
         private async Task RunSelectedScriptAsync(ScriptModel script, CancellationToken token)
         {
-            int yOffset = GetSelectedYOffset();
-            await _runner.RunAsync(script, ddlOffset.SelectedIndex, yOffset, token, UpdateLabelStatus);
+            var (offsetValue, offsetAxis) = GetSelectedOffset();
+            await _runner.RunAsync(script, ddlOffset.SelectedIndex, offsetValue, offsetAxis, token, UpdateLabelStatus);
         }
 
-        private int GetSelectedYOffset()
+        private (int value, string axis) GetSelectedOffset()
         {
-            int value;
-            if (ddlOffset.SelectedItem != null && int.TryParse(ddlOffset.SelectedItem.ToString(), out value))
+            string raw = ddlOffset.SelectedItem?.ToString() ?? "0";
+            if (raw == "0")
             {
-                return value * 5;
+                return (0, "y");
             }
 
-            return 0;
+            var parts = raw.Split(':');
+            if (parts.Length != 2)
+            {
+                return (0, "y");
+            }
+
+            if (!int.TryParse(parts[0], out int step))
+            {
+                return (0, "y");
+            }
+
+            string axis = parts[1].Trim().Equals("x", StringComparison.OrdinalIgnoreCase) ? "x" : "y";
+            return (step * 5, axis);
         }
 
         private async Task StopRunAsync()

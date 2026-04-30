@@ -31,5 +31,6 @@ namespace Lazy_App_Codex_Core
         public int RandY { get; set; }
         public int Sleep_Min { get; set; }
         public int Sleep_Max { get; set; }
+        public string Offset { get; set; } = ""; // optional x or y; applies on left click only
     }
 }

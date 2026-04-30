@@ -115,7 +115,7 @@ namespace Lazy_App_Codex_Core
 
             return new JObject
             {
-                [nameof(StepAction.Act)] = ReadString(stepObj, defaults, "leftclick", "act", "a"),
+                [nameof(StepAction.Act)] = NormalizeAction(ReadString(stepObj, defaults, "leftclick", "act", "a")),
                 [nameof(StepAction.PosX)] = ReadInt(stepObj, defaults, 0, "posX", "x", "pos", "p"),
                 [nameof(StepAction.PosY)] = ReadInt(stepObj, defaults, 1, "posY", "y", "pos", "p"),
                 [nameof(StepAction.PosX2)] = ReadNullableInt(stepObj, defaults, 0, "posX2", "x2", "pos2", "p2"),
@@ -127,7 +127,8 @@ namespace Lazy_App_Codex_Core
                 [nameof(StepAction.RandX)] = ReadInt(stepObj, defaults, 0, "randX", "rx", "rand", "r"),
                 [nameof(StepAction.RandY)] = ReadInt(stepObj, defaults, 1, "randY", "ry", "rand", "r"),
                 [nameof(StepAction.Sleep_Min)] = ReadInt(stepObj, defaults, 0, "sleep_min", "smin", "sleep", "t"),
-                [nameof(StepAction.Sleep_Max)] = ReadInt(stepObj, defaults, 1, "sleep_max", "smax", "sleep", "t")
+                [nameof(StepAction.Sleep_Max)] = ReadInt(stepObj, defaults, 1, "sleep_max", "smax", "sleep", "t"),
+                [nameof(StepAction.Offset)] = ReadString(stepObj, defaults, "", "offset", "o")
             };
         }
 
@@ -136,6 +137,23 @@ namespace Lazy_App_Codex_Core
             var token = TryGetToken(source, defaults, aliases);
             return string.IsNullOrWhiteSpace(token?.ToString()) ? fallback : token!.ToString();
         }
+
+        private static string NormalizeAction(string action)
+        {
+            if (string.IsNullOrWhiteSpace(action))
+            {
+                return "leftclick";
+            }
+
+            return action.Trim().ToLowerInvariant() switch
+            {
+                "left" => "leftclick",
+                "right" => "rightclick",
+                "drag" => "leftdrag",
+                _ => action.Trim().ToLowerInvariant()
+            };
+        }
+
 
         private static int ReadInt(JObject source, JObject? defaults, int index, params string[] aliases)
         {
