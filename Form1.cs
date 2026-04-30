@@ -13,7 +13,7 @@ namespace Lazy_App_Codex_Core
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
 
-        private static bool IsAdbActionEnabled = true;
+        private static bool IsAdbActionEnabled = false;
 
         public Form1()
         {
@@ -22,6 +22,7 @@ namespace Lazy_App_Codex_Core
             Load += OnLoad;
             Activated += OnActivated;
             Resize += OnResize;
+            splitContainer1.Panel1.Resize += (_, _) => ApplyResponsiveLayout();
 
             ddlOffset.SelectedIndex = 2;
 
@@ -32,6 +33,7 @@ namespace Lazy_App_Codex_Core
             _clockTimer.Start();
             UpdateCurrentTimeLabel();
             SetRunningState(false);
+            ApplyResponsiveLayout();
         }
 
         protected override void WndProc(ref Message m)
@@ -64,6 +66,7 @@ namespace Lazy_App_Codex_Core
 
         private void OnLoad(object? sender, EventArgs e)
         {
+            ApplyResponsiveLayout();
             RegisterHotkeysForWindowState();
         }
 
@@ -77,6 +80,8 @@ namespace Lazy_App_Codex_Core
 
         private void OnResize(object? sender, EventArgs e)
         {
+            ApplyResponsiveLayout();
+
             if (WindowState == FormWindowState.Minimized)
             {
                 if (_lastHotkeyRegistrationSucceeded == null)
@@ -95,6 +100,33 @@ namespace Lazy_App_Codex_Core
             {
                 RegisterHotkeysForWindowState();
             }
+        }
+
+        private void ApplyResponsiveLayout()
+        {
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+
+            int panelWidth = splitContainer1.Panel1.ClientSize.Width;
+            if (panelWidth <= 0)
+            {
+                return;
+            }
+
+            int leftMargin = ddlScript.Left;
+            int rightMargin = Math.Max(16, leftMargin);
+            int statusGap = 0;
+            int rightEdge = Math.Max(leftMargin + 120, panelWidth - rightMargin);
+            int statusIndicatorLeft = Math.Max(leftMargin + 120, rightEdge - btnStatus.Width);
+            int contentWidth = Math.Max(120, rightEdge - leftMargin);
+
+            btnStatus.Left = statusIndicatorLeft;
+            lblStatus.Width = Math.Max(120, statusIndicatorLeft - leftMargin - statusGap);
+            ddlScript.Width = contentWidth;
+            lblCircleTiming.Width = contentWidth;
+            lblCurrentTime.Width = contentWidth;
         }
 
         private void RegisterHotkeysForWindowState()
@@ -277,7 +309,15 @@ namespace Lazy_App_Codex_Core
 
             lblStatus.Text = text;
             lblStatus.ForeColor = color;
+            lblStatus.Invalidate();
             WriteLog(text);
+        }
+
+        private void lblStatus_Paint(object? sender, PaintEventArgs e)
+        {
+            using var borderPen = new Pen(lblStatus.ForeColor, 2);
+            var borderBounds = new Rectangle(0, 0, lblStatus.Width - 1, lblStatus.Height - 1);
+            e.Graphics.DrawRectangle(borderPen, borderBounds);
         }
 
         private void UpdateCircleTimingLabel(string text)

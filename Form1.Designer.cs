@@ -30,7 +30,7 @@
         {
             splitContainer1 = new SplitContainer();
             btnStatus = new Button();
-            lblStatus = new Button();
+            lblStatus = new Label();
             lblCircleTiming = new Label();
             lblCurrentTime = new Label();
             ddlScript = new ComboBox();
@@ -56,6 +56,7 @@
             splitContainer1.Location = new Point(0, 0);
             splitContainer1.Margin = new Padding(4, 5, 4, 5);
             splitContainer1.Name = "splitContainer1";
+            splitContainer1.Panel1MinSize = 280;
             // 
             // splitContainer1.Panel1
             // 
@@ -69,6 +70,7 @@
             // 
             splitContainer1.Panel2.Controls.Add(ddlOffset);
             splitContainer1.Panel2.Controls.Add(btnRun);
+            splitContainer1.Panel2MinSize = 125;
             splitContainer1.Size = new Size(576, 150);
             splitContainer1.SplitterDistance = 426;
             splitContainer1.SplitterWidth = 5;
@@ -76,6 +78,7 @@
             // 
             // btnStatus
             // 
+            btnStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnStatus.BackColor = Color.Red;
             btnStatus.Enabled = false;
             btnStatus.FlatStyle = FlatStyle.Flat;
@@ -91,24 +94,24 @@
             // 
             // lblStatus
             // 
+            lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblStatus.BackColor = SystemColors.Window;
-            lblStatus.Enabled = false;
-            lblStatus.FlatAppearance.BorderSize = 2;
-            lblStatus.FlatStyle = FlatStyle.Flat;
+            lblStatus.BorderStyle = BorderStyle.None;
             lblStatus.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lblStatus.ForeColor = SystemColors.ActiveCaption;
             lblStatus.Location = new Point(16, 60);
             lblStatus.Margin = new Padding(4, 5, 4, 5);
             lblStatus.Name = "lblStatus";
+            lblStatus.Padding = new Padding(4, 0, 0, 0);
             lblStatus.Size = new Size(361, 28);
             lblStatus.TabIndex = 1;
-            lblStatus.TabStop = false;
             lblStatus.Text = "STATUS";
             lblStatus.TextAlign = ContentAlignment.MiddleLeft;
-            lblStatus.UseVisualStyleBackColor = false;
+            lblStatus.Paint += lblStatus_Paint;
             // 
             // lblCircleTiming
             // 
+            lblCircleTiming.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblCircleTiming.AutoSize = false;
             lblCircleTiming.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lblCircleTiming.Location = new Point(16, 93);
@@ -121,6 +124,7 @@
             // 
             // lblCurrentTime
             // 
+            lblCurrentTime.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblCurrentTime.AutoSize = false;
             lblCurrentTime.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             lblCurrentTime.Location = new Point(16, 119);
@@ -133,6 +137,7 @@
             // 
             // ddlScript
             // 
+            ddlScript.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             ddlScript.DropDownStyle = ComboBoxStyle.DropDownList;
             ddlScript.FormattingEnabled = true;
             ddlScript.Location = new Point(16, 19);
@@ -202,6 +207,7 @@
             ClientSize = new Size(576, 579);
             Controls.Add(splitContainer2);
             Margin = new Padding(4, 5, 4, 5);
+            MinimumSize = new Size(500, 260);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Lazy App";
@@ -222,7 +228,7 @@
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.Button btnRun;
         private System.Windows.Forms.ComboBox ddlScript;
-        private System.Windows.Forms.Button lblStatus;
+        private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.Label lblCircleTiming;
         private System.Windows.Forms.Label lblCurrentTime;
         private System.Windows.Forms.Button btnStatus;
