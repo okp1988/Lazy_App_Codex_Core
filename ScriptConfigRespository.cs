@@ -14,6 +14,8 @@ namespace Lazy_App_Codex_Core
         private readonly string _configPath;
 
         public AppSettings Settings { get; private set; } = new AppSettings();
+        public int OffsetX { get; private set; } = 5;
+        public int OffsetY { get; private set; } = 5;
 
         public ScriptConfigRepository(string configPath)
         {
@@ -23,6 +25,8 @@ namespace Lazy_App_Codex_Core
         public Dictionary<string, ScriptModel> Load()
         {
             Settings = new AppSettings();
+            OffsetX = 5;
+            OffsetY = 5;
 
             if (!File.Exists(_configPath))
             {
@@ -41,6 +45,12 @@ namespace Lazy_App_Codex_Core
             if (parsedSettings != null)
             {
                 Settings = parsedSettings;
+            }
+
+            if (root["offset"] is JObject offsetObj)
+            {
+                OffsetX = ReadIntOrFallback(offsetObj, 5, 0, "offsetX", "ox", "x", "s");
+                OffsetY = ReadIntOrFallback(offsetObj, 5, 1, "offsetY", "oy", "y", "s");
             }
 
             var scripts = new Dictionary<string, ScriptModel>(StringComparer.OrdinalIgnoreCase);
@@ -155,6 +165,12 @@ namespace Lazy_App_Codex_Core
         {
             var token = TryGetToken(source, defaults, aliases);
             return TryParseIntToken(token, index, out var value) ? value : 0;
+        }
+
+        private static int ReadIntOrFallback(JObject source, int fallback, int index, params string[] aliases)
+        {
+            var token = TryGetToken(source, null, aliases);
+            return TryParseIntToken(token, index, out var value) ? value : fallback;
         }
 
         private static int? ReadNullableInt(JObject source, JObject? defaults, int index, params string[] aliases)

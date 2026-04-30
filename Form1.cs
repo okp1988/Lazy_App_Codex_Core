@@ -10,8 +10,9 @@ namespace Lazy_App_Codex_Core
         private CancellationTokenSource _runCts;
         private Task _runTask;
         private bool _isRunning;
+        private bool? _lastHotkeyRegistrationSucceeded;
 
-        private static bool IsAdbActionEnabled = true;
+        private static bool IsAdbActionEnabled = false;
 
         public Form1()
         {
@@ -30,16 +31,29 @@ namespace Lazy_App_Codex_Core
         protected override void WndProc(ref Message m)
         {
             HotkeyAction action = _hotkeys.HandleMessage(m);
-            if (action == HotkeyAction.Toggle)
+            if (action != HotkeyAction.None)
             {
-                btnRun.PerformClick();
-            }
-            else if (action == HotkeyAction.Stop)
-            {
-                _ = StopRunAsync();
+                HandleHotkeyAction(action);
             }
 
             base.WndProc(ref m);
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.F3)
+            {
+                HandleHotkeyAction(HotkeyAction.Toggle);
+                return true;
+            }
+
+            if (keyData == Keys.Escape && _isRunning)
+            {
+                HandleHotkeyAction(HotkeyAction.Stop);
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         private void OnLoad(object sender, EventArgs e)
@@ -49,20 +63,20 @@ namespace Lazy_App_Codex_Core
 
         private void OnResize(object sender, EventArgs e)
         {
-            if (WindowState == FormWindowState.Minimized)
-            {
-                _hotkeys.UnregisterAll(Handle);
-                UpdateHotkeyStatus(false);
-                return;
-            }
-
             RegisterHotkeysForWindowState();
         }
 
         private void RegisterHotkeysForWindowState()
         {
-            bool success = _hotkeys.RegisterIfActive(Handle, WindowState == FormWindowState.Minimized);
+            bool success = _hotkeys.Register(Handle);
             UpdateHotkeyStatus(success);
+
+            if (!success && _lastHotkeyRegistrationSucceeded != false)
+            {
+                WriteLog($"GLOBAL HOTKEY NOT REGISTERED ({_hotkeys.ToggleHotkeyText}). F3 still works while this window is focused.");
+            }
+
+            _lastHotkeyRegistrationSucceeded = success;
         }
 
         private void LoadConfig()
@@ -107,8 +121,8 @@ namespace Lazy_App_Codex_Core
 
             ScriptModel selectedScript = _scripts[selectedScriptName];
             _runCts = new CancellationTokenSource();
-            SetRunningState(true);
             taLog.Clear();
+            SetRunningState(true);
 
             _runTask = RunSelectedScriptAsync(selectedScript, _runCts.Token);
             try
@@ -128,7 +142,8 @@ namespace Lazy_App_Codex_Core
         private async Task RunSelectedScriptAsync(ScriptModel script, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset();
-            await _runner.RunAsync(script, ddlOffset.SelectedIndex, offsetValue, offsetAxis, token, UpdateLabelStatus, IsAdbActionEnabled);
+            WriteLog($"OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
+            await _runner.RunAsync(script, offsetValue, offsetAxis, token, UpdateLabelStatus, IsAdbActionEnabled);
         }
 
         private (int value, string axis) GetSelectedOffset()
@@ -151,7 +166,26 @@ namespace Lazy_App_Codex_Core
             }
 
             string axis = parts[1].Trim().Equals("x", StringComparison.OrdinalIgnoreCase) ? "x" : "y";
-            return (step * 5, axis);
+            int offsetUnit = axis == "x" ? _configRepository.OffsetX : _configRepository.OffsetY;
+            return (step * offsetUnit, axis);
+        }
+
+        private static string FormatOffset(int value, string axis)
+        {
+            string sign = value > 0 ? "+" : "";
+            return $"{sign}{value}{axis}";
+        }
+
+        private void HandleHotkeyAction(HotkeyAction action)
+        {
+            if (action == HotkeyAction.Toggle)
+            {
+                btnRun.PerformClick();
+            }
+            else if (action == HotkeyAction.Stop)
+            {
+                _ = StopRunAsync();
+            }
         }
 
         private async Task StopRunAsync()
@@ -179,7 +213,7 @@ namespace Lazy_App_Codex_Core
             _isRunning = isRunning;
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
-            btnRun.Text = isRunning ? "Stop" : "Run";
+            btnRun.Text = isRunning ? "Stop" : "Run (F3)";
 
             if (isRunning)
             {

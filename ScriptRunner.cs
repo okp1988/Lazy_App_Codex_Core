@@ -12,7 +12,6 @@ namespace Lazy_App_Codex_Core
 
         public async Task RunAsync(
             ScriptModel script,
-            int clickType,
             int selectedOffset,
             string selectedOffsetAxis,
             CancellationToken token,
@@ -28,12 +27,14 @@ namespace Lazy_App_Codex_Core
                 token.ThrowIfCancellationRequested();
                 onStatus($"CLICKING {loop}/{maxLoop}", Color.Red);
 
-                foreach (var step in script.Config)
+                for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
                 {
+                    var step = script.Config[stepIndex];
                     token.ThrowIfCancellationRequested();
                     randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
 
-                    await ExecuteStepAsync(step, clickType, selectedOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
+                    int stepOffset = stepIndex == 0 ? selectedOffset : 0;
+                    await ExecuteStepAsync(step, stepOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
 
                     if (randSleep > 0)
                     {
@@ -53,7 +54,6 @@ namespace Lazy_App_Codex_Core
 
         private async Task ExecuteStepAsync(
             StepAction step,
-            int clickType,
             int selectedOffset,
             string selectedOffsetAxis,
             AdbShellController adb,
@@ -77,7 +77,7 @@ namespace Lazy_App_Codex_Core
                     y += selectedOffset;
                 }
 
-                onStatus($"LEFT CLICK ({x},{y}):{randSleep}(s)", Color.Red);
+                onStatus($"LEFT CLICK ({x},{y}) OFFSET {FormatOffset(selectedOffset, axis)}:{randSleep}(s)", Color.Red);
                 if (!isAdbEnabled)
                 {
                     onStatus("ADB OFF: SKIP TAP", Color.DarkOrange);
@@ -105,16 +105,14 @@ namespace Lazy_App_Codex_Core
             {
                 var p1 = MouseHelper.WithRandomDrag(step.ScrX, step.ScrY, step.RandX, step.RandY, false);
                 var p2 = MouseHelper.WithRandomDrag(step.ScrX2 ?? step.ScrX, step.ScrY2 ?? step.ScrY, step.RandX, step.RandY, false);
-                int y1 = p1.Item2 + selectedOffset;
-                int y2 = p2.Item2 + selectedOffset;
-                onStatus($"DRAG ({p1.Item1},{y1}):({p2.Item1},{y2}):{randSleep}(s)", Color.Red);
+                onStatus($"DRAG ({p1.Item1},{p1.Item2}):({p2.Item1},{p2.Item2}):{randSleep}(s)", Color.Red);
                 if (!isAdbEnabled)
                 {
                     onStatus("ADB OFF: SKIP SWIPE", Color.DarkOrange);
                     return;
                 }
 
-                await adb.SwipeAsync(p1.Item1, y1, p2.Item1, y2, 150, token);
+                await adb.SwipeAsync(p1.Item1, p1.Item2, p2.Item1, p2.Item2, 150, token);
             }
         }
 
@@ -131,6 +129,12 @@ namespace Lazy_App_Codex_Core
             {
                 return _random.Next(min, max + 1);
             }
+        }
+
+        private static string FormatOffset(int value, string axis)
+        {
+            string sign = value > 0 ? "+" : "";
+            return $"{sign}{value}{axis}";
         }
     }
 }

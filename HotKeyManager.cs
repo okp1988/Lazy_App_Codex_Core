@@ -58,23 +58,13 @@ namespace Lazy_App_Codex_Core
                 out _stopHotkeyKey);
         }
 
-        /// <summary>Registers global hotkeys for the current window when active.</summary>
-        public bool RegisterIfActive(IntPtr handle, bool isMinimized)
+        /// <summary>Registers global hotkeys for the current window handle.</summary>
+        public bool Register(IntPtr handle)
         {
             if (handle == IntPtr.Zero)
             {
                 _registered = false;
                 _secondaryRegistered = false;
-                return false;
-            }
-
-            if (isMinimized)
-            {
-                if (_registered || _secondaryRegistered)
-                {
-                    UnregisterAll(handle);
-                }
-
                 return false;
             }
 
