@@ -16,6 +16,7 @@ namespace Lazy_App_Codex_Core
             string selectedOffsetAxis,
             CancellationToken token,
             Action<string, Color> onStatus,
+            Action<string> onCircleTiming,
             bool isAdbEnabled)
         {
             var adb = new AdbShellController();
@@ -25,14 +26,14 @@ namespace Lazy_App_Codex_Core
                 long loop = 1;
                 while (true)
                 {
-                    await RunLoopAsync(script, loop, "unlimited", selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+                    await RunLoopAsync(script, loop, "unlimited", selectedOffset, selectedOffsetAxis, adb, token, onStatus, onCircleTiming, isAdbEnabled);
                     loop++;
                 }
             }
 
             for (long loop = 1; loop <= script.Duration; loop++)
             {
-                await RunLoopAsync(script, loop, script.Duration.ToString(), selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+                await RunLoopAsync(script, loop, script.Duration.ToString(), selectedOffset, selectedOffsetAxis, adb, token, onStatus, onCircleTiming, isAdbEnabled);
             }
         }
 
@@ -45,27 +46,38 @@ namespace Lazy_App_Codex_Core
             AdbShellController adb,
             CancellationToken token,
             Action<string, Color> onStatus,
+            Action<string> onCircleTiming,
             bool isAdbEnabled)
         {
             token.ThrowIfCancellationRequested();
-            onStatus($"CLICKING {loop}/{loopTotal}", Color.Red);
+            onStatus($"GENERATING {loop}/{loopTotal}", Color.DarkOrange);
 
+            List<PlannedStep> plannedSteps = new List<PlannedStep>();
             for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
             {
-                var step = script.Config[stepIndex];
-                token.ThrowIfCancellationRequested();
-                int randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
-
                 int stepOffset = stepIndex == 0 ? selectedOffset : 0;
-                await ExecuteStepAsync(step, stepOffset, selectedOffsetAxis, adb, randSleep, token, onStatus, isAdbEnabled);
-
-                if (randSleep > 0)
-                {
-                    await Task.Delay(randSleep * 1000, token);
-                }
+                plannedSteps.Add(GenerateStep(script.Config[stepIndex], stepOffset, selectedOffsetAxis));
             }
 
             int intervalSleep = script.Interval_Max > 0 ? RandomBetween(script.Interval_Min, script.Interval_Max) : 0;
+            int circleSeconds = plannedSteps.Sum(step => step.SleepSeconds) + intervalSleep;
+            DateTime expectedEnd = DateTime.Now.AddSeconds(circleSeconds);
+            onCircleTiming($"Circle: {loop} | Time: {FormatDuration(circleSeconds)} | End: {expectedEnd:HH:mm:ss}");
+
+            token.ThrowIfCancellationRequested();
+            onStatus($"CLICKING {loop}/{loopTotal}", Color.Red);
+
+            foreach (PlannedStep plannedStep in plannedSteps)
+            {
+                token.ThrowIfCancellationRequested();
+                await ExecutePlannedStepAsync(plannedStep, adb, token, onStatus, isAdbEnabled);
+
+                if (plannedStep.SleepSeconds > 0)
+                {
+                    await Task.Delay(plannedStep.SleepSeconds * 1000, token);
+                }
+            }
+
             onStatus($"DONE {loop}/{loopTotal}:{intervalSleep}(s)", Color.Red);
 
             if (intervalSleep > 0)
@@ -95,16 +107,13 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task ExecuteStepAsync(
+        private PlannedStep GenerateStep(
             StepAction step,
             int selectedOffset,
-            string selectedOffsetAxis,
-            AdbShellController adb,
-            int randSleep,
-            CancellationToken token,
-            Action<string, Color> onStatus,
-            bool isAdbEnabled)
+            string selectedOffsetAxis)
         {
+            int randSleep = step.Sleep_Max > 0 ? RandomBetween(step.Sleep_Min, step.Sleep_Max) : 0;
+
             if (step.Act == "leftclick" || step.Act == "left")
             {
                 var p = MouseHelper.WithRandom(step.ScrX, step.ScrY, step.RandX, step.RandY);
@@ -120,43 +129,59 @@ namespace Lazy_App_Codex_Core
                     y += selectedOffset;
                 }
 
-                onStatus($"LEFT CLICK ({x},{y}) OFFSET {FormatOffset(selectedOffset, axis)}:{randSleep}(s)", Color.Red);
-                if (!isAdbEnabled)
-                {
-                    onStatus("ADB OFF: SKIP TAP", Color.DarkOrange);
-                    return;
-                }
-
-                await RunAdbCommandAsync(adb, $"shell input tap {x} {y}", "tap", token);
-                return;
+                return new PlannedStep(
+                    $"LEFT CLICK ({x},{y}) OFFSET {FormatOffset(selectedOffset, axis)}:{randSleep}(s)",
+                    $"shell input tap {x} {y}",
+                    "tap",
+                    "ADB OFF: SKIP TAP",
+                    randSleep);
             }
 
             if (step.Act == "rightclick" || step.Act == "right")
             {
-                onStatus("BACK BUTTON CLICK", Color.Red);
-                if (!isAdbEnabled)
-                {
-                    onStatus("ADB OFF: SKIP KEY BACK", Color.DarkOrange);
-                    return;
-                }
-
-                await RunAdbCommandAsync(adb, $"shell input keyevent {AndroidKeys.BACK}", "key back", token);
-                return;
+                return new PlannedStep(
+                    "BACK BUTTON CLICK",
+                    $"shell input keyevent {AndroidKeys.BACK}",
+                    "key back",
+                    "ADB OFF: SKIP KEY BACK",
+                    randSleep);
             }
 
             if (step.Act == "drag" || step.Act == "leftdrag" || step.Act == "rightdrag" || step.Act == "updrag" || step.Act == "downdrag")
             {
                 var p1 = MouseHelper.WithRandomDrag(step.ScrX, step.ScrY, step.RandX, step.RandY, false);
                 var p2 = MouseHelper.WithRandomDrag(step.ScrX2 ?? step.ScrX, step.ScrY2 ?? step.ScrY, step.RandX, step.RandY, false);
-                onStatus($"DRAG ({p1.Item1},{p1.Item2}):({p2.Item1},{p2.Item2}):{randSleep}(s)", Color.Red);
-                if (!isAdbEnabled)
-                {
-                    onStatus("ADB OFF: SKIP SWIPE", Color.DarkOrange);
-                    return;
-                }
-
-                await RunAdbCommandAsync(adb, $"shell input swipe {p1.Item1} {p1.Item2} {p2.Item1} {p2.Item2} 150", "swipe", token);
+                return new PlannedStep(
+                    $"DRAG ({p1.Item1},{p1.Item2}):({p2.Item1},{p2.Item2}):{randSleep}(s)",
+                    $"shell input swipe {p1.Item1} {p1.Item2} {p2.Item1} {p2.Item2} 150",
+                    "swipe",
+                    "ADB OFF: SKIP SWIPE",
+                    randSleep);
             }
+
+            return new PlannedStep($"UNKNOWN ACTION {step.Act}:{randSleep}(s)", "", "", "ADB OFF: SKIP UNKNOWN", randSleep);
+        }
+
+        private static async Task ExecutePlannedStepAsync(
+            PlannedStep plannedStep,
+            AdbShellController adb,
+            CancellationToken token,
+            Action<string, Color> onStatus,
+            bool isAdbEnabled)
+        {
+            onStatus(plannedStep.Status, Color.Red);
+            if (string.IsNullOrWhiteSpace(plannedStep.AdbArgs))
+            {
+                return;
+            }
+
+            if (!isAdbEnabled)
+            {
+                onStatus(plannedStep.AdbDisabledStatus, Color.DarkOrange);
+                return;
+            }
+
+            await RunAdbCommandAsync(adb, plannedStep.AdbArgs, plannedStep.AdbAction, token);
         }
 
         private int RandomBetween(int min, int max)
@@ -178,6 +203,35 @@ namespace Lazy_App_Codex_Core
         {
             string sign = value > 0 ? "+" : "";
             return $"{sign}{value}{axis}";
+        }
+
+        private static string FormatDuration(int seconds)
+        {
+            TimeSpan duration = TimeSpan.FromSeconds(seconds);
+            if (duration.TotalHours >= 1)
+            {
+                return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+            }
+
+            return $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+
+        private sealed class PlannedStep
+        {
+            public PlannedStep(string status, string adbArgs, string adbAction, string adbDisabledStatus, int sleepSeconds)
+            {
+                Status = status;
+                AdbArgs = adbArgs;
+                AdbAction = adbAction;
+                AdbDisabledStatus = adbDisabledStatus;
+                SleepSeconds = sleepSeconds;
+            }
+
+            public string Status { get; }
+            public string AdbArgs { get; }
+            public string AdbAction { get; }
+            public string AdbDisabledStatus { get; }
+            public int SleepSeconds { get; }
         }
     }
 }

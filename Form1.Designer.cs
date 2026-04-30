@@ -31,6 +31,8 @@
             splitContainer1 = new SplitContainer();
             btnStatus = new Button();
             lblStatus = new Button();
+            lblCircleTiming = new Label();
+            lblCurrentTime = new Label();
             ddlScript = new ComboBox();
             ddlOffset = new ComboBox();
             btnRun = new Button();
@@ -59,13 +61,15 @@
             // 
             splitContainer1.Panel1.Controls.Add(btnStatus);
             splitContainer1.Panel1.Controls.Add(lblStatus);
+            splitContainer1.Panel1.Controls.Add(lblCircleTiming);
+            splitContainer1.Panel1.Controls.Add(lblCurrentTime);
             splitContainer1.Panel1.Controls.Add(ddlScript);
             // 
             // splitContainer1.Panel2
             // 
             splitContainer1.Panel2.Controls.Add(ddlOffset);
             splitContainer1.Panel2.Controls.Add(btnRun);
-            splitContainer1.Size = new Size(576, 112);
+            splitContainer1.Size = new Size(576, 150);
             splitContainer1.SplitterDistance = 426;
             splitContainer1.SplitterWidth = 5;
             splitContainer1.TabIndex = 0;
@@ -102,6 +106,30 @@
             lblStatus.Text = "STATUS";
             lblStatus.TextAlign = ContentAlignment.MiddleLeft;
             lblStatus.UseVisualStyleBackColor = false;
+            // 
+            // lblCircleTiming
+            // 
+            lblCircleTiming.AutoSize = false;
+            lblCircleTiming.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lblCircleTiming.Location = new Point(16, 93);
+            lblCircleTiming.Margin = new Padding(4, 0, 4, 0);
+            lblCircleTiming.Name = "lblCircleTiming";
+            lblCircleTiming.Size = new Size(391, 23);
+            lblCircleTiming.TabIndex = 3;
+            lblCircleTiming.Text = "Circle: -- | Time: -- | End: --";
+            lblCircleTiming.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblCurrentTime
+            // 
+            lblCurrentTime.AutoSize = false;
+            lblCurrentTime.Font = new Font("Microsoft Sans Serif", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lblCurrentTime.Location = new Point(16, 119);
+            lblCurrentTime.Margin = new Padding(4, 0, 4, 0);
+            lblCurrentTime.Name = "lblCurrentTime";
+            lblCurrentTime.Size = new Size(391, 23);
+            lblCurrentTime.TabIndex = 4;
+            lblCurrentTime.Text = "Current time: --:--:--";
+            lblCurrentTime.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // ddlScript
             // 
@@ -152,8 +180,8 @@
             // splitContainer2.Panel2
             // 
             splitContainer2.Panel2.Controls.Add(taLog);
-            splitContainer2.Size = new Size(576, 541);
-            splitContainer2.SplitterDistance = 112;
+            splitContainer2.Size = new Size(576, 579);
+            splitContainer2.SplitterDistance = 150;
             splitContainer2.SplitterWidth = 6;
             splitContainer2.TabIndex = 1;
             // 
@@ -171,7 +199,7 @@
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(576, 541);
+            ClientSize = new Size(576, 579);
             Controls.Add(splitContainer2);
             Margin = new Padding(4, 5, 4, 5);
             Name = "Form1";
@@ -195,6 +223,8 @@
         private System.Windows.Forms.Button btnRun;
         private System.Windows.Forms.ComboBox ddlScript;
         private System.Windows.Forms.Button lblStatus;
+        private System.Windows.Forms.Label lblCircleTiming;
+        private System.Windows.Forms.Label lblCurrentTime;
         private System.Windows.Forms.Button btnStatus;
         private System.Windows.Forms.SplitContainer splitContainer2;
         private System.Windows.Forms.RichTextBox taLog;

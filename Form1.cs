@@ -11,6 +11,7 @@ namespace Lazy_App_Codex_Core
         private Task _runTask;
         private bool _isRunning;
         private bool? _lastHotkeyRegistrationSucceeded;
+        private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
 
         private static bool IsAdbActionEnabled = true;
 
@@ -26,6 +27,10 @@ namespace Lazy_App_Codex_Core
 
             LoadConfig();
             _hotkeys.Configure(_configRepository.Settings.HotkeyStartStopToggle, _configRepository.Settings.HotkeyStop);
+            _clockTimer.Interval = 1000;
+            _clockTimer.Tick += (_, _) => UpdateCurrentTimeLabel();
+            _clockTimer.Start();
+            UpdateCurrentTimeLabel();
             SetRunningState(false);
         }
 
@@ -178,7 +183,7 @@ namespace Lazy_App_Codex_Core
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(scriptName);
             WriteLog($"OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
-            await _runner.RunAsync(script, offsetValue, offsetAxis, token, UpdateLabelStatus, IsAdbActionEnabled);
+            await _runner.RunAsync(script, offsetValue, offsetAxis, token, UpdateLabelStatus, UpdateCircleTimingLabel, IsAdbActionEnabled);
         }
 
         private (int value, string axis) GetSelectedOffset(string scriptName)
@@ -253,10 +258,12 @@ namespace Lazy_App_Codex_Core
             if (isRunning)
             {
                 UpdateLabelStatus("CLICKING NOW", Color.Red);
+                UpdateCircleTimingLabel("Circle: -- | Time: generating... | End: --");
             }
             else
             {
                 UpdateLabelStatus("STOP WORKING", Color.Blue);
+                UpdateCircleTimingLabel("Circle: -- | Time: -- | End: --");
             }
         }
 
@@ -271,6 +278,22 @@ namespace Lazy_App_Codex_Core
             lblStatus.Text = text;
             lblStatus.ForeColor = color;
             WriteLog(text);
+        }
+
+        private void UpdateCircleTimingLabel(string text)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => UpdateCircleTimingLabel(text)));
+                return;
+            }
+
+            lblCircleTiming.Text = text;
+        }
+
+        private void UpdateCurrentTimeLabel()
+        {
+            lblCurrentTime.Text = "Current time: " + DateTime.Now.ToString("HH:mm:ss");
         }
 
         public void WriteLog(string text)
@@ -293,6 +316,8 @@ namespace Lazy_App_Codex_Core
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             _hotkeys.UnregisterAll(Handle);
+            _clockTimer.Stop();
+            _clockTimer.Dispose();
             _runCts?.Cancel();
         }
     }
