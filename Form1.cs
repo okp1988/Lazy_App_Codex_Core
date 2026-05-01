@@ -13,7 +13,7 @@ namespace Lazy_App_Codex_Core
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
 
-        private static bool IsAdbActionEnabled = false;
+        private static bool IsAdbActionEnabled = true;
 
         public Form1()
         {
@@ -142,6 +142,7 @@ namespace Lazy_App_Codex_Core
             if (!success && _lastHotkeyRegistrationSucceeded != false)
             {
                 WriteLog($"GLOBAL HOTKEY NOT REGISTERED ({_hotkeys.ToggleHotkeyText}). F3 still works while this window is focused.");
+                AppLogger.LogWarning($"Global hotkey was not registered ({_hotkeys.ToggleHotkeyText}).");
             }
 
             _lastHotkeyRegistrationSucceeded = success;
@@ -149,7 +150,16 @@ namespace Lazy_App_Codex_Core
 
         private void LoadConfig()
         {
-            _scripts = _configRepository.Load();
+            try
+            {
+                _scripts = _configRepository.Load();
+            }
+            catch (Exception ex)
+            {
+                _scripts = new Dictionary<string, ScriptModel>();
+                AppLogger.LogError("Failed to load script configuration.", ex);
+                MessageBox.Show("Failed to load config.json. Please check the logs folder.", "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
 
             ddlScript.Items.Clear();
             ddlScript.Items.Insert(0, "Choose a script");
@@ -202,6 +212,7 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
+                AppLogger.LogError("Script run failed.", ex);
                 UpdateLabelStatus("ERROR: " + ex.Message, Color.Red);
             }
             finally

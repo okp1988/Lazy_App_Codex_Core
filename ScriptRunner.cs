@@ -160,6 +160,7 @@ namespace Lazy_App_Codex_Core
                     randSleep);
             }
 
+            AppLogger.LogWarning($"Unknown script action '{step.Act}' was skipped.");
             return new PlannedStep($"UNKNOWN ACTION {step.Act}:{randSleep}(s)", "", "", "ADB OFF: SKIP UNKNOWN", randSleep);
         }
 
