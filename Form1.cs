@@ -2,6 +2,39 @@ namespace Lazy_App_Codex_Core
 {
     public partial class Form1 : Form
     {
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool DestroyIcon(IntPtr hIcon);
+
+        [System.Runtime.InteropServices.ComImport]
+        [System.Runtime.InteropServices.Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+        [System.Runtime.InteropServices.ClassInterface(System.Runtime.InteropServices.ClassInterfaceType.None)]
+        private class CTaskbarList
+        {
+        }
+
+        [System.Runtime.InteropServices.ComImport]
+        [System.Runtime.InteropServices.Guid("EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF")]
+        [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ITaskbarList3
+        {
+            void HrInit();
+            void AddTab(IntPtr hwnd);
+            void DeleteTab(IntPtr hwnd);
+            void ActivateTab(IntPtr hwnd);
+            void SetActiveAlt(IntPtr hwnd);
+            void MarkFullscreenWindow(IntPtr hwnd, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] bool fullscreen);
+            void SetProgressValue(IntPtr hwnd, ulong completed, ulong total);
+            void SetProgressState(IntPtr hwnd, int flags);
+            void RegisterTab(IntPtr hwndTab, IntPtr hwndMdi);
+            void UnregisterTab(IntPtr hwndTab);
+            void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
+            void SetTabActive(IntPtr hwndTab, IntPtr hwndMdi, int flags);
+            void ThumbBarAddButtons(IntPtr hwnd, uint buttonCount, IntPtr buttons);
+            void ThumbBarUpdateButtons(IntPtr hwnd, uint buttonCount, IntPtr buttons);
+            void ThumbBarSetImageList(IntPtr hwnd, IntPtr imageList);
+            void SetOverlayIcon(IntPtr hwnd, IntPtr icon, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string description);
+        }
+
         private readonly HotkeyManager _hotkeys = new HotkeyManager();
         private readonly ScriptConfigRepository _configRepository = new ScriptConfigRepository("config.json");
         private readonly ScriptRunner _runner = new ScriptRunner();
@@ -12,12 +45,24 @@ namespace Lazy_App_Codex_Core
         private bool _isRunning;
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
+        private readonly string _baseTitle;
+        private readonly Icon _baseIcon;
+        private readonly Icon _runningIcon;
+        private readonly Icon _stoppedIcon;
+        private ITaskbarList3? _taskbarList;
 
         private static bool IsAdbActionEnabled = true;
 
         public Form1()
         {
             InitializeComponent();
+            Icon? appIcon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            _baseIcon = appIcon != null ? (Icon)appIcon.Clone() : (Icon)SystemIcons.Application.Clone();
+            appIcon?.Dispose();
+            _runningIcon = CreateOverlayIcon(Color.LimeGreen, true);
+            _stoppedIcon = CreateOverlayIcon(Color.DodgerBlue, false);
+            Icon = _baseIcon;
+            _baseTitle = Text;
 
             Load += OnLoad;
             Activated += OnActivated;
@@ -68,6 +113,7 @@ namespace Lazy_App_Codex_Core
         {
             ApplyResponsiveLayout();
             RegisterHotkeysForWindowState();
+            SetTaskbarOverlayIcon(_stoppedIcon, "Stopped");
         }
 
         private void OnActivated(object? sender, EventArgs e)
@@ -201,6 +247,7 @@ namespace Lazy_App_Codex_Core
             _runCts = new CancellationTokenSource();
             taLog.Clear();
             SetRunningState(true);
+            Text = $"{_baseTitle} - Running: {selectedScriptName}";
 
             _runTask = RunSelectedScriptAsync(selectedScriptName, selectedScript, _runCts.Token);
             try
@@ -219,6 +266,7 @@ namespace Lazy_App_Codex_Core
             {
                 _runTask = null;
                 SetRunningState(false);
+                Text = _baseTitle;
             }
         }
 
@@ -297,6 +345,7 @@ namespace Lazy_App_Codex_Core
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
             btnRun.Text = isRunning ? "Stop" : "Run (F3)";
+            SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
 
             if (isRunning)
             {
@@ -322,6 +371,84 @@ namespace Lazy_App_Codex_Core
             lblStatus.ForeColor = color;
             lblStatus.Invalidate();
             WriteLog(text);
+        }
+
+        private void SetTaskbarOverlayIcon(Icon? overlayIcon, string description)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => SetTaskbarOverlayIcon(overlayIcon, description)));
+                return;
+            }
+
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                _taskbarList ??= CreateTaskbarList();
+                _taskbarList.SetOverlayIcon(Handle, overlayIcon?.Handle ?? IntPtr.Zero, description);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogWarning($"Taskbar overlay icon could not be updated: {ex.Message}");
+            }
+        }
+
+        private static ITaskbarList3 CreateTaskbarList()
+        {
+            var taskbarList = (ITaskbarList3)new CTaskbarList();
+            taskbarList.HrInit();
+            return taskbarList;
+        }
+
+        private static Icon CreateOverlayIcon(Color badgeColor, bool isRunning)
+        {
+            using Bitmap bitmap = new Bitmap(32, 32);
+            using Graphics graphics = Graphics.FromImage(bitmap);
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            graphics.Clear(Color.Transparent);
+
+            int badgeSize = 30;
+            int badgeX = 1;
+            int badgeY = 1;
+            var badgeBounds = new Rectangle(badgeX, badgeY, badgeSize - 1, badgeSize - 1);
+
+            using var badgeBrush = new SolidBrush(badgeColor);
+            using var borderPen = new Pen(Color.White, 3);
+            graphics.FillEllipse(badgeBrush, badgeBounds);
+            graphics.DrawEllipse(borderPen, badgeBounds);
+
+            using var symbolBrush = new SolidBrush(Color.White);
+            if (isRunning)
+            {
+                Point[] play =
+                {
+                    new Point(badgeX + badgeSize / 3, badgeY + badgeSize / 4),
+                    new Point(badgeX + badgeSize / 3, badgeY + badgeSize * 3 / 4),
+                    new Point(badgeX + badgeSize * 3 / 4, badgeY + badgeSize / 2)
+                };
+                graphics.FillPolygon(symbolBrush, play);
+            }
+            else
+            {
+                int squareSize = badgeSize / 3;
+                int squareX = badgeX + (badgeSize - squareSize) / 2;
+                int squareY = badgeY + (badgeSize - squareSize) / 2;
+                graphics.FillRectangle(symbolBrush, squareX, squareY, squareSize, squareSize);
+            }
+
+            IntPtr iconHandle = bitmap.GetHicon();
+            try
+            {
+                return (Icon)Icon.FromHandle(iconHandle).Clone();
+            }
+            finally
+            {
+                DestroyIcon(iconHandle);
+            }
         }
 
         private void lblStatus_Paint(object? sender, PaintEventArgs e)
@@ -367,8 +494,12 @@ namespace Lazy_App_Codex_Core
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             _hotkeys.UnregisterAll(Handle);
+            SetTaskbarOverlayIcon(null, "");
             _clockTimer.Stop();
             _clockTimer.Dispose();
+            _runningIcon.Dispose();
+            _stoppedIcon.Dispose();
+            _baseIcon.Dispose();
             _runCts?.Cancel();
         }
     }

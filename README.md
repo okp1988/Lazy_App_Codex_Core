@@ -32,17 +32,7 @@ The app now supports editable hotkeys and a shorter script format.
 }
 ```
 
-### Script aliases (short format)
-
-- Script: `d` (duration), `imin`, `imax`, `steps` (same as `config`), `defaults`.
-- Step: `a` (act), `sx/sy`, `sx2/sy2`, `x/y`, `x2/y2`, `rx/ry`, `smin/smax`.
-
-The old long keys are still supported.
-You do **not** need to shrink or delete existing scripts. Keep your full config list (all 20 scripts), and only use short aliases for new edits if you want.
-
-
-
-### Even shorter per-step format
+### Script aliases
 
 You can also use array pairs to shorten repeated keys:
 
@@ -72,8 +62,8 @@ If you have the same sequence repeated many times, use a group object with `step
 ```json
 {
   "steps": [
-    { "a": "updrag", "s": [537, 1680], "s2": [547, 1072], "r": [100, 20], "t": [3, 4] },
-    { "a": "downdrag", "s": [544, 1120], "s2": [544, 1557], "r": [100, 20], "t": [3, 4] }
+    { "a": "drag", "s": [537, 1680], "s2": [547, 1072], "r": [100, 20], "t": [3, 4] },
+    { "a": "drag", "s": [544, 1120], "s2": [544, 1557], "r": [100, 20], "t": [3, 4] }
   ],
   "repeat": 4
 }
