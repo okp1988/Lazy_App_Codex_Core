@@ -196,6 +196,8 @@ namespace Lazy_App_Codex_Core
 
         private void LoadConfig()
         {
+            string? selectedScript = ddlScript.SelectedIndex > 0 ? ddlScript.SelectedItem?.ToString() : null;
+
             try
             {
                 _scripts = _configRepository.Load();
@@ -214,6 +216,11 @@ namespace Lazy_App_Codex_Core
             foreach (var key in _scripts.Keys)
             {
                 ddlScript.Items.Add(key);
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedScript) && _scripts.ContainsKey(selectedScript))
+            {
+                ddlScript.SelectedItem = selectedScript;
             }
         }
 
@@ -344,6 +351,7 @@ namespace Lazy_App_Codex_Core
             _isRunning = isRunning;
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
+            btnConfig.Enabled = !isRunning;
             btnRun.Text = isRunning ? "Stop" : "Run (F3)";
             SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
 
@@ -489,6 +497,22 @@ namespace Lazy_App_Codex_Core
         private void UpdateHotkeyStatus(bool success)
         {
             btnStatus.BackColor = success ? Color.Green : Color.Red;
+        }
+
+        private void btnConfig_Click(object sender, EventArgs e)
+        {
+            using var editor = new ConfigEditorForm(_configRepository);
+            if (editor.ShowDialog(this) != DialogResult.OK || !editor.ConfigSaved)
+            {
+                return;
+            }
+
+            LoadConfig();
+            _hotkeys.UnregisterAll(Handle);
+            _hotkeys.Configure(_configRepository.Settings.HotkeyStartStopToggle, _configRepository.Settings.HotkeyStop);
+            _lastHotkeyRegistrationSucceeded = null;
+            RegisterHotkeysForWindowState();
+            WriteLog("CONFIG UPDATED.");
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)

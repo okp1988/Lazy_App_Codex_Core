@@ -35,6 +35,7 @@
             lblCurrentTime = new Label();
             ddlScript = new ComboBox();
             ddlOffset = new ComboBox();
+            btnConfig = new Button();
             btnRun = new Button();
             splitContainer2 = new SplitContainer();
             taLog = new RichTextBox();
@@ -68,6 +69,7 @@
             // 
             // splitContainer1.Panel2
             // 
+            splitContainer1.Panel2.Controls.Add(btnConfig);
             splitContainer1.Panel2.Controls.Add(ddlOffset);
             splitContainer1.Panel2.Controls.Add(btnRun);
             splitContainer1.Panel2MinSize = 125;
@@ -157,6 +159,17 @@
             ddlOffset.Size = new Size(111, 28);
             ddlOffset.TabIndex = 1;
             // 
+            // btnConfig
+            // 
+            btnConfig.Location = new Point(4, 93);
+            btnConfig.Margin = new Padding(4, 5, 4, 5);
+            btnConfig.Name = "btnConfig";
+            btnConfig.Size = new Size(111, 35);
+            btnConfig.TabIndex = 2;
+            btnConfig.Text = "Config";
+            btnConfig.UseVisualStyleBackColor = true;
+            btnConfig.Click += btnConfig_Click;
+            // 
             // btnRun
             // 
             btnRun.Location = new Point(4, 19);
@@ -235,6 +248,7 @@
         private System.Windows.Forms.SplitContainer splitContainer2;
         private System.Windows.Forms.RichTextBox taLog;
         private System.Windows.Forms.ComboBox ddlOffset;
+        private System.Windows.Forms.Button btnConfig;
     }
 }
 

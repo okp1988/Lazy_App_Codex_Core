@@ -1,0 +1,766 @@
+using Newtonsoft.Json.Linq;
+
+namespace Lazy_App_Codex_Core
+{
+    public sealed class ConfigEditorForm : Form
+    {
+        private sealed record ConfigCategory(string Key, string Text);
+
+        private static readonly ConfigCategory[] Categories =
+        {
+            new ConfigCategory("settings", "SETTINGS"),
+            new ConfigCategory("offset", "OFFSET"),
+            new ConfigCategory("scripts", "SCRIPTS")
+        };
+
+        private readonly ScriptConfigRepository _repository;
+        private readonly TabControl _categoryTabs = new TabControl();
+        private readonly ListBox _entryList = new ListBox();
+        private readonly TextBox _keyTextBox = new TextBox();
+        private readonly TextBox _valueTextBox = new TextBox();
+        private readonly NumericUpDown _offsetXBox = new NumericUpDown();
+        private readonly NumericUpDown _offsetYBox = new NumericUpDown();
+        private readonly NumericUpDown _durationBox = new NumericUpDown();
+        private readonly NumericUpDown _intervalMinBox = new NumericUpDown();
+        private readonly NumericUpDown _intervalMaxBox = new NumericUpDown();
+        private readonly DataGridView _stepGrid = new DataGridView();
+        private readonly Panel _settingsEditor = new Panel();
+        private readonly Panel _offsetEditor = new Panel();
+        private readonly Panel _scriptEditor = new Panel();
+        private readonly Button _newButton = new Button();
+        private readonly Button _saveEntryButton = new Button();
+        private readonly Button _removeButton = new Button();
+        private readonly Button _saveConfigButton = new Button();
+        private readonly Button _cancelButton = new Button();
+        private readonly Button _stepHelpButton = new Button();
+        private readonly Label _statusLabel = new Label();
+        private readonly ToolTip _toolTip = new ToolTip();
+
+        private JObject _root;
+        private string? _selectedKey;
+
+        public bool ConfigSaved { get; private set; }
+
+        public ConfigEditorForm(ScriptConfigRepository repository)
+        {
+            _repository = repository;
+            _root = _repository.LoadRawConfig();
+
+            Text = "Config";
+            StartPosition = FormStartPosition.CenterParent;
+            MinimumSize = new Size(840, 540);
+            Size = new Size(980, 680);
+            ShowIcon = false;
+
+            BuildLayout();
+            LoadCategories();
+            LoadEntries();
+        }
+
+        private string CurrentCategory => Categories[Math.Max(0, _categoryTabs.SelectedIndex)].Key;
+
+        private string CurrentCategoryText => Categories[Math.Max(0, _categoryTabs.SelectedIndex)].Text;
+
+        private JObject CurrentCategoryObject => (JObject)_root[CurrentCategory]!;
+
+        private void BuildLayout()
+        {
+            _categoryTabs.Dock = DockStyle.Top;
+            _categoryTabs.Height = 36;
+            _categoryTabs.SelectedIndexChanged += (_, _) => LoadEntries();
+
+            var main = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1
+            };
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            _entryList.Dock = DockStyle.Fill;
+            _entryList.IntegralHeight = false;
+            _entryList.SelectedIndexChanged += (_, _) => LoadSelectedEntry();
+
+            var leftButtons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.LeftToRight,
+                Height = 40,
+                Padding = new Padding(6, 4, 6, 4),
+                WrapContents = false
+            };
+
+            ConfigureButton(_newButton, "Add", "Add a new item in this tab", (_, _) => StartNewEntry(), 76);
+            ConfigureButton(_removeButton, "Remove", "Remove the selected item", (_, _) => RemoveSelectedEntry(), 76);
+            leftButtons.Controls.Add(_newButton);
+            leftButtons.Controls.Add(_removeButton);
+            var listPanel = new Panel { Dock = DockStyle.Fill };
+            listPanel.Controls.Add(_entryList);
+            listPanel.Controls.Add(leftButtons);
+
+            var editor = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 5,
+                Padding = new Padding(10)
+            };
+            editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            editor.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+            var keyLabel = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Name",
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            _keyTextBox.Dock = DockStyle.Fill;
+
+            var editorHost = new Panel { Dock = DockStyle.Fill };
+            BuildSettingsEditor();
+            BuildOffsetEditor();
+            BuildScriptEditor();
+            editorHost.Controls.Add(_settingsEditor);
+            editorHost.Controls.Add(_offsetEditor);
+            editorHost.Controls.Add(_scriptEditor);
+
+            _statusLabel.Dock = DockStyle.Fill;
+            _statusLabel.ForeColor = Color.DimGray;
+            _statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+            var bottomButtons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.RightToLeft,
+                Padding = new Padding(0, 7, 0, 0),
+                WrapContents = false
+            };
+            ConfigureButton(_saveEntryButton, "Save Item", "Save this item inside the popup", (_, _) => SaveEntry(), 108);
+            ConfigureButton(_saveConfigButton, "Save All & Close", "Write all changes to config.json", (_, _) => SaveConfig(), 138);
+            ConfigureButton(_cancelButton, "Close", "Close without writing unsaved popup changes to config.json", (_, _) => Close(), 70);
+            bottomButtons.Controls.Add(_cancelButton);
+            bottomButtons.Controls.Add(_saveConfigButton);
+            bottomButtons.Controls.Add(_saveEntryButton);
+
+            editor.Controls.Add(keyLabel, 0, 0);
+            editor.Controls.Add(_keyTextBox, 0, 1);
+            editor.Controls.Add(editorHost, 0, 2);
+            editor.Controls.Add(_statusLabel, 0, 3);
+            editor.Controls.Add(bottomButtons, 0, 4);
+            main.Controls.Add(listPanel, 0, 0);
+            main.Controls.Add(editor, 1, 0);
+
+            Controls.Add(main);
+            Controls.Add(_categoryTabs);
+        }
+
+        private void BuildSettingsEditor()
+        {
+            _settingsEditor.Dock = DockStyle.Fill;
+            var layout = CreateSimpleEditorLayout("Value");
+            _valueTextBox.Dock = DockStyle.Top;
+            layout.Controls.Add(_valueTextBox, 0, 1);
+            _settingsEditor.Controls.Add(layout);
+        }
+
+        private void BuildOffsetEditor()
+        {
+            _offsetEditor.Dock = DockStyle.Fill;
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 2,
+                RowCount = 2,
+                Height = 70
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            AddNumberField(layout, "X", _offsetXBox, 0);
+            AddNumberField(layout, "Y", _offsetYBox, 1);
+            _offsetEditor.Controls.Add(layout);
+        }
+
+        private void BuildScriptEditor()
+        {
+            _scriptEditor.Dock = DockStyle.Fill;
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var header = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 3
+            };
+            header.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            header.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            AddNumberField(header, "Loop Count", _durationBox, 0);
+            AddNumberField(header, "Interval Min", _intervalMinBox, 1);
+            AddNumberField(header, "Interval Max", _intervalMaxBox, 2);
+            _stepHelpButton.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+            _stepHelpButton.Size = new Size(24, 24);
+            _stepHelpButton.Text = "";
+            _stepHelpButton.Font = new Font(_stepHelpButton.Font.FontFamily, 9F, FontStyle.Bold);
+            _stepHelpButton.FlatStyle = FlatStyle.Flat;
+            _stepHelpButton.FlatAppearance.BorderSize = 0;
+            _stepHelpButton.BackColor = Color.LightGoldenrodYellow;
+            _stepHelpButton.ForeColor = Color.Black;
+            _stepHelpButton.UseVisualStyleBackColor = false;
+            _stepHelpButton.Paint += (_, e) =>
+            {
+                using var path = new System.Drawing.Drawing2D.GraphicsPath();
+                path.AddEllipse(0, 0, _stepHelpButton.Width - 1, _stepHelpButton.Height - 1);
+                _stepHelpButton.Region = new Region(path);
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                var bounds = new Rectangle(1, 1, _stepHelpButton.Width - 3, _stepHelpButton.Height - 3);
+                using var fillBrush = new SolidBrush(Color.LightGoldenrodYellow);
+                using var shadowPen = new Pen(Color.DarkGoldenrod);
+                using var highlightPen = new Pen(Color.White);
+                using var textBrush = new SolidBrush(Color.Black);
+
+                e.Graphics.FillEllipse(fillBrush, bounds);
+                e.Graphics.DrawArc(highlightPen, bounds, 135, 180);
+                e.Graphics.DrawArc(shadowPen, bounds, -45, 180);
+
+                var textSize = e.Graphics.MeasureString("?", _stepHelpButton.Font);
+                float textX = (_stepHelpButton.Width - textSize.Width) / 2F + 0.5F;
+                float textY = (_stepHelpButton.Height - textSize.Height) / 2F - 0.5F;
+                e.Graphics.DrawString("?", _stepHelpButton.Font, textBrush, textX, textY);
+            };
+            _stepHelpButton.MouseEnter += (_, _) => _toolTip.Show(GetStepHelpText(), _stepHelpButton, _stepHelpButton.Width + 4, 0, 12000);
+            _stepHelpButton.MouseLeave += (_, _) => _toolTip.Hide(_stepHelpButton);
+            header.Controls.Add(_stepHelpButton, 0, 2);
+            header.SetColumnSpan(_stepHelpButton, 3);
+
+            _stepGrid.Dock = DockStyle.Fill;
+            _stepGrid.AllowUserToAddRows = true;
+            _stepGrid.AllowUserToDeleteRows = true;
+            _stepGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _stepGrid.RowHeadersWidth = 35;
+            _stepGrid.Columns.Add(CreateTextColumn("act", "Act", 66, "Input left, right, or drag."));
+            _stepGrid.Columns.Add(CreateTextColumn("x", "X", 58, "Screen X coordinate for click, or drag start X."));
+            _stepGrid.Columns.Add(CreateTextColumn("y", "Y", 58, "Screen Y coordinate for click, or drag start Y."));
+            _stepGrid.Columns.Add(CreateTextColumn("x2", "X2", 58, "For drag only: drag end X. Leave blank for click."));
+            _stepGrid.Columns.Add(CreateTextColumn("y2", "Y2", 58, "For drag only: drag end Y. Leave blank for click."));
+            _stepGrid.Columns.Add(CreateTextColumn("randX", "RX", 52, "Random X range. Use 0 if no random movement is needed."));
+            _stepGrid.Columns.Add(CreateTextColumn("randY", "RY", 52, "Random Y range. Use 0 if no random movement is needed."));
+            _stepGrid.Columns.Add(CreateTextColumn("sleepMin", "Min", 56, "Minimum wait time after this step, in seconds."));
+            _stepGrid.Columns.Add(CreateTextColumn("sleepMax", "Max", 56, "Maximum wait time after this step, in seconds."));
+
+            layout.Controls.Add(header, 0, 0);
+            layout.Controls.Add(_stepGrid, 0, 1);
+            _scriptEditor.Controls.Add(layout);
+        }
+
+        private static TableLayoutPanel CreateSimpleEditorLayout(string labelText)
+        {
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 2,
+                Height = 62
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            layout.Controls.Add(new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = labelText,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+            return layout;
+        }
+
+        private static void AddNumberField(TableLayoutPanel layout, string label, NumericUpDown input, int column)
+        {
+            input.Dock = DockStyle.Fill;
+            input.Minimum = -100000;
+            input.Maximum = 100000;
+
+            layout.Controls.Add(new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = label,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, column, 0);
+            layout.Controls.Add(input, column, 1);
+        }
+
+        private static DataGridViewTextBoxColumn CreateTextColumn(string name, string header, int width, string tooltip)
+        {
+            return new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = header,
+                ToolTipText = tooltip,
+                MinimumWidth = 38,
+                Width = width
+            };
+        }
+
+        private void ConfigureButton(Button button, string text, string tooltip, EventHandler handler, int width)
+        {
+            button.Text = text;
+            button.Size = new Size(width, 30);
+            button.Margin = new Padding(4, 3, 4, 3);
+            button.UseVisualStyleBackColor = true;
+            button.Click += handler;
+            _toolTip.SetToolTip(button, tooltip);
+        }
+
+        private static string GetStepHelpText()
+        {
+            return string.Join(Environment.NewLine, new[]
+            {
+                "Act: input left, right, or drag",
+                "X/Y: click position, or drag start position",
+                "X2/Y2: drag end position; leave blank for click",
+                "RX/RY: random movement range; use 0 if not needed",
+                "Min/Max: wait time after this step, in seconds"
+            });
+        }
+
+        private void LoadCategories()
+        {
+            _categoryTabs.TabPages.Clear();
+            foreach (var category in Categories)
+            {
+                _categoryTabs.TabPages.Add(category.Key, category.Text);
+            }
+
+            _categoryTabs.SelectedIndex = 0;
+        }
+
+        private void LoadEntries()
+        {
+            _entryList.BeginUpdate();
+            _entryList.Items.Clear();
+            foreach (var property in CurrentCategoryObject.Properties())
+            {
+                _entryList.Items.Add(property.Name);
+            }
+            _entryList.EndUpdate();
+
+            _selectedKey = null;
+            _keyTextBox.Clear();
+            ClearEditors();
+            ShowCurrentEditor();
+            UpdateActionLabels();
+            SetStatus($"Editing {CurrentCategoryText}.");
+        }
+
+        private void LoadSelectedEntry()
+        {
+            if (_entryList.SelectedItem == null)
+            {
+                return;
+            }
+
+            _selectedKey = _entryList.SelectedItem.ToString();
+            if (string.IsNullOrWhiteSpace(_selectedKey))
+            {
+                return;
+            }
+
+            _keyTextBox.Text = _selectedKey;
+            JToken? value = CurrentCategoryObject[_selectedKey];
+            ClearEditors();
+
+            if (CurrentCategory == "settings")
+            {
+                _valueTextBox.Text = value?.ToString() ?? "";
+            }
+            else if (CurrentCategory == "offset")
+            {
+                LoadOffset(value);
+            }
+            else
+            {
+                LoadScript(value as JObject);
+            }
+
+            ShowCurrentEditor();
+            SetStatus("Edit the fields, then save the entry.");
+        }
+
+        private void StartNewEntry()
+        {
+            _entryList.ClearSelected();
+            _selectedKey = null;
+            _keyTextBox.Clear();
+            ClearEditors();
+            ShowCurrentEditor();
+            UpdateActionLabels();
+
+            if (CurrentCategory == "scripts")
+            {
+                _intervalMaxBox.Value = 1;
+            }
+
+            _keyTextBox.Focus();
+            SetStatus("Add a new entry inside the selected tab.");
+        }
+
+        private void SaveEntry()
+        {
+            string key = _keyTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                ShowValidation("Name is required.");
+                return;
+            }
+
+            JToken value;
+            try
+            {
+                value = CurrentCategory switch
+                {
+                    "settings" => new JValue(_valueTextBox.Text),
+                    "offset" => new JArray((int)_offsetXBox.Value, (int)_offsetYBox.Value),
+                    _ => BuildScriptValue()
+                };
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowValidation(ex.Message);
+                return;
+            }
+
+            var category = CurrentCategoryObject;
+            if (!string.IsNullOrWhiteSpace(_selectedKey) && !key.Equals(_selectedKey, StringComparison.Ordinal))
+            {
+                category.Property(_selectedKey!)?.Remove();
+            }
+
+            category[key] = value;
+            _selectedKey = key;
+            LoadEntries();
+            SelectEntry(key);
+            SetStatus($"{GetEntryName()} saved in this window. Click Save All & Close to update config.json.");
+        }
+
+        private void RemoveSelectedEntry()
+        {
+            string? key = _entryList.SelectedItem?.ToString();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            var result = MessageBox.Show($"Remove {CurrentCategoryText}.{key}?", "Remove Config", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (result != DialogResult.Yes)
+            {
+                return;
+            }
+
+            CurrentCategoryObject.Property(key)?.Remove();
+            LoadEntries();
+            SetStatus("Item removed in this window. Click Save All & Close to update config.json.");
+        }
+
+        private void SaveConfig()
+        {
+            try
+            {
+                _repository.SaveRawConfig(_root);
+                ConfigSaved = true;
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to save config.json. " + ex.Message, "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ClearEditors()
+        {
+            _valueTextBox.Clear();
+            _offsetXBox.Value = 0;
+            _offsetYBox.Value = 0;
+            _durationBox.Value = 0;
+            _intervalMinBox.Value = 0;
+            _intervalMaxBox.Value = 0;
+            _stepGrid.Rows.Clear();
+        }
+
+        private void ShowCurrentEditor()
+        {
+            _settingsEditor.Visible = CurrentCategory == "settings";
+            _offsetEditor.Visible = CurrentCategory == "offset";
+            _scriptEditor.Visible = CurrentCategory == "scripts";
+        }
+
+        private void UpdateActionLabels()
+        {
+            _saveEntryButton.Text = CurrentCategory switch
+            {
+                "settings" => "Save Setting",
+                "offset" => "Save Offset",
+                _ => "Save Script"
+            };
+            _toolTip.SetToolTip(_saveEntryButton, $"Save the selected {GetEntryName().ToLowerInvariant()} inside this popup");
+        }
+
+        private string GetEntryName()
+        {
+            return CurrentCategory switch
+            {
+                "settings" => "Setting",
+                "offset" => "Offset",
+                _ => "Script"
+            };
+        }
+
+        private void LoadOffset(JToken? value)
+        {
+            if (value is JArray array)
+            {
+                _offsetXBox.Value = ClampNumeric(ReadInt(array.ElementAtOrDefault(0), 0));
+                _offsetYBox.Value = ClampNumeric(ReadInt(array.ElementAtOrDefault(1), 0));
+                return;
+            }
+
+            _offsetXBox.Value = ClampNumeric(ReadInt(value, 0));
+        }
+
+        private void LoadScript(JObject? script)
+        {
+            if (script == null)
+            {
+                _intervalMaxBox.Value = 1;
+                return;
+            }
+
+            _durationBox.Value = ClampNumeric(ReadInt(GetToken(script, "d", "duration"), 0));
+            _intervalMinBox.Value = ClampNumeric(ReadInt(GetToken(script, "imin", "interval_min", "interval", "i"), 0, 0));
+            _intervalMaxBox.Value = ClampNumeric(ReadInt(GetToken(script, "imax", "interval_max", "interval", "i"), 1, 1));
+
+            var steps = script["config"] as JArray ?? script["steps"] as JArray;
+            if (steps == null)
+            {
+                return;
+            }
+
+            foreach (var step in ExpandSteps(steps))
+            {
+                AddStepRow(step as JObject);
+            }
+        }
+
+        private JObject BuildScriptValue()
+        {
+            var config = new JArray();
+            foreach (DataGridViewRow row in _stepGrid.Rows)
+            {
+                if (row.IsNewRow || IsEmptyRow(row))
+                {
+                    continue;
+                }
+
+                var step = new JObject
+                {
+                    ["a"] = ReadCell(row, "act", "left"),
+                    ["s"] = new JArray(ParseCellInt(row, "x"), ParseCellInt(row, "y")),
+                    ["r"] = new JArray(ParseCellInt(row, "randX"), ParseCellInt(row, "randY")),
+                    ["t"] = new JArray(ParseCellInt(row, "sleepMin"), ParseCellInt(row, "sleepMax"))
+                };
+
+                int? x2 = ParseOptionalCellInt(row, "x2");
+                int? y2 = ParseOptionalCellInt(row, "y2");
+                if (x2.HasValue || y2.HasValue)
+                {
+                    step["s2"] = new JArray(x2 ?? 0, y2 ?? 0);
+                }
+
+                config.Add(step);
+            }
+
+            return new JObject
+            {
+                ["d"] = (int)_durationBox.Value,
+                ["imin"] = (int)_intervalMinBox.Value,
+                ["imax"] = (int)_intervalMaxBox.Value,
+                ["config"] = config
+            };
+        }
+
+        private void AddStepRow(JObject? step)
+        {
+            if (step == null)
+            {
+                return;
+            }
+
+            int rowIndex = _stepGrid.Rows.Add();
+            var row = _stepGrid.Rows[rowIndex];
+            row.Cells["act"].Value = ReadString(GetToken(step, "a", "act"), "left");
+            row.Cells["x"].Value = ReadInt(GetToken(step, "s", "scr", "p", "x", "scrX", "posX"), 0, 0);
+            row.Cells["y"].Value = ReadInt(GetToken(step, "s", "scr", "p", "y", "scrY", "posY"), 0, 1);
+            row.Cells["x2"].Value = ReadNullableInt(GetToken(step, "s2", "scr2", "p2", "x2", "scrX2", "posX2"), 0);
+            row.Cells["y2"].Value = ReadNullableInt(GetToken(step, "s2", "scr2", "p2", "y2", "scrY2", "posY2"), 1);
+            row.Cells["randX"].Value = ReadInt(GetToken(step, "r", "rand", "rx", "randX"), 0, 0);
+            row.Cells["randY"].Value = ReadInt(GetToken(step, "r", "rand", "ry", "randY"), 0, 1);
+            row.Cells["sleepMin"].Value = ReadInt(GetToken(step, "t", "sleep", "smin", "sleep_min"), 0, 0);
+            row.Cells["sleepMax"].Value = ReadInt(GetToken(step, "t", "sleep", "smax", "sleep_max"), 0, 1);
+        }
+
+        private static IEnumerable<JToken> ExpandSteps(JArray rawSteps)
+        {
+            foreach (var item in rawSteps)
+            {
+                if (item is not JObject stepObj)
+                {
+                    continue;
+                }
+
+                var nested = stepObj["steps"] as JArray;
+                int repeat = ReadInt(GetToken(stepObj, "repeat", "rep"), 1);
+                if (nested == null)
+                {
+                    yield return stepObj;
+                    continue;
+                }
+
+                for (int i = 0; i < Math.Max(1, repeat); i++)
+                {
+                    foreach (var nestedStep in ExpandSteps(nested))
+                    {
+                        yield return nestedStep;
+                    }
+                }
+            }
+        }
+
+        private static JToken? GetToken(JObject source, params string[] aliases)
+        {
+            foreach (string alias in aliases)
+            {
+                var token = source.GetValue(alias, StringComparison.OrdinalIgnoreCase);
+                if (token != null)
+                {
+                    return token;
+                }
+            }
+
+            return null;
+        }
+
+        private static int ReadInt(JToken? value, int fallback, int index = -1)
+        {
+            if (value is JArray array && index >= 0)
+            {
+                value = array.ElementAtOrDefault(index);
+            }
+
+            return int.TryParse(value?.ToString(), out int parsed) ? parsed : fallback;
+        }
+
+        private static int? ReadNullableInt(JToken? value, int index)
+        {
+            if (value is JArray array)
+            {
+                value = array.ElementAtOrDefault(index);
+            }
+
+            return int.TryParse(value?.ToString(), out int parsed) ? parsed : null;
+        }
+
+        private static string ReadString(JToken? value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value?.ToString()) ? fallback : value!.ToString();
+        }
+
+        private static decimal ClampNumeric(int value)
+        {
+            return Math.Max(-100000, Math.Min(100000, value));
+        }
+
+        private static bool IsEmptyRow(DataGridViewRow row)
+        {
+            foreach (DataGridViewCell cell in row.Cells)
+            {
+                if (!string.IsNullOrWhiteSpace(cell.Value?.ToString()))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ReadCell(DataGridViewRow row, string column, string fallback)
+        {
+            string? value = row.Cells[column].Value?.ToString();
+            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        }
+
+        private static int ParseCellInt(DataGridViewRow row, string column)
+        {
+            string? value = row.Cells[column].Value?.ToString();
+            if (int.TryParse(value, out int parsed))
+            {
+                return parsed;
+            }
+
+            throw new InvalidOperationException($"{row.Cells[column].OwningColumn.HeaderText} must be a number.");
+        }
+
+        private static int? ParseOptionalCellInt(DataGridViewRow row, string column)
+        {
+            string? value = row.Cells[column].Value?.ToString();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            if (int.TryParse(value, out int parsed))
+            {
+                return parsed;
+            }
+
+            throw new InvalidOperationException($"{row.Cells[column].OwningColumn.HeaderText} must be a number.");
+        }
+
+        private void SelectEntry(string key)
+        {
+            for (int i = 0; i < _entryList.Items.Count; i++)
+            {
+                if (key.Equals(_entryList.Items[i]?.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    _entryList.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        private void ShowValidation(string message)
+        {
+            SetStatus(message, true);
+            MessageBox.Show(message, "Config", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private void SetStatus(string message, bool isError = false)
+        {
+            _statusLabel.Text = message;
+            _statusLabel.ForeColor = isError ? Color.Firebrick : Color.DimGray;
+        }
+    }
+}

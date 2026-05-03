@@ -26,6 +26,30 @@ namespace Lazy_App_Codex_Core
             _configPath = configPath;
         }
 
+        public JObject LoadRawConfig()
+        {
+            JObject root;
+            if (!File.Exists(_configPath))
+            {
+                root = new JObject();
+            }
+            else
+            {
+                string json = File.ReadAllText(_configPath);
+                root = JsonConvert.DeserializeObject<JObject>(json) ?? new JObject();
+            }
+
+            EnsureConfigCategories(root);
+            return root;
+        }
+
+        public void SaveRawConfig(JObject root)
+        {
+            EnsureConfigCategories(root);
+            string json = JsonConvert.SerializeObject(root, Formatting.Indented);
+            File.WriteAllText(_configPath, json);
+        }
+
         public Dictionary<string, ScriptModel> Load()
         {
             Settings = new AppSettings();
@@ -84,6 +108,21 @@ namespace Lazy_App_Codex_Core
             }
 
             return scripts;
+        }
+
+        private static void EnsureConfigCategories(JObject root)
+        {
+            EnsureCategory(root, "settings");
+            EnsureCategory(root, "offset");
+            EnsureCategory(root, "scripts");
+        }
+
+        private static void EnsureCategory(JObject root, string name)
+        {
+            if (root[name] is not JObject)
+            {
+                root[name] = new JObject();
+            }
         }
 
         public int GetOffsetUnitForScript(string scriptName, string axis)
