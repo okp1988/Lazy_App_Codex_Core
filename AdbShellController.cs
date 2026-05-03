@@ -31,7 +31,7 @@ namespace Lazy_App_Codex_Core
 
         /// <param name="adbPath">Full path to adb.exe (default C:\adb\adb.exe)</param>
         /// <param name="deviceSerial">Optional device serial. If provided, will prepend "-s {serial}" to all calls.</param>
-        public AdbShellController(string adbPath = @"C:\adb\adb.exe", string deviceSerial = null)
+        public AdbShellController(string adbPath = @"C:\adb\adb.exe", string? deviceSerial = null)
         {
             AdbPath = adbPath ?? @"C:\adb\adb.exe";
             DeviceSelector = string.IsNullOrWhiteSpace(deviceSerial) ? "" : ("-s " + deviceSerial + " ");
@@ -105,13 +105,17 @@ namespace Lazy_App_Codex_Core
                 CreateNoWindow = true,
                 RedirectStandardOutput = capture,
                 RedirectStandardError = capture,
-                StandardOutputEncoding = capture ? Encoding.UTF8 : null,
-                StandardErrorEncoding = capture ? Encoding.UTF8 : null
             };
 
-            Process p = null;
-            CancellationTokenSource timeoutCts = null;
-            CancellationTokenSource linked = null;
+            if (capture)
+            {
+                psi.StandardOutputEncoding = Encoding.UTF8;
+                psi.StandardErrorEncoding = Encoding.UTF8;
+            }
+
+            Process? p = null;
+            CancellationTokenSource? timeoutCts = null;
+            CancellationTokenSource? linked = null;
 
             string so = "", se = "";
             Task soTask = Task.CompletedTask, seTask = Task.CompletedTask;

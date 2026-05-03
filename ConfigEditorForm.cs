@@ -29,6 +29,7 @@ namespace Lazy_App_Codex_Core
         private readonly NumericUpDown _intervalMinBox = new NumericUpDown();
         private readonly NumericUpDown _intervalMaxBox = new NumericUpDown();
         private readonly DataGridView _stepGrid = new DataGridView();
+        private readonly Label _stepTotalLabel = new Label();
         private readonly Panel _settingsEditor = new Panel();
         private readonly Panel _offsetEditor = new Panel();
         private readonly Panel _scriptEditor = new Panel();
@@ -215,9 +216,10 @@ namespace Lazy_App_Codex_Core
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 2
+                RowCount = 3
             };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             var header = new TableLayoutPanel
@@ -244,7 +246,7 @@ namespace Lazy_App_Codex_Core
             _stepGrid.AllowUserToDeleteRows = true;
             _stepGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             _stepGrid.RowHeadersWidth = 35;
-            _stepGrid.Columns.Add(CreateTextColumn("act", "Act", 66, "Input left, right, or drag."));
+            _stepGrid.Columns.Add(CreateActionColumn());
             _stepGrid.Columns.Add(CreateTextColumn("x", "X", 58, "Screen X coordinate for click, or drag start X."));
             _stepGrid.Columns.Add(CreateTextColumn("y", "Y", 58, "Screen Y coordinate for click, or drag start Y."));
             _stepGrid.Columns.Add(CreateTextColumn("x2", "X2", 58, "For drag only: drag end X. Leave blank for click."));
@@ -253,9 +255,31 @@ namespace Lazy_App_Codex_Core
             _stepGrid.Columns.Add(CreateTextColumn("randY", "RY", 52, "Random Y range. Use 0 if no random movement is needed."));
             _stepGrid.Columns.Add(CreateTextColumn("sleepMin", "Min", 56, "Minimum wait time after this step, in seconds."));
             _stepGrid.Columns.Add(CreateTextColumn("sleepMax", "Max", 56, "Maximum wait time after this step, in seconds."));
+            _stepGrid.RowsAdded += (_, _) => UpdateStepTotals();
+            _stepGrid.RowsRemoved += (_, _) => UpdateStepTotals();
+            _stepGrid.CellValidating += StepGrid_CellValidating;
+            _stepGrid.CellValueChanged += StepGrid_CellValueChanged;
+            _stepGrid.CellEndEdit += (_, e) =>
+            {
+                ValidateStepCell(_stepGrid.Rows[e.RowIndex], _stepGrid.Columns[e.ColumnIndex].Name);
+                UpdateStepTotals();
+            };
+            _stepGrid.CurrentCellDirtyStateChanged += (_, _) =>
+            {
+                if (_stepGrid.IsCurrentCellDirty)
+                {
+                    _stepGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                }
+            };
+
+            _stepTotalLabel.Dock = DockStyle.Fill;
+            _stepTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _stepTotalLabel.Font = new Font(_stepTotalLabel.Font, FontStyle.Bold);
+            UpdateStepTotals();
 
             layout.Controls.Add(header, 0, 0);
-            layout.Controls.Add(_stepGrid, 0, 1);
+            layout.Controls.Add(_stepTotalLabel, 0, 1);
+            layout.Controls.Add(_stepGrid, 0, 2);
             _scriptEditor.Controls.Add(layout);
         }
 
@@ -305,6 +329,21 @@ namespace Lazy_App_Codex_Core
                 MinimumWidth = 38,
                 Width = width
             };
+        }
+
+        private static DataGridViewComboBoxColumn CreateActionColumn()
+        {
+            var column = new DataGridViewComboBoxColumn
+            {
+                Name = "act",
+                HeaderText = "Act",
+                ToolTipText = "Choose left, right, or drag.",
+                MinimumWidth = 58,
+                Width = 66,
+                FlatStyle = FlatStyle.Flat
+            };
+            column.Items.AddRange("left", "right", "drag");
+            return column;
         }
 
         private void ConfigureButton(Button button, string text, string tooltip, EventHandler handler, int width)
@@ -502,6 +541,12 @@ namespace Lazy_App_Codex_Core
             JToken value;
             try
             {
+                if (CurrentCategory == "scripts" && !ValidateStepGridNumbers())
+                {
+                    SetStatus("Fix highlighted cells before saving.", true);
+                    return;
+                }
+
                 value = CurrentCategory switch
                 {
                     "settings" => new JValue(_valueTextBox.Text),
@@ -580,6 +625,7 @@ namespace Lazy_App_Codex_Core
             _intervalMinBox.Value = 0;
             _intervalMaxBox.Value = 0;
             _stepGrid.Rows.Clear();
+            UpdateStepTotals();
         }
 
         private void ShowCurrentEditor()
@@ -667,6 +713,7 @@ namespace Lazy_App_Codex_Core
             {
                 AddStepRow(step as JObject);
             }
+            UpdateStepTotals();
         }
 
         private JObject BuildScriptValue()
@@ -679,9 +726,10 @@ namespace Lazy_App_Codex_Core
                     continue;
                 }
 
+                string action = NormalizeGridAction(ReadCell(row, "act", "left"));
                 var step = new JObject
                 {
-                    ["a"] = ReadCell(row, "act", "left"),
+                    ["a"] = action,
                     ["s"] = new JArray(ParseCellInt(row, "x"), ParseCellInt(row, "y")),
                     ["r"] = new JArray(ParseCellInt(row, "randX"), ParseCellInt(row, "randY")),
                     ["t"] = new JArray(ParseCellInt(row, "sleepMin"), ParseCellInt(row, "sleepMax"))
@@ -689,7 +737,7 @@ namespace Lazy_App_Codex_Core
 
                 int? x2 = ParseOptionalCellInt(row, "x2");
                 int? y2 = ParseOptionalCellInt(row, "y2");
-                if (x2.HasValue || y2.HasValue)
+                if (action == "drag" && (x2.HasValue || y2.HasValue))
                 {
                     step["s2"] = new JArray(x2 ?? 0, y2 ?? 0);
                 }
@@ -706,6 +754,25 @@ namespace Lazy_App_Codex_Core
             };
         }
 
+        private void UpdateStepTotals()
+        {
+            int totalMin = 0;
+            int totalMax = 0;
+
+            foreach (DataGridViewRow row in _stepGrid.Rows)
+            {
+                if (row.IsNewRow || IsEmptyRow(row))
+                {
+                    continue;
+                }
+
+                totalMin += ReadCellIntOrZero(row, "sleepMin");
+                totalMax += ReadCellIntOrZero(row, "sleepMax");
+            }
+
+            _stepTotalLabel.Text = $"Grid total time: Min {totalMin}s | Max {totalMax}s";
+        }
+
         private void AddStepRow(JObject? step)
         {
             if (step == null)
@@ -715,7 +782,7 @@ namespace Lazy_App_Codex_Core
 
             int rowIndex = _stepGrid.Rows.Add();
             var row = _stepGrid.Rows[rowIndex];
-            row.Cells["act"].Value = ReadString(GetToken(step, "a", "act"), "left");
+            row.Cells["act"].Value = NormalizeGridAction(ReadString(GetToken(step, "a", "act"), "left"));
             row.Cells["x"].Value = ReadInt(GetToken(step, "s", "scr", "p", "x", "scrX", "posX"), 0, 0);
             row.Cells["y"].Value = ReadInt(GetToken(step, "s", "scr", "p", "y", "scrY", "posY"), 0, 1);
             row.Cells["x2"].Value = ReadNullableInt(GetToken(step, "s2", "scr2", "p2", "x2", "scrX2", "posX2"), 0);
@@ -724,6 +791,188 @@ namespace Lazy_App_Codex_Core
             row.Cells["randY"].Value = ReadInt(GetToken(step, "r", "rand", "ry", "randY"), 0, 1);
             row.Cells["sleepMin"].Value = ReadInt(GetToken(step, "t", "sleep", "smin", "sleep_min"), 0, 0);
             row.Cells["sleepMax"].Value = ReadInt(GetToken(step, "t", "sleep", "smax", "sleep_max"), 0, 1);
+            ApplyStepRowState(row);
+        }
+
+        private void StepGrid_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
+        {
+            if (e.RowIndex < 0)
+            {
+                return;
+            }
+
+            var row = _stepGrid.Rows[e.RowIndex];
+            if (row.IsNewRow || IsEmptyRow(row))
+            {
+                return;
+            }
+
+            string columnName = _stepGrid.Columns[e.ColumnIndex].Name;
+            if (!IsNumericStepColumn(columnName) || IsDisabledDragEndCell(row, columnName))
+            {
+                return;
+            }
+
+            ValidateStepCell(row, columnName, e.FormattedValue?.ToString());
+        }
+
+        private void StepGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0)
+            {
+                return;
+            }
+
+            if (_stepGrid.Columns[e.ColumnIndex].Name == "act")
+            {
+                ApplyStepRowState(_stepGrid.Rows[e.RowIndex]);
+            }
+
+            UpdateStepTotals();
+        }
+
+        private bool ValidateStepGridNumbers()
+        {
+            bool valid = true;
+            foreach (DataGridViewRow row in _stepGrid.Rows)
+            {
+                if (row.IsNewRow || IsEmptyRow(row))
+                {
+                    continue;
+                }
+
+                foreach (DataGridViewCell cell in row.Cells)
+                {
+                    if (IsNumericStepColumn(cell.OwningColumn.Name) && !ValidateStepCell(row, cell.OwningColumn.Name))
+                    {
+                        valid = false;
+                    }
+                }
+            }
+
+            return valid;
+        }
+
+        private bool ValidateStepCell(DataGridViewRow row, string columnName, string? editedText = null)
+        {
+            if (row.IsNewRow || IsEmptyRow(row) || !IsNumericStepColumn(columnName))
+            {
+                return true;
+            }
+
+            var cell = row.Cells[columnName];
+            if (IsDisabledDragEndCell(row, columnName))
+            {
+                ClearInvalidCell(cell);
+                ClearRowErrorIfValid(row);
+                return true;
+            }
+
+            string text = editedText ?? cell.Value?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(text) && IsOptionalNumericStepColumn(columnName))
+            {
+                ClearInvalidCell(cell);
+                ClearRowErrorIfValid(row);
+                return true;
+            }
+
+            if (int.TryParse(text, out _))
+            {
+                ClearInvalidCell(cell);
+                ClearRowErrorIfValid(row);
+                return true;
+            }
+
+            MarkInvalidCell(cell, $"{cell.OwningColumn.HeaderText} must be a number.");
+            row.ErrorText = cell.ErrorText;
+            return false;
+        }
+
+        private static void ClearRowErrorIfValid(DataGridViewRow row)
+        {
+            foreach (DataGridViewCell cell in row.Cells)
+            {
+                if (!string.IsNullOrWhiteSpace(cell.ErrorText))
+                {
+                    return;
+                }
+            }
+
+            row.ErrorText = "";
+        }
+
+        private void ApplyStepRowState(DataGridViewRow row)
+        {
+            if (row.IsNewRow)
+            {
+                return;
+            }
+
+            string action = NormalizeGridAction(row.Cells["act"].Value?.ToString() ?? "left");
+            bool drag = action == "drag";
+            SetDragEndCellState(row.Cells["x2"], drag);
+            SetDragEndCellState(row.Cells["y2"], drag);
+        }
+
+        private static void SetDragEndCellState(DataGridViewCell cell, bool enabled)
+        {
+            cell.ReadOnly = !enabled;
+            if (!enabled)
+            {
+                cell.Value = null;
+                ClearInvalidCell(cell);
+            }
+
+            if (!string.IsNullOrWhiteSpace(cell.ErrorText))
+            {
+                return;
+            }
+
+            cell.Style.BackColor = enabled ? SystemColors.Window : SystemColors.Control;
+            cell.Style.ForeColor = enabled ? SystemColors.ControlText : SystemColors.GrayText;
+            cell.Style.SelectionBackColor = enabled ? SystemColors.Highlight : SystemColors.ControlDark;
+            cell.Style.SelectionForeColor = enabled ? SystemColors.HighlightText : SystemColors.GrayText;
+        }
+
+        private static void MarkInvalidCell(DataGridViewCell cell, string message)
+        {
+            cell.ErrorText = message;
+            cell.Style.BackColor = Color.MistyRose;
+            cell.Style.ForeColor = Color.DarkRed;
+            cell.Style.SelectionBackColor = Color.LightCoral;
+            cell.Style.SelectionForeColor = Color.DarkRed;
+            cell.ToolTipText = message;
+        }
+
+        private static void ClearInvalidCell(DataGridViewCell cell)
+        {
+            cell.ErrorText = "";
+            cell.ToolTipText = "";
+            cell.Style.BackColor = SystemColors.Window;
+            cell.Style.ForeColor = SystemColors.ControlText;
+            cell.Style.SelectionBackColor = SystemColors.Highlight;
+            cell.Style.SelectionForeColor = SystemColors.HighlightText;
+        }
+
+        private static bool IsDisabledDragEndCell(DataGridViewRow row, string columnName)
+        {
+            if (columnName != "x2" && columnName != "y2")
+            {
+                return false;
+            }
+
+            string action = NormalizeGridAction(row.Cells["act"].Value?.ToString() ?? "left");
+            return action != "drag";
+        }
+
+        private static bool IsNumericStepColumn(string columnName)
+        {
+            return columnName is "x" or "y" or "x2" or "y2" or "randX" or "randY" or "sleepMin" or "sleepMax";
+        }
+
+        private static bool IsOptionalNumericStepColumn(string columnName)
+        {
+            return columnName is "x2" or "y2";
         }
 
         private static IEnumerable<JToken> ExpandSteps(JArray rawSteps)
@@ -816,6 +1065,23 @@ namespace Lazy_App_Codex_Core
             return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
 
+        private static string NormalizeGridAction(string action)
+        {
+            return action.Trim().ToLowerInvariant() switch
+            {
+                "leftclick" => "left",
+                "rightclick" => "right",
+                "left" => "left",
+                "right" => "right",
+                "drag" => "drag",
+                "updrag" => "drag",
+                "downdrag" => "drag",
+                "leftdrag" => "drag",
+                "rightdrag" => "drag",
+                _ => "left"
+            };
+        }
+
         private static int ParseCellInt(DataGridViewRow row, string column)
         {
             string? value = row.Cells[column].Value?.ToString();
@@ -841,6 +1107,12 @@ namespace Lazy_App_Codex_Core
             }
 
             throw new InvalidOperationException($"{row.Cells[column].OwningColumn.HeaderText} must be a number.");
+        }
+
+        private static int ReadCellIntOrZero(DataGridViewRow row, string column)
+        {
+            string? value = row.Cells[column].Value?.ToString();
+            return int.TryParse(value, out int parsed) ? parsed : 0;
         }
 
         private void SelectEntry(string key)

@@ -40,8 +40,8 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptRunner _runner = new ScriptRunner();
 
         private Dictionary<string, ScriptModel> _scripts = new Dictionary<string, ScriptModel>();
-        private CancellationTokenSource _runCts;
-        private Task _runTask;
+        private CancellationTokenSource? _runCts;
+        private Task? _runTask;
         private bool _isRunning;
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
@@ -243,7 +243,13 @@ namespace Lazy_App_Codex_Core
 
         private async Task StartRunAsync()
         {
-            string selectedScriptName = ddlScript.SelectedItem.ToString();
+            string? selectedScriptName = ddlScript.SelectedItem?.ToString();
+            if (string.IsNullOrWhiteSpace(selectedScriptName))
+            {
+                MessageBox.Show("Select a script before run");
+                return;
+            }
+
             if (!_scripts.ContainsKey(selectedScriptName))
             {
                 MessageBox.Show($"Missing config ({selectedScriptName})");
