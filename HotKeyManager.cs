@@ -8,7 +8,7 @@ namespace Lazy_App_Codex_Core
     public enum HotkeyAction
     {
         None = 0,
-        Toggle = 1,
+        Start = 1,
         Stop = 2
     }
 
@@ -33,24 +33,26 @@ namespace Lazy_App_Codex_Core
 
         private bool _registered;
         private bool _secondaryRegistered;
+        private bool _startHotkeyEnabled = true;
+        private bool _stopHotkeyEnabled = true;
         private int _startHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _startHotkeyKey = DEFAULT_HOTKEY_START;
         private int _stopHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _stopHotkeyKey = DEFAULT_HOTKEY_STOP;
 
-        public string ToggleHotkeyText => ToDisplayText(_startHotkeyModifiers, _startHotkeyKey);
-        public string StopHotkeyText => ToDisplayText(_stopHotkeyModifiers, _stopHotkeyKey);
+        public string ToggleHotkeyText => _startHotkeyEnabled ? ToDisplayText(_startHotkeyModifiers, _startHotkeyKey) : "Disabled";
+        public string StopHotkeyText => _stopHotkeyEnabled ? ToDisplayText(_stopHotkeyModifiers, _stopHotkeyKey) : "Disabled";
 
-        public void Configure(string? startStopHotkey, string? stopHotkey)
+        public void Configure(string? startHotkey, string? stopHotkey)
         {
-            ParseHotkey(
-                startStopHotkey,
+            _startHotkeyEnabled = TryParseHotkey(
+                startHotkey,
                 DEFAULT_HOTKEY_MODIFIERS,
                 DEFAULT_HOTKEY_START,
                 out _startHotkeyModifiers,
                 out _startHotkeyKey);
 
-            ParseHotkey(
+            _stopHotkeyEnabled = TryParseHotkey(
                 stopHotkey,
                 DEFAULT_HOTKEY_MODIFIERS,
                 DEFAULT_HOTKEY_STOP,
@@ -70,14 +72,18 @@ namespace Lazy_App_Codex_Core
 
             UnregisterAll(handle);
 
-            bool primaryOk = RegisterHotKey(handle, HOTKEY_ID_PRIMARY, _startHotkeyModifiers, _startHotkeyKey);
-            if (!primaryOk)
+            bool primaryOk = true;
+            if (_startHotkeyEnabled)
             {
-                _registered = false;
-                return false;
+                primaryOk = RegisterHotKey(handle, HOTKEY_ID_PRIMARY, _startHotkeyModifiers, _startHotkeyKey);
+                if (!primaryOk)
+                {
+                    _registered = false;
+                    return false;
+                }
             }
 
-            _secondaryRegistered = !IsSameStartStop();
+            _secondaryRegistered = _stopHotkeyEnabled && (!_startHotkeyEnabled || !IsSameStartStop());
             bool secondaryOk = true;
             if (_secondaryRegistered)
             {
@@ -85,6 +91,11 @@ namespace Lazy_App_Codex_Core
             }
 
             _registered = primaryOk && secondaryOk;
+            if (!_startHotkeyEnabled && !_secondaryRegistered)
+            {
+                _registered = true;
+            }
+
             if (!_registered)
             {
                 UnregisterAll(handle);
@@ -113,7 +124,7 @@ namespace Lazy_App_Codex_Core
             int id = m.WParam.ToInt32();
             if (id == HOTKEY_ID_PRIMARY)
             {
-                return HotkeyAction.Toggle;
+                return HotkeyAction.Start;
             }
 
             if (id == HOTKEY_ID_SECONDARY)
@@ -129,14 +140,14 @@ namespace Lazy_App_Codex_Core
             return _startHotkeyModifiers == _stopHotkeyModifiers && _startHotkeyKey == _stopHotkeyKey;
         }
 
-        private static void ParseHotkey(string? hotkeySetting, int defaultModifiers, int defaultKey, out int modifiers, out int key)
+        private static bool TryParseHotkey(string? hotkeySetting, int defaultModifiers, int defaultKey, out int modifiers, out int key)
         {
             modifiers = defaultModifiers;
             key = defaultKey;
 
             if (string.IsNullOrWhiteSpace(hotkeySetting))
             {
-                return;
+                return false;
             }
 
             int parsedModifiers = 0;
@@ -176,7 +187,10 @@ namespace Lazy_App_Codex_Core
             {
                 modifiers = parsedModifiers;
                 key = parsedKey;
+                return true;
             }
+
+            return true;
         }
 
         private static string ToDisplayText(int modifiers, int key)

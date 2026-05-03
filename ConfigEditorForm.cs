@@ -13,6 +13,11 @@ namespace Lazy_App_Codex_Core
             new ConfigCategory("scripts", "SCRIPTS")
         };
 
+        private const string StartHotkeyKey = "hotkeyStart";
+        private const string StopHotkeyKey = "hotkeyStop";
+        private const string StartHotkeyLabel = "1 Start";
+        private const string StopHotkeyLabel = "1 Stop";
+
         private readonly ScriptConfigRepository _repository;
         private readonly TabControl _categoryTabs = new TabControl();
         private readonly ListBox _entryList = new ListBox();
@@ -32,6 +37,8 @@ namespace Lazy_App_Codex_Core
         private readonly Button _removeButton = new Button();
         private readonly Button _saveConfigButton = new Button();
         private readonly Button _cancelButton = new Button();
+        private readonly Button _settingsHelpButton = new Button();
+        private readonly Button _offsetHelpButton = new Button();
         private readonly Button _stepHelpButton = new Button();
         private readonly Label _statusLabel = new Label();
         private readonly ToolTip _toolTip = new ToolTip();
@@ -62,6 +69,8 @@ namespace Lazy_App_Codex_Core
         private string CurrentCategoryText => Categories[Math.Max(0, _categoryTabs.SelectedIndex)].Text;
 
         private JObject CurrentCategoryObject => (JObject)_root[CurrentCategory]!;
+
+        private bool IsSettingsCategory => CurrentCategory == "settings";
 
         private void BuildLayout()
         {
@@ -161,9 +170,11 @@ namespace Lazy_App_Codex_Core
         private void BuildSettingsEditor()
         {
             _settingsEditor.Dock = DockStyle.Fill;
-            var layout = CreateSimpleEditorLayout("Value");
+            var layout = CreateSimpleEditorLayout("Hotkey");
             _valueTextBox.Dock = DockStyle.Top;
             layout.Controls.Add(_valueTextBox, 0, 1);
+            ConfigureHelpButton(_settingsHelpButton, GetSettingsHelpText());
+            layout.Controls.Add(_settingsHelpButton, 0, 2);
             _settingsEditor.Controls.Add(layout);
         }
 
@@ -181,7 +192,19 @@ namespace Lazy_App_Codex_Core
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             AddNumberField(layout, "X", _offsetXBox, 0);
             AddNumberField(layout, "Y", _offsetYBox, 1);
-            _offsetEditor.Controls.Add(layout);
+            var host = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 2,
+                Height = 102
+            };
+            host.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            host.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            ConfigureHelpButton(_offsetHelpButton, GetOffsetHelpText());
+            host.Controls.Add(layout, 0, 0);
+            host.Controls.Add(_offsetHelpButton, 0, 1);
+            _offsetEditor.Controls.Add(host);
         }
 
         private void BuildScriptEditor()
@@ -212,39 +235,7 @@ namespace Lazy_App_Codex_Core
             AddNumberField(header, "Loop Count", _durationBox, 0);
             AddNumberField(header, "Interval Min", _intervalMinBox, 1);
             AddNumberField(header, "Interval Max", _intervalMaxBox, 2);
-            _stepHelpButton.Anchor = AnchorStyles.Left | AnchorStyles.Top;
-            _stepHelpButton.Size = new Size(24, 24);
-            _stepHelpButton.Text = "";
-            _stepHelpButton.Font = new Font(_stepHelpButton.Font.FontFamily, 9F, FontStyle.Bold);
-            _stepHelpButton.FlatStyle = FlatStyle.Flat;
-            _stepHelpButton.FlatAppearance.BorderSize = 0;
-            _stepHelpButton.BackColor = Color.LightGoldenrodYellow;
-            _stepHelpButton.ForeColor = Color.Black;
-            _stepHelpButton.UseVisualStyleBackColor = false;
-            _stepHelpButton.Paint += (_, e) =>
-            {
-                using var path = new System.Drawing.Drawing2D.GraphicsPath();
-                path.AddEllipse(0, 0, _stepHelpButton.Width - 1, _stepHelpButton.Height - 1);
-                _stepHelpButton.Region = new Region(path);
-                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-                var bounds = new Rectangle(1, 1, _stepHelpButton.Width - 3, _stepHelpButton.Height - 3);
-                using var fillBrush = new SolidBrush(Color.LightGoldenrodYellow);
-                using var shadowPen = new Pen(Color.DarkGoldenrod);
-                using var highlightPen = new Pen(Color.White);
-                using var textBrush = new SolidBrush(Color.Black);
-
-                e.Graphics.FillEllipse(fillBrush, bounds);
-                e.Graphics.DrawArc(highlightPen, bounds, 135, 180);
-                e.Graphics.DrawArc(shadowPen, bounds, -45, 180);
-
-                var textSize = e.Graphics.MeasureString("?", _stepHelpButton.Font);
-                float textX = (_stepHelpButton.Width - textSize.Width) / 2F + 0.5F;
-                float textY = (_stepHelpButton.Height - textSize.Height) / 2F - 0.5F;
-                e.Graphics.DrawString("?", _stepHelpButton.Font, textBrush, textX, textY);
-            };
-            _stepHelpButton.MouseEnter += (_, _) => _toolTip.Show(GetStepHelpText(), _stepHelpButton, _stepHelpButton.Width + 4, 0, 12000);
-            _stepHelpButton.MouseLeave += (_, _) => _toolTip.Hide(_stepHelpButton);
+            ConfigureHelpButton(_stepHelpButton, GetStepHelpText());
             header.Controls.Add(_stepHelpButton, 0, 2);
             header.SetColumnSpan(_stepHelpButton, 3);
 
@@ -274,11 +265,12 @@ namespace Lazy_App_Codex_Core
             {
                 Dock = DockStyle.Top,
                 ColumnCount = 1,
-                RowCount = 2,
-                Height = 62
+                RowCount = 3,
+                Height = 94
             };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             layout.Controls.Add(new Label
             {
                 Dock = DockStyle.Fill,
@@ -325,6 +317,45 @@ namespace Lazy_App_Codex_Core
             _toolTip.SetToolTip(button, tooltip);
         }
 
+        private void ConfigureHelpButton(Button button, string helpText)
+        {
+            button.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+            button.Size = new Size(24, 24);
+            button.Text = "";
+            button.Font = new Font(button.Font.FontFamily, 9F, FontStyle.Bold);
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.BackColor = Color.LightGoldenrodYellow;
+            button.ForeColor = Color.Black;
+            button.UseVisualStyleBackColor = false;
+            button.Paint += (_, e) => PaintHelpButton(button, e);
+            button.MouseEnter += (_, _) => _toolTip.Show(helpText, button, button.Width + 4, 0, 12000);
+            button.MouseLeave += (_, _) => _toolTip.Hide(button);
+        }
+
+        private static void PaintHelpButton(Button button, PaintEventArgs e)
+        {
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddEllipse(0, 0, button.Width - 1, button.Height - 1);
+            button.Region = new Region(path);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            var bounds = new Rectangle(1, 1, button.Width - 3, button.Height - 3);
+            using var fillBrush = new SolidBrush(Color.LightGoldenrodYellow);
+            using var shadowPen = new Pen(Color.DarkGoldenrod);
+            using var highlightPen = new Pen(Color.White);
+            using var textBrush = new SolidBrush(Color.Black);
+
+            e.Graphics.FillEllipse(fillBrush, bounds);
+            e.Graphics.DrawArc(highlightPen, bounds, 135, 180);
+            e.Graphics.DrawArc(shadowPen, bounds, -45, 180);
+
+            var textSize = e.Graphics.MeasureString("?", button.Font);
+            float textX = (button.Width - textSize.Width) / 2F + 0.5F;
+            float textY = (button.Height - textSize.Height) / 2F - 0.5F;
+            e.Graphics.DrawString("?", button.Font, textBrush, textX, textY);
+        }
+
         private static string GetStepHelpText()
         {
             return string.Join(Environment.NewLine, new[]
@@ -334,6 +365,28 @@ namespace Lazy_App_Codex_Core
                 "X2/Y2: drag end position; leave blank for click",
                 "RX/RY: random movement range; use 0 if not needed",
                 "Min/Max: wait time after this step, in seconds"
+            });
+        }
+
+        private static string GetSettingsHelpText()
+        {
+            return string.Join(Environment.NewLine, new[]
+            {
+                "1 Start: global hotkey to start running",
+                "1 Stop: global hotkey to stop running",
+                "Example: CTRL+ALT+S or ALT+S",
+                "Leave value empty to disable that hotkey"
+            });
+        }
+
+        private static string GetOffsetHelpText()
+        {
+            return string.Join(Environment.NewLine, new[]
+            {
+                "s<number>: used when script name contains that number",
+                "Example: s90 is used by scripts with 90 in the name",
+                "x/y or offsetX/offsetY: fallback for other scripts",
+                "X/Y: distance moved for each offset step selected in main window"
             });
         }
 
@@ -350,16 +403,28 @@ namespace Lazy_App_Codex_Core
 
         private void LoadEntries()
         {
+            EnsureRequiredSettings();
             _entryList.BeginUpdate();
             _entryList.Items.Clear();
-            foreach (var property in CurrentCategoryObject.Properties())
+            if (IsSettingsCategory)
             {
-                _entryList.Items.Add(property.Name);
+                _entryList.Items.Add(StartHotkeyLabel);
+                _entryList.Items.Add(StopHotkeyLabel);
+            }
+            else
+            {
+                foreach (var property in CurrentCategoryObject.Properties())
+                {
+                    _entryList.Items.Add(property.Name);
+                }
             }
             _entryList.EndUpdate();
 
             _selectedKey = null;
             _keyTextBox.Clear();
+            _keyTextBox.ReadOnly = IsSettingsCategory;
+            _newButton.Enabled = !IsSettingsCategory;
+            _removeButton.Enabled = !IsSettingsCategory;
             ClearEditors();
             ShowCurrentEditor();
             UpdateActionLabels();
@@ -380,7 +445,8 @@ namespace Lazy_App_Codex_Core
             }
 
             _keyTextBox.Text = _selectedKey;
-            JToken? value = CurrentCategoryObject[_selectedKey];
+            string configKey = GetConfigKeyFromDisplayKey(_selectedKey);
+            JToken? value = CurrentCategoryObject[configKey];
             ClearEditors();
 
             if (CurrentCategory == "settings")
@@ -402,6 +468,12 @@ namespace Lazy_App_Codex_Core
 
         private void StartNewEntry()
         {
+            if (IsSettingsCategory)
+            {
+                SetStatus("SETTINGS has only 1 Start and 1 Stop. They cannot be added.");
+                return;
+            }
+
             _entryList.ClearSelected();
             _selectedKey = null;
             _keyTextBox.Clear();
@@ -444,12 +516,14 @@ namespace Lazy_App_Codex_Core
             }
 
             var category = CurrentCategoryObject;
-            if (!string.IsNullOrWhiteSpace(_selectedKey) && !key.Equals(_selectedKey, StringComparison.Ordinal))
+            string configKey = IsSettingsCategory ? GetConfigKeyFromDisplayKey(key) : key;
+            string? selectedConfigKey = string.IsNullOrWhiteSpace(_selectedKey) ? null : GetConfigKeyFromDisplayKey(_selectedKey);
+            if (!IsSettingsCategory && !string.IsNullOrWhiteSpace(selectedConfigKey) && !configKey.Equals(selectedConfigKey, StringComparison.Ordinal))
             {
-                category.Property(_selectedKey!)?.Remove();
+                category.Property(selectedConfigKey!)?.Remove();
             }
 
-            category[key] = value;
+            category[configKey] = value;
             _selectedKey = key;
             LoadEntries();
             SelectEntry(key);
@@ -458,6 +532,12 @@ namespace Lazy_App_Codex_Core
 
         private void RemoveSelectedEntry()
         {
+            if (IsSettingsCategory)
+            {
+                SetStatus("1 Start and 1 Stop are required settings. They cannot be removed.");
+                return;
+            }
+
             string? key = _entryList.SelectedItem?.ToString();
             if (string.IsNullOrWhiteSpace(key))
             {
@@ -479,6 +559,7 @@ namespace Lazy_App_Codex_Core
         {
             try
             {
+                EnsureRequiredSettings();
                 _repository.SaveRawConfig(_root);
                 ConfigSaved = true;
                 DialogResult = DialogResult.OK;
@@ -517,6 +598,29 @@ namespace Lazy_App_Codex_Core
                 _ => "Save Script"
             };
             _toolTip.SetToolTip(_saveEntryButton, $"Save the selected {GetEntryName().ToLowerInvariant()} inside this popup");
+        }
+
+        private void EnsureRequiredSettings()
+        {
+            var settings = (JObject)_root["settings"]!;
+            if (settings[StartHotkeyKey] == null && settings["hotkeyStartStopToggle"] != null)
+            {
+                settings[StartHotkeyKey] = settings["hotkeyStartStopToggle"]!.DeepClone();
+            }
+
+            settings.Property("hotkeyStartStopToggle")?.Remove();
+            settings[StartHotkeyKey] ??= "CTRL+ALT+S";
+            settings[StopHotkeyKey] ??= "CTRL+ALT+D";
+        }
+
+        private static string GetConfigKeyFromDisplayKey(string key)
+        {
+            return key switch
+            {
+                StartHotkeyLabel => StartHotkeyKey,
+                StopHotkeyLabel => StopHotkeyKey,
+                _ => key
+            };
         }
 
         private string GetEntryName()

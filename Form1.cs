@@ -72,7 +72,7 @@ namespace Lazy_App_Codex_Core
             ddlOffset.SelectedIndex = 2;
 
             LoadConfig();
-            _hotkeys.Configure(_configRepository.Settings.HotkeyStartStopToggle, _configRepository.Settings.HotkeyStop);
+            _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
             _clockTimer.Interval = 1000;
             _clockTimer.Tick += (_, _) => UpdateCurrentTimeLabel();
             _clockTimer.Start();
@@ -96,7 +96,7 @@ namespace Lazy_App_Codex_Core
         {
             if (keyData == Keys.F3)
             {
-                HandleHotkeyAction(HotkeyAction.Toggle);
+                HandleHotkeyAction(HotkeyAction.Start);
                 return true;
             }
 
@@ -316,9 +316,12 @@ namespace Lazy_App_Codex_Core
 
         private void HandleHotkeyAction(HotkeyAction action)
         {
-            if (action == HotkeyAction.Toggle)
+            if (action == HotkeyAction.Start)
             {
-                btnRun.PerformClick();
+                if (!_isRunning)
+                {
+                    btnRun.PerformClick();
+                }
             }
             else if (action == HotkeyAction.Stop)
             {
@@ -509,7 +512,7 @@ namespace Lazy_App_Codex_Core
 
             LoadConfig();
             _hotkeys.UnregisterAll(Handle);
-            _hotkeys.Configure(_configRepository.Settings.HotkeyStartStopToggle, _configRepository.Settings.HotkeyStop);
+            _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
             _lastHotkeyRegistrationSucceeded = null;
             RegisterHotkeysForWindowState();
             WriteLog("CONFIG UPDATED.");

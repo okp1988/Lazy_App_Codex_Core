@@ -1,11 +1,12 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Text.RegularExpressions;
 
 namespace Lazy_App_Codex_Core
 {
     public sealed class AppSettings
     {
-        public string HotkeyStartStopToggle { get; set; } = "CTRL+ALT+S";
+        public string HotkeyStart { get; set; } = "CTRL+ALT+S";
         public string HotkeyStop { get; set; } = "CTRL+ALT+D";
     }
 
@@ -16,10 +17,7 @@ namespace Lazy_App_Codex_Core
         public AppSettings Settings { get; private set; } = new AppSettings();
         public int OffsetX { get; private set; } = 5;
         public int OffsetY { get; private set; } = 5;
-        public int Offset26X { get; private set; } = 5;
-        public int Offset26Y { get; private set; } = 5;
-        public int Offset13X { get; private set; } = 5;
-        public int Offset13Y { get; private set; } = 5;
+        private Dictionary<string, (int x, int y)> _offsetProfiles = new Dictionary<string, (int x, int y)>(StringComparer.OrdinalIgnoreCase);
 
         public ScriptConfigRepository(string configPath)
         {
@@ -28,16 +26,11 @@ namespace Lazy_App_Codex_Core
 
         public JObject LoadRawConfig()
         {
+            EnsureConfigFileExists();
+
             JObject root;
-            if (!File.Exists(_configPath))
-            {
-                root = new JObject();
-            }
-            else
-            {
-                string json = File.ReadAllText(_configPath);
-                root = JsonConvert.DeserializeObject<JObject>(json) ?? new JObject();
-            }
+            string json = File.ReadAllText(_configPath);
+            root = JsonConvert.DeserializeObject<JObject>(json) ?? CreateDefaultConfig();
 
             EnsureConfigCategories(root);
             return root;
@@ -52,18 +45,12 @@ namespace Lazy_App_Codex_Core
 
         public Dictionary<string, ScriptModel> Load()
         {
+            EnsureConfigFileExists();
+
             Settings = new AppSettings();
             OffsetX = 5;
             OffsetY = 5;
-            Offset26X = 5;
-            Offset26Y = 5;
-            Offset13X = 5;
-            Offset13Y = 5;
-
-            if (!File.Exists(_configPath))
-            {
-                return new Dictionary<string, ScriptModel>();
-            }
+            _offsetProfiles = new Dictionary<string, (int x, int y)>(StringComparer.OrdinalIgnoreCase);
 
             string json = File.ReadAllText(_configPath);
             var root = JsonConvert.DeserializeObject<JObject>(json);
@@ -83,10 +70,7 @@ namespace Lazy_App_Codex_Core
             {
                 OffsetX = ReadIntOrFallback(offsetObj, 5, 0, "offsetX", "ox", "x", "s");
                 OffsetY = ReadIntOrFallback(offsetObj, 5, 1, "offsetY", "oy", "y", "s");
-                Offset26X = ReadIntOrFallback(offsetObj, OffsetX, 0, "s26");
-                Offset26Y = ReadIntOrFallback(offsetObj, OffsetY, 1, "s26");
-                Offset13X = ReadIntOrFallback(offsetObj, OffsetX, 0, "s13");
-                Offset13Y = ReadIntOrFallback(offsetObj, OffsetY, 1, "s13");
+                _offsetProfiles = ReadOffsetProfiles(offsetObj, OffsetX, OffsetY);
             }
 
             var scripts = new Dictionary<string, ScriptModel>(StringComparer.OrdinalIgnoreCase);
@@ -110,11 +94,44 @@ namespace Lazy_App_Codex_Core
             return scripts;
         }
 
+        private void EnsureConfigFileExists()
+        {
+            if (File.Exists(_configPath))
+            {
+                return;
+            }
+
+            string? directory = Path.GetDirectoryName(Path.GetFullPath(_configPath));
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            SaveRawConfig(CreateDefaultConfig());
+        }
+
+        private static JObject CreateDefaultConfig()
+        {
+            return new JObject
+            {
+                ["settings"] = JObject.FromObject(new AppSettings()),
+                ["offset"] = new JObject
+                {
+                    ["s26"] = new JArray(5, 5),
+                    ["s13"] = new JArray(5, 5)
+                },
+                ["scripts"] = new JObject()
+            };
+        }
+
         private static void EnsureConfigCategories(JObject root)
         {
             EnsureCategory(root, "settings");
             EnsureCategory(root, "offset");
             EnsureCategory(root, "scripts");
+            MigrateSetting(root, "hotkeyStartStopToggle", "hotkeyStart");
+            EnsureSetting(root, "hotkeyStart", "CTRL+ALT+S");
+            EnsureSetting(root, "hotkeyStop", "CTRL+ALT+D");
         }
 
         private static void EnsureCategory(JObject root, string name)
@@ -125,19 +142,56 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        public int GetOffsetUnitForScript(string scriptName, string axis)
+        private static void EnsureSetting(JObject root, string key, string defaultValue)
         {
-            if (scriptName.Contains("26", StringComparison.OrdinalIgnoreCase))
+            var settings = (JObject)root["settings"]!;
+            if (settings[key] == null)
             {
-                return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? Offset26X : Offset26Y;
+                settings[key] = defaultValue;
+            }
+        }
+
+        private static void MigrateSetting(JObject root, string oldKey, string newKey)
+        {
+            var settings = (JObject)root["settings"]!;
+            if (settings[newKey] == null && settings[oldKey] != null)
+            {
+                settings[newKey] = settings[oldKey]!.DeepClone();
             }
 
-            if (scriptName.Contains("13", StringComparison.OrdinalIgnoreCase))
+            settings.Property(oldKey)?.Remove();
+        }
+
+        public int GetOffsetUnitForScript(string scriptName, string axis)
+        {
+            foreach (Match match in Regex.Matches(scriptName, @"\d+"))
             {
-                return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? Offset13X : Offset13Y;
+                string profileName = "s" + match.Value;
+                if (_offsetProfiles.TryGetValue(profileName, out var profile))
+                {
+                    return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? profile.x : profile.y;
+                }
             }
 
             return axis.Equals("x", StringComparison.OrdinalIgnoreCase) ? OffsetX : OffsetY;
+        }
+
+        private static Dictionary<string, (int x, int y)> ReadOffsetProfiles(JObject offsetObj, int fallbackX, int fallbackY)
+        {
+            var profiles = new Dictionary<string, (int x, int y)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in offsetObj.Properties())
+            {
+                if (!Regex.IsMatch(property.Name, @"^s\d+$", RegexOptions.IgnoreCase))
+                {
+                    continue;
+                }
+
+                int x = TryParseIntToken(property.Value, 0, out var parsedX) ? parsedX : fallbackX;
+                int y = TryParseIntToken(property.Value, 1, out var parsedY) ? parsedY : fallbackY;
+                profiles[property.Name] = (x, y);
+            }
+
+            return profiles;
         }
 
         private static ScriptModel ParseScript(JObject scriptObj)
