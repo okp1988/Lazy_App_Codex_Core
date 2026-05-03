@@ -26,3 +26,10 @@ jobs:
 
       - name: Build
         run: dotnet build Lazy_App_Codex_Core.sln --configuration Release --no-restore
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lazy_App_Codex_Core-Build
+          path: |
+            **/bin/Release/**
