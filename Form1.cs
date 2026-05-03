@@ -94,12 +94,6 @@ namespace Lazy_App_Codex_Core
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == Keys.F3)
-            {
-                HandleHotkeyAction(HotkeyAction.Start);
-                return true;
-            }
-
             if (keyData == Keys.Escape && _isRunning)
             {
                 HandleHotkeyAction(HotkeyAction.Stop);
@@ -182,13 +176,13 @@ namespace Lazy_App_Codex_Core
 
             if (success && _lastHotkeyRegistrationSucceeded != true)
             {
-                WriteLog($"GLOBAL HOTKEY REGISTERED ({_hotkeys.ToggleHotkeyText}).");
+                WriteLog($"GLOBAL HOTKEY REGISTERED (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
             }
 
             if (!success && _lastHotkeyRegistrationSucceeded != false)
             {
-                WriteLog($"GLOBAL HOTKEY NOT REGISTERED ({_hotkeys.ToggleHotkeyText}). F3 still works while this window is focused.");
-                AppLogger.LogWarning($"Global hotkey was not registered ({_hotkeys.ToggleHotkeyText}).");
+                WriteLog($"GLOBAL HOTKEY NOT REGISTERED (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
+                AppLogger.LogWarning($"Global hotkey was not registered (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
             }
 
             _lastHotkeyRegistrationSucceeded = success;
@@ -329,6 +323,10 @@ namespace Lazy_App_Codex_Core
                     btnRun.PerformClick();
                 }
             }
+            else if (action == HotkeyAction.StartOrStop)
+            {
+                btnRun.PerformClick();
+            }
             else if (action == HotkeyAction.Stop)
             {
                 _ = StopRunAsync();
@@ -361,7 +359,7 @@ namespace Lazy_App_Codex_Core
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
             btnConfig.Enabled = !isRunning;
-            btnRun.Text = isRunning ? "Stop" : "Run (F3)";
+            btnRun.Text = isRunning ? "Stop" : "Run";
             SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
 
             if (isRunning)

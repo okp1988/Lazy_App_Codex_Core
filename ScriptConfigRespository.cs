@@ -59,6 +59,8 @@ namespace Lazy_App_Codex_Core
                 return new Dictionary<string, ScriptModel>();
             }
 
+            EnsureConfigCategories(root);
+
             var scriptsNode = root["scripts"] as JObject ?? root;
             var parsedSettings = root["settings"]?.ToObject<AppSettings>();
             if (parsedSettings != null)

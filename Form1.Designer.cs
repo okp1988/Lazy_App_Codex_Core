@@ -177,7 +177,7 @@
             btnRun.Name = "btnRun";
             btnRun.Size = new Size(111, 35);
             btnRun.TabIndex = 1;
-            btnRun.Text = "Run (F3)";
+            btnRun.Text = "Run";
             btnRun.UseVisualStyleBackColor = true;
             btnRun.Click += btnRun_Click;
             // 

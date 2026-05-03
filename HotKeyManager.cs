@@ -9,7 +9,8 @@ namespace Lazy_App_Codex_Core
     {
         None = 0,
         Start = 1,
-        Stop = 2
+        Stop = 2,
+        StartOrStop = 3
     }
 
     public class HotkeyManager
@@ -40,7 +41,7 @@ namespace Lazy_App_Codex_Core
         private int _stopHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _stopHotkeyKey = DEFAULT_HOTKEY_STOP;
 
-        public string ToggleHotkeyText => _startHotkeyEnabled ? ToDisplayText(_startHotkeyModifiers, _startHotkeyKey) : "Disabled";
+        public string StartHotkeyText => _startHotkeyEnabled ? ToDisplayText(_startHotkeyModifiers, _startHotkeyKey) : "Disabled";
         public string StopHotkeyText => _stopHotkeyEnabled ? ToDisplayText(_stopHotkeyModifiers, _stopHotkeyKey) : "Disabled";
 
         public void Configure(string? startHotkey, string? stopHotkey)
@@ -124,6 +125,11 @@ namespace Lazy_App_Codex_Core
             int id = m.WParam.ToInt32();
             if (id == HOTKEY_ID_PRIMARY)
             {
+                if (_startHotkeyEnabled && _stopHotkeyEnabled && IsSameStartStop())
+                {
+                    return HotkeyAction.StartOrStop;
+                }
+
                 return HotkeyAction.Start;
             }
 

@@ -413,6 +413,7 @@ namespace Lazy_App_Codex_Core
             {
                 "1 Start: global hotkey to start running",
                 "1 Stop: global hotkey to stop running",
+                "If both values are same, one hotkey toggles start/stop",
                 "Example: CTRL+ALT+S or ALT+S",
                 "Leave value empty to disable that hotkey"
             });
@@ -531,48 +532,7 @@ namespace Lazy_App_Codex_Core
 
         private void SaveEntry()
         {
-            string key = _keyTextBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                ShowValidation("Name is required.");
-                return;
-            }
-
-            JToken value;
-            try
-            {
-                if (CurrentCategory == "scripts" && !ValidateStepGridNumbers())
-                {
-                    SetStatus("Fix highlighted cells before saving.", true);
-                    return;
-                }
-
-                value = CurrentCategory switch
-                {
-                    "settings" => new JValue(_valueTextBox.Text),
-                    "offset" => new JArray((int)_offsetXBox.Value, (int)_offsetYBox.Value),
-                    _ => BuildScriptValue()
-                };
-            }
-            catch (InvalidOperationException ex)
-            {
-                ShowValidation(ex.Message);
-                return;
-            }
-
-            var category = CurrentCategoryObject;
-            string configKey = IsSettingsCategory ? GetConfigKeyFromDisplayKey(key) : key;
-            string? selectedConfigKey = string.IsNullOrWhiteSpace(_selectedKey) ? null : GetConfigKeyFromDisplayKey(_selectedKey);
-            if (!IsSettingsCategory && !string.IsNullOrWhiteSpace(selectedConfigKey) && !configKey.Equals(selectedConfigKey, StringComparison.Ordinal))
-            {
-                category.Property(selectedConfigKey!)?.Remove();
-            }
-
-            category[configKey] = value;
-            _selectedKey = key;
-            LoadEntries();
-            SelectEntry(key);
-            SetStatus($"{GetEntryName()} saved in this window. Click Save All & Close to update config.json.");
+            SaveCurrentEntry(true);
         }
 
         private void RemoveSelectedEntry()
@@ -604,6 +564,11 @@ namespace Lazy_App_Codex_Core
         {
             try
             {
+                if (!SaveCurrentEntry(false))
+                {
+                    return;
+                }
+
                 EnsureRequiredSettings();
                 _repository.SaveRawConfig(_root);
                 ConfigSaved = true;
@@ -614,6 +579,58 @@ namespace Lazy_App_Codex_Core
             {
                 MessageBox.Show("Failed to save config.json. " + ex.Message, "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private bool SaveCurrentEntry(bool reloadList)
+        {
+            string key = _keyTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                ShowValidation("Name is required.");
+                return false;
+            }
+
+            JToken value;
+            try
+            {
+                if (CurrentCategory == "scripts" && !ValidateStepGridNumbers())
+                {
+                    SetStatus("Fix highlighted cells before saving.", true);
+                    return false;
+                }
+
+                value = CurrentCategory switch
+                {
+                    "settings" => new JValue(_valueTextBox.Text),
+                    "offset" => new JArray((int)_offsetXBox.Value, (int)_offsetYBox.Value),
+                    _ => BuildScriptValue()
+                };
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowValidation(ex.Message);
+                return false;
+            }
+
+            var category = CurrentCategoryObject;
+            string configKey = IsSettingsCategory ? GetConfigKeyFromDisplayKey(key) : key;
+            string? selectedConfigKey = string.IsNullOrWhiteSpace(_selectedKey) ? null : GetConfigKeyFromDisplayKey(_selectedKey);
+            if (!IsSettingsCategory && !string.IsNullOrWhiteSpace(selectedConfigKey) && !configKey.Equals(selectedConfigKey, StringComparison.Ordinal))
+            {
+                category.Property(selectedConfigKey!)?.Remove();
+            }
+
+            category[configKey] = value;
+            _selectedKey = key;
+
+            if (reloadList)
+            {
+                LoadEntries();
+                SelectEntry(key);
+                SetStatus($"{GetEntryName()} saved in this window. Click Save All & Close to update config.json.");
+            }
+
+            return true;
         }
 
         private void ClearEditors()
