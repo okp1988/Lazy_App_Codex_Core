@@ -5,9 +5,6 @@ namespace Lazy_App_Codex_Core
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool DestroyIcon(IntPtr hIcon);
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern int ShowCursor(bool show);
-
         [System.Runtime.InteropServices.ComImport]
         [System.Runtime.InteropServices.Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
         [System.Runtime.InteropServices.ClassInterface(System.Runtime.InteropServices.ClassInterfaceType.None)]
@@ -44,8 +41,6 @@ namespace Lazy_App_Codex_Core
 
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
-        private bool _filteringRunTargets;
-        private const string NoRunTargetMatchesText = "(No records found)";
         private CancellationTokenSource? _runCts;
         private Task? _runTask;
         private bool _isRunning;
@@ -75,9 +70,7 @@ namespace Lazy_App_Codex_Core
             Load += OnLoad;
             Activated += OnActivated;
             Resize += OnResize;
-            ddlScript.SelectionChangeCommitted += (_, _) => ApplySelectedDefaultOffset();
-            ddlScript.TextChanged += ddlScript_TextChanged;
-            ddlScript.KeyDown += ddlScript_KeyDown;
+            ddlScript.SelectionChanged += (_, _) => ApplySelectedDefaultOffset();
             splitContainer1.Panel1.Resize += (_, _) => ApplyResponsiveLayout();
 
             ResetOffsetSelection();
@@ -213,10 +206,8 @@ namespace Lazy_App_Codex_Core
                 MessageBox.Show("Failed to load config.json. Please check the logs folder.", "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
-            ddlScript.Items.Clear();
             _runTargets.Clear();
-            ddlScript.Items.Insert(0, "Choose script or sequence");
-            ddlScript.SelectedIndex = 0;
+            ddlScript.ClearSelection();
 
             foreach (var script in _library.Scripts)
             {
@@ -228,18 +219,15 @@ namespace Lazy_App_Codex_Core
                 _runTargets.Add(new RunTarget("sequence", sequence.Id, sequence.Name));
             }
 
-            foreach (var target in _runTargets)
-            {
-                ddlScript.Items.Add(target);
-            }
+            ddlScript.SetItems(_runTargets.Cast<object>());
 
             if (!string.IsNullOrWhiteSpace(selectedId))
             {
-                for (int i = 1; i < ddlScript.Items.Count; i++)
+                foreach (var target in _runTargets)
                 {
-                    if (ddlScript.Items[i] is RunTarget target && target.Id == selectedId)
+                    if (target.Id == selectedId)
                     {
-                        ddlScript.SelectedIndex = i;
+                        ddlScript.SelectedItem = target;
                         break;
                     }
                 }
@@ -254,7 +242,7 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (ddlScript.SelectedIndex <= 0)
+            if (ddlScript.SelectedItem is not RunTarget)
             {
                 MessageBox.Show("Select a script or sequence before run");
                 return;
@@ -265,7 +253,7 @@ namespace Lazy_App_Codex_Core
 
         private async Task StartRunAsync()
         {
-            RunTarget? target = ddlScript.SelectedItem as RunTarget ?? FindRunTargetByText(ddlScript.Text);
+            RunTarget? target = ddlScript.SelectedItem as RunTarget;
             if (target == null)
             {
                 MessageBox.Show("Select a script or sequence before run");
@@ -620,7 +608,7 @@ namespace Lazy_App_Codex_Core
         private void ApplySelectedDefaultOffset()
         {
             ResetOffsetSelection();
-            RunTarget? target = ddlScript.SelectedItem as RunTarget ?? FindRunTargetByText(ddlScript.Text);
+            RunTarget? target = ddlScript.SelectedItem as RunTarget;
             if (target == null)
             {
                 return;
@@ -651,114 +639,6 @@ namespace Lazy_App_Codex_Core
             {
                 ddlOffset.SelectedIndex = index;
             }
-        }
-
-        private void ddlScript_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter)
-            {
-                RunTarget? target = FindRunTargetByText(ddlScript.Text);
-                if (target != null)
-                {
-                    ddlScript.SelectedItem = target;
-                    ApplySelectedDefaultOffset();
-                    e.Handled = true;
-                }
-            }
-        }
-
-        private void ddlScript_TextChanged(object? sender, EventArgs e)
-        {
-            if (!_filteringRunTargets && ddlScript.Focused && ddlScript.SelectedItem is not RunTarget)
-            {
-                FilterRunTargetDropdown(ddlScript.Text);
-            }
-        }
-
-        private void FilterRunTargetDropdown(string searchText)
-        {
-            string typed = searchText;
-            var matches = _runTargets
-                .Where(target => string.IsNullOrWhiteSpace(typed) || target.Name.Contains(typed, StringComparison.OrdinalIgnoreCase) || target.ToString().Contains(typed, StringComparison.OrdinalIgnoreCase))
-                .Take(15)
-                .Cast<object>()
-                .ToArray();
-
-            _filteringRunTargets = true;
-            try
-            {
-                if (ddlScript.DroppedDown)
-                {
-                    ddlScript.DroppedDown = false;
-                }
-
-                ddlScript.BeginUpdate();
-                ddlScript.Items.Clear();
-                if (matches.Length > 0)
-                {
-                    ddlScript.Items.AddRange(matches);
-                }
-                else
-                {
-                    ddlScript.Items.Add(NoRunTargetMatchesText);
-                }
-                ddlScript.EndUpdate();
-                ddlScript.SelectedIndex = -1;
-                ddlScript.Text = typed;
-                ddlScript.SelectionStart = ddlScript.Text.Length;
-                ddlScript.SelectionLength = 0;
-            }
-            finally
-            {
-                _filteringRunTargets = false;
-            }
-
-            BeginInvoke((Action)(() => OpenFilteredDropdown(typed)));
-        }
-
-        private void OpenFilteredDropdown(string typedText)
-        {
-            if (!ddlScript.Focused || ddlScript.Text != typedText)
-            {
-                return;
-            }
-
-            ddlScript.DroppedDown = ddlScript.Items.Count > 0;
-            RestoreMousePointer();
-            RestoreMousePointerAfterDropdownPaint();
-        }
-
-        private static void RestoreMousePointer()
-        {
-            while (ShowCursor(true) < 0)
-            {
-            }
-
-            var position = Cursor.Position;
-            int nudgeX = position.X > 0 ? position.X - 1 : position.X + 1;
-            Cursor.Position = new Point(nudgeX, position.Y);
-            Cursor.Current = Cursors.Default;
-            Cursor.Position = position;
-        }
-
-        private void RestoreMousePointerAfterDropdownPaint()
-        {
-            var timer = new System.Windows.Forms.Timer { Interval = 80 };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                timer.Dispose();
-                RestoreMousePointer();
-            };
-            timer.Start();
-        }
-
-        private RunTarget? FindRunTargetByText(string text)
-        {
-            string normalized = text.Trim();
-            return _runTargets.FirstOrDefault(target =>
-                target.ToString().Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
-                target.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string FormatStatusTime(DateTime? time)

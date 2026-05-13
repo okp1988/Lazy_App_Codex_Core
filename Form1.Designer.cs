@@ -24,7 +24,7 @@ namespace Lazy_App_Codex_Core
             lblNextActionValue = new Label();
             lblNextAtValue = new Label();
             lblEstimatedEndValue = new Label();
-            ddlScript = new ComboBox();
+            ddlScript = new SearchableDropdown();
             ddlOffset = new ComboBox();
             btnConfig = new Button();
             btnRun = new Button();
@@ -102,13 +102,12 @@ namespace Lazy_App_Codex_Core
             // ddlScript
             // 
             ddlScript.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            ddlScript.DropDownStyle = ComboBoxStyle.DropDown;
-            ddlScript.FormattingEnabled = true;
             ddlScript.Location = new Point(16, 18);
             ddlScript.Name = "ddlScript";
             ddlScript.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             ddlScript.Size = new Size(418, 28);
             ddlScript.TabIndex = 0;
+            ddlScript.PlaceholderText = "Choose script or sequence";
             // 
             // ddlOffset
             // 
@@ -219,7 +218,7 @@ namespace Lazy_App_Codex_Core
 
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.Button btnRun;
-        private System.Windows.Forms.ComboBox ddlScript;
+        private SearchableDropdown ddlScript;
         private System.Windows.Forms.Panel statusDot;
         private System.Windows.Forms.TableLayoutPanel liveStatusLayout;
         private System.Windows.Forms.Label lblCurrentActionValue;
