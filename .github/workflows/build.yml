@@ -1,4 +1,4 @@
-name: Build
+name: Lazy App Build
 
 on:
   push:
@@ -8,24 +8,31 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    name: Build Lazy App
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - run: dotnet restore Lazy_App_Codex_Core.sln
-      - run: dotnet build Lazy_App_Codex_Core.sln --configuration Release --no-restore
+      - name: Restore
+        run: dotnet restore Lazy_App_Codex_Core.sln
 
-      - uses: actions/upload-artifact@v4
+      - name: Build
+        run: dotnet build Lazy_App_Codex_Core.sln --configuration Release --no-restore
+
+      - name: Upload Lazy App artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: build
+          name: lazy-app-release
           path: |
-            **/bin/Release/**/*
+            bin/Release/net8.0-windows/**/*

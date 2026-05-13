@@ -7,6 +7,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyName>Lazy App</AssemblyName>
+    <AssemblyTitle>Lazy App</AssemblyTitle>
+    <Product>Lazy App</Product>
+    <FileDescription>Lazy App</FileDescription>
   </PropertyGroup>
 
   <ItemGroup>

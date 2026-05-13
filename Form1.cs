@@ -39,10 +39,13 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptConfigRepository _configRepository = new ScriptConfigRepository("config.json");
         private readonly ScriptRunner _runner = new ScriptRunner();
 
-        private Dictionary<string, ScriptModel> _scripts = new Dictionary<string, ScriptModel>();
+        private ConfigLibrary _library = new ConfigLibrary();
+        private readonly List<RunTarget> _runTargets = new List<RunTarget>();
         private CancellationTokenSource? _runCts;
         private Task? _runTask;
         private bool _isRunning;
+        private LiveRunStatus _liveStatus = new LiveRunStatus { Idle = true };
+        private Color _statusDotColor = Color.Red;
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
         private readonly string _baseTitle;
@@ -67,16 +70,19 @@ namespace Lazy_App_Codex_Core
             Load += OnLoad;
             Activated += OnActivated;
             Resize += OnResize;
+            ddlScript.SelectionChangeCommitted += (_, _) => ApplySelectedDefaultOffset();
+            ddlScript.TextChanged += ddlScript_TextChanged;
+            ddlScript.KeyDown += ddlScript_KeyDown;
             splitContainer1.Panel1.Resize += (_, _) => ApplyResponsiveLayout();
 
-            ddlOffset.SelectedIndex = 2;
+            ResetOffsetSelection();
 
             LoadConfig();
             _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
             _clockTimer.Interval = 1000;
-            _clockTimer.Tick += (_, _) => UpdateCurrentTimeLabel();
+            _clockTimer.Tick += (_, _) => UpdateLiveStatusLabels();
             _clockTimer.Start();
-            UpdateCurrentTimeLabel();
+            UpdateLiveStatusLabels();
             SetRunningState(false);
             ApplyResponsiveLayout();
         }
@@ -157,16 +163,15 @@ namespace Lazy_App_Codex_Core
 
             int leftMargin = ddlScript.Left;
             int rightMargin = Math.Max(16, leftMargin);
-            int statusGap = 0;
+            int statusGap = 8;
             int rightEdge = Math.Max(leftMargin + 120, panelWidth - rightMargin);
-            int statusIndicatorLeft = Math.Max(leftMargin + 120, rightEdge - btnStatus.Width);
+            int statusIndicatorLeft = Math.Max(leftMargin + 120, rightEdge - statusDot.Width);
             int contentWidth = Math.Max(120, rightEdge - leftMargin);
 
-            btnStatus.Left = statusIndicatorLeft;
-            lblStatus.Width = Math.Max(120, statusIndicatorLeft - leftMargin - statusGap);
-            ddlScript.Width = contentWidth;
-            lblCircleTiming.Width = contentWidth;
-            lblCurrentTime.Width = contentWidth;
+            statusDot.Left = statusIndicatorLeft;
+            statusDot.Top = ddlScript.Top + (ddlScript.Height - statusDot.Height) / 2;
+            ddlScript.Width = Math.Max(120, statusIndicatorLeft - leftMargin - statusGap);
+            liveStatusLayout.Width = contentWidth;
         }
 
         private void RegisterHotkeysForWindowState()
@@ -190,31 +195,49 @@ namespace Lazy_App_Codex_Core
 
         private void LoadConfig()
         {
-            string? selectedScript = ddlScript.SelectedIndex > 0 ? ddlScript.SelectedItem?.ToString() : null;
+            string? selectedId = ddlScript.SelectedItem is RunTarget selected ? selected.Id : null;
 
             try
             {
-                _scripts = _configRepository.Load();
+                _library = _configRepository.LoadLibrary();
             }
             catch (Exception ex)
             {
-                _scripts = new Dictionary<string, ScriptModel>();
+                _library = new ConfigLibrary();
                 AppLogger.LogError("Failed to load script configuration.", ex);
                 MessageBox.Show("Failed to load config.json. Please check the logs folder.", "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
             ddlScript.Items.Clear();
-            ddlScript.Items.Insert(0, "Choose a script");
+            _runTargets.Clear();
+            ddlScript.Items.Insert(0, "Choose script or sequence");
             ddlScript.SelectedIndex = 0;
 
-            foreach (var key in _scripts.Keys)
+            foreach (var script in _library.Scripts)
             {
-                ddlScript.Items.Add(key);
+                _runTargets.Add(new RunTarget("script", script.Id, script.Name));
             }
 
-            if (!string.IsNullOrWhiteSpace(selectedScript) && _scripts.ContainsKey(selectedScript))
+            foreach (var sequence in _library.Sequences)
             {
-                ddlScript.SelectedItem = selectedScript;
+                _runTargets.Add(new RunTarget("sequence", sequence.Id, sequence.Name));
+            }
+
+            foreach (var target in _runTargets)
+            {
+                ddlScript.Items.Add(target);
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedId))
+            {
+                for (int i = 1; i < ddlScript.Items.Count; i++)
+                {
+                    if (ddlScript.Items[i] is RunTarget target && target.Id == selectedId)
+                    {
+                        ddlScript.SelectedIndex = i;
+                        break;
+                    }
+                }
             }
         }
 
@@ -228,7 +251,7 @@ namespace Lazy_App_Codex_Core
 
             if (ddlScript.SelectedIndex <= 0)
             {
-                MessageBox.Show("Select a script before run");
+                MessageBox.Show("Select a script or sequence before run");
                 return;
             }
 
@@ -237,26 +260,27 @@ namespace Lazy_App_Codex_Core
 
         private async Task StartRunAsync()
         {
-            string? selectedScriptName = ddlScript.SelectedItem?.ToString();
-            if (string.IsNullOrWhiteSpace(selectedScriptName))
+            RunTarget? target = ddlScript.SelectedItem as RunTarget ?? FindRunTargetByText(ddlScript.Text);
+            if (target == null)
             {
-                MessageBox.Show("Select a script before run");
+                MessageBox.Show("Select a script or sequence before run");
                 return;
             }
 
-            if (!_scripts.ContainsKey(selectedScriptName))
+            ScriptModel? script = target.Kind == "script" ? _library.FindScriptById(target.Id) : null;
+            SequenceModel? sequence = target.Kind == "sequence" ? _library.Sequences.FirstOrDefault(item => item.Id == target.Id) : null;
+            if (script == null && sequence == null)
             {
-                MessageBox.Show($"Missing config ({selectedScriptName})");
+                MessageBox.Show($"Missing config ({target.Name})");
                 return;
             }
 
-            ScriptModel selectedScript = _scripts[selectedScriptName];
             _runCts = new CancellationTokenSource();
             taLog.Clear();
             SetRunningState(true);
-            Text = $"{_baseTitle} - Running: {selectedScriptName}";
+            Text = $"{_baseTitle} - Running: {target.Name}";
 
-            _runTask = RunSelectedScriptAsync(selectedScriptName, selectedScript, _runCts.Token);
+            _runTask = RunSelectedTargetAsync(target, script, sequence, _runCts.Token);
             try
             {
                 await _runTask;
@@ -267,7 +291,8 @@ namespace Lazy_App_Codex_Core
             catch (Exception ex)
             {
                 AppLogger.LogError("Script run failed.", ex);
-                UpdateLabelStatus("ERROR: " + ex.Message, Color.Red);
+                ShowRunError(ex);
+                WriteLog("ERROR: " + ex.Message);
             }
             finally
             {
@@ -277,11 +302,27 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task RunSelectedScriptAsync(string scriptName, ScriptModel script, CancellationToken token)
+        private async Task RunSelectedTargetAsync(RunTarget target, ScriptModel? script, SequenceModel? sequence, CancellationToken token)
         {
-            var (offsetValue, offsetAxis) = GetSelectedOffset(scriptName);
+            var (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
             WriteLog($"OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
-            await _runner.RunAsync(script, offsetValue, offsetAxis, token, UpdateLabelStatus, UpdateCircleTimingLabel, IsAdbActionEnabled);
+            if (script != null)
+            {
+                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, token, UpdateLiveStatus, IsAdbActionEnabled);
+            }
+            else if (sequence != null)
+            {
+                (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
+                await _runner.RunSequenceAsync(
+                    sequence,
+                    _library,
+                    offsetValue,
+                    offsetAxis,
+                    scriptItem => GetSelectedOffset(scriptItem.Name),
+                    token,
+                    UpdateLiveStatus,
+                    IsAdbActionEnabled);
+            }
         }
 
         private (int value, string axis) GetSelectedOffset(string scriptName)
@@ -364,28 +405,25 @@ namespace Lazy_App_Codex_Core
 
             if (isRunning)
             {
-                UpdateLabelStatus("CLICKING NOW", Color.Red);
-                UpdateCircleTimingLabel("Circle: -- | Time: generating... | End: --");
+                UpdateLiveStatus(new LiveRunStatus { CurrentAction = "--", CurrentStep = "--", CurrentCycle = "--", NextAction = "--" });
             }
             else
             {
-                UpdateLabelStatus("STOP WORKING", Color.Blue);
-                UpdateCircleTimingLabel("Circle: -- | Time: -- | End: --");
+                UpdateLiveStatus(new LiveRunStatus { Idle = true });
             }
         }
 
-        private void UpdateLabelStatus(string text, Color color)
+        private void UpdateLiveStatus(LiveRunStatus status)
         {
             if (InvokeRequired)
             {
-                BeginInvoke((Action)(() => UpdateLabelStatus(text, color)));
+                BeginInvoke((Action)(() => UpdateLiveStatus(status)));
                 return;
             }
 
-            lblStatus.Text = text;
-            lblStatus.ForeColor = color;
-            lblStatus.Invalidate();
-            WriteLog(text);
+            _liveStatus = status;
+            UpdateLiveStatusLabels();
+            WriteLog(status.CurrentAction);
         }
 
         private void SetTaskbarOverlayIcon(Icon? overlayIcon, string description)
@@ -466,27 +504,72 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private void lblStatus_Paint(object? sender, PaintEventArgs e)
+        private void statusDot_Paint(object? sender, PaintEventArgs e)
         {
-            using var borderPen = new Pen(lblStatus.ForeColor, 2);
-            var borderBounds = new Rectangle(0, 0, lblStatus.Width - 1, lblStatus.Height - 1);
-            e.Graphics.DrawRectangle(borderPen, borderBounds);
-        }
-
-        private void UpdateCircleTimingLabel(string text)
-        {
-            if (InvokeRequired)
+            if (sender is not Panel dot)
             {
-                BeginInvoke((Action)(() => UpdateCircleTimingLabel(text)));
                 return;
             }
 
-            lblCircleTiming.Text = text;
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddEllipse(0, 0, dot.Width - 1, dot.Height - 1);
+            dot.Region = new Region(path);
+
+            using var brush = new SolidBrush(_statusDotColor);
+            using var border = new Pen(Color.FromArgb(120, Color.Black));
+            var bounds = new Rectangle(0, 0, dot.Width - 1, dot.Height - 1);
+            e.Graphics.FillEllipse(brush, bounds);
+            e.Graphics.DrawEllipse(border, bounds);
         }
 
-        private void UpdateCurrentTimeLabel()
+        private void UpdateLiveStatusLabels()
         {
-            lblCurrentTime.Text = "Current time: " + DateTime.Now.ToString("HH:mm:ss");
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)UpdateLiveStatusLabels);
+                return;
+            }
+
+            if (_liveStatus.Idle)
+            {
+                lblCurrentActionValue.Text = "--";
+                lblStepValue.Text = "--";
+                lblCycleValue.Text = "--";
+                lblNextActionValue.Text = "--";
+                lblNextAtValue.Text = "--";
+                lblEstimatedEndValue.Text = "--";
+                return;
+            }
+
+            lblCurrentActionValue.Text = _liveStatus.CurrentAction;
+            lblStepValue.Text = _liveStatus.CurrentStep;
+            lblCycleValue.Text = _liveStatus.CurrentCycle;
+            lblNextActionValue.Text = _liveStatus.NextAction;
+            lblNextAtValue.Text = FormatStatusTime(_liveStatus.NextActionAt);
+            lblEstimatedEndValue.Text = FormatStatusTime(_liveStatus.EstimatedEnd);
+        }
+
+        private void ShowRunError(Exception ex)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => ShowRunError(ex)));
+                return;
+            }
+
+            _liveStatus = new LiveRunStatus
+            {
+                CurrentAction = "ERROR",
+                CurrentStep = "--",
+                CurrentCycle = "--",
+                NextAction = "--",
+                Idle = false
+            };
+            UpdateLiveStatusLabels();
+            lblNextAtValue.Text = "Check ADB/device connection";
+            lblEstimatedEndValue.Text = ShortenError(ex.Message);
+            MessageBox.Show(ex.Message, "Lazy App Run Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         public void WriteLog(string text)
@@ -503,7 +586,8 @@ namespace Lazy_App_Codex_Core
 
         private void UpdateHotkeyStatus(bool success)
         {
-            btnStatus.BackColor = success ? Color.Green : Color.Red;
+            _statusDotColor = success ? Color.Green : Color.Red;
+            statusDot.Invalidate();
         }
 
         private void btnConfig_Click(object sender, EventArgs e)
@@ -522,6 +606,137 @@ namespace Lazy_App_Codex_Core
             WriteLog("CONFIG UPDATED.");
         }
 
+        private void ResetOffsetSelection()
+        {
+            int zeroOffsetIndex = ddlOffset.FindStringExact("0");
+            ddlOffset.SelectedIndex = zeroOffsetIndex >= 0 ? zeroOffsetIndex : -1;
+        }
+
+        private void ApplySelectedDefaultOffset()
+        {
+            ResetOffsetSelection();
+            RunTarget? target = ddlScript.SelectedItem as RunTarget ?? FindRunTargetByText(ddlScript.Text);
+            if (target == null)
+            {
+                return;
+            }
+
+            bool enabled;
+            string defaultOffset;
+            if (target.Kind == "script")
+            {
+                var script = _library.FindScriptById(target.Id);
+                enabled = script?.DefaultOffsetEnabled == true;
+                defaultOffset = script?.DefaultOffset ?? "0";
+            }
+            else
+            {
+                var sequence = _library.Sequences.FirstOrDefault(item => item.Id == target.Id);
+                enabled = sequence?.DefaultOffsetEnabled == true;
+                defaultOffset = sequence?.DefaultOffset ?? "0";
+            }
+
+            if (!enabled)
+            {
+                return;
+            }
+
+            int index = ddlOffset.FindStringExact(defaultOffset);
+            if (index >= 0)
+            {
+                ddlOffset.SelectedIndex = index;
+            }
+        }
+
+        private void ddlScript_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                RunTarget? target = FindRunTargetByText(ddlScript.Text);
+                if (target != null)
+                {
+                    ddlScript.SelectedItem = target;
+                    ApplySelectedDefaultOffset();
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void ddlScript_TextChanged(object? sender, EventArgs e)
+        {
+            if (ddlScript.Focused && ddlScript.SelectedItem is not RunTarget)
+            {
+                FilterRunTargetDropdown(ddlScript.Text);
+            }
+        }
+
+        private void FilterRunTargetDropdown(string searchText)
+        {
+            string typed = searchText;
+            var matches = _runTargets
+                .Where(target => string.IsNullOrWhiteSpace(typed) || target.Name.Contains(typed, StringComparison.OrdinalIgnoreCase) || target.ToString().Contains(typed, StringComparison.OrdinalIgnoreCase))
+                .Take(15)
+                .Cast<object>()
+                .ToArray();
+
+            ddlScript.BeginUpdate();
+            ddlScript.Items.Clear();
+            ddlScript.Items.AddRange(matches);
+            ddlScript.EndUpdate();
+            ddlScript.Text = typed;
+            ddlScript.SelectionStart = ddlScript.Text.Length;
+            ddlScript.SelectionLength = 0;
+            if (ddlScript.Focused)
+            {
+                ddlScript.DroppedDown = matches.Length > 0;
+            }
+        }
+
+        private RunTarget? FindRunTargetByText(string text)
+        {
+            string normalized = text.Trim();
+            return _runTargets.FirstOrDefault(target =>
+                target.ToString().Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+                target.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string FormatStatusTime(DateTime? time)
+        {
+            if (time == null)
+            {
+                return "--";
+            }
+
+            TimeSpan remaining = time.Value - DateTime.Now;
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            return $"{time.Value:HH:mm:ss} ({FormatDuration(remaining)})";
+        }
+
+        private static string FormatDuration(TimeSpan duration)
+        {
+            if (duration.TotalHours >= 1)
+            {
+                return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+            }
+
+            return $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+
+        private static string ShortenError(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return "Unknown error";
+            }
+
+            const int maxLength = 72;
+            return message.Length <= maxLength ? message : message[..maxLength] + "...";
+        }
+
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             _hotkeys.UnregisterAll(Handle);
@@ -532,6 +747,14 @@ namespace Lazy_App_Codex_Core
             _stoppedIcon.Dispose();
             _baseIcon.Dispose();
             _runCts?.Cancel();
+        }
+
+        private sealed record RunTarget(string Kind, string Id, string Name)
+        {
+            public override string ToString()
+            {
+                return Kind == "sequence" ? "[Q] " + Name : "[S] " + Name;
+            }
         }
     }
 }

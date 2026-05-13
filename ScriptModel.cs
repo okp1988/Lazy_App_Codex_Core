@@ -1,32 +1,83 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace Lazy_App_Codex_Core
 {
-    public class ScriptModel
+    public sealed class ConfigLibrary
     {
-        public int Duration { get; set; }        // 0 = unlimited, >0 = loop count
-        public int Interval_Min { get; set; }    // 秒
-        public int Interval_Max { get; set; }    // 秒
+        public List<ScriptModel> Scripts { get; set; } = new();
+        public List<SequenceModel> Sequences { get; set; } = new();
 
-        // Config 改为数组 (List) 对应 JSON 中的 []
-        public List<StepAction> Config { get; set; } = new List<StepAction>();
+        public ScriptModel? FindScriptById(string? id)
+        {
+            return Scripts.FirstOrDefault(script => script.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
-    public class StepAction
+    public sealed class ScriptModel
     {
-        public string Act { get; set; } = "";   // e.g. leftclick, leftdrag, rightclick
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public int Order { get; set; }
+        public int Duration { get; set; }        // 0 = unlimited, >0 = loop count
+        public int Interval_Min { get; set; }    // seconds
+        public int Interval_Max { get; set; }    // seconds
+        public bool DefaultOffsetEnabled { get; set; }
+        public string DefaultOffset { get; set; } = "0";
+        public List<ActionGroup> Groups { get; set; } = new();
+
+        public List<StepAction> Config => Groups.SelectMany(group => group.ExpandedSteps()).ToList();
+    }
+
+    public sealed class ActionGroup
+    {
+        public int Repeat { get; set; } = 1;
+        public List<StepAction> Steps { get; set; } = new();
+
+        public IEnumerable<StepAction> ExpandedSteps()
+        {
+            int repeat = Math.Max(1, Repeat);
+            for (int i = 0; i < repeat; i++)
+            {
+                foreach (var step in Steps)
+                {
+                    yield return step;
+                }
+            }
+        }
+    }
+
+    public sealed class SequenceModel
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public int Order { get; set; }
+        public int Duration { get; set; }
+        public int Interval_Min { get; set; }
+        public int Interval_Max { get; set; }
+        public bool DefaultOffsetEnabled { get; set; }
+        public string DefaultOffset { get; set; } = "0";
+        public List<SequenceItem> Items { get; set; } = new();
+    }
+
+    public sealed class SequenceItem
+    {
+        public string Type { get; set; } = "script";
+        public string ScriptId { get; set; } = "";
+        public int Repeat { get; set; } = 1;
+        public int Interval_Min { get; set; }
+        public int Interval_Max { get; set; }
+        public StepAction Action { get; set; } = new();
+    }
+
+    public sealed class StepAction
+    {
+        public string Act { get; set; } = "";   // e.g. leftclick, drag, rightclick
         public int ScrX { get; set; }
         public int ScrY { get; set; }
-        public int? ScrX2 { get; set; } // FOR DRAGGING
-        public int? ScrY2 { get; set; } // FOR DRAGGING
+        public int? ScrX2 { get; set; }
+        public int? ScrY2 { get; set; }
         public int RandX { get; set; }
         public int RandY { get; set; }
         public int Sleep_Min { get; set; }
         public int Sleep_Max { get; set; }
-        public string Offset { get; set; } = ""; // optional x or y; applies on left click only
+        public string Offset { get; set; } = "";
     }
 }
