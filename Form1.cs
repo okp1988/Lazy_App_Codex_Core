@@ -53,6 +53,7 @@ namespace Lazy_App_Codex_Core
         private readonly Icon _runningIcon;
         private readonly Icon _stoppedIcon;
         private ITaskbarList3? _taskbarList;
+        private readonly List<string> _debugLog = new List<string>();
 
         private static bool IsAdbActionEnabled = true;
 
@@ -71,7 +72,6 @@ namespace Lazy_App_Codex_Core
             Activated += OnActivated;
             Resize += OnResize;
             ddlScript.SelectionChanged += (_, _) => ApplySelectedDefaultOffset();
-            splitContainer1.Panel1.Resize += (_, _) => ApplyResponsiveLayout();
 
             ResetOffsetSelection();
 
@@ -82,7 +82,6 @@ namespace Lazy_App_Codex_Core
             _clockTimer.Start();
             UpdateLiveStatusLabels();
             SetRunningState(false);
-            ApplyResponsiveLayout();
         }
 
         protected override void WndProc(ref Message m)
@@ -109,7 +108,6 @@ namespace Lazy_App_Codex_Core
 
         private void OnLoad(object? sender, EventArgs e)
         {
-            ApplyResponsiveLayout();
             RegisterHotkeysForWindowState();
             SetTaskbarOverlayIcon(_stoppedIcon, "Stopped");
         }
@@ -124,7 +122,6 @@ namespace Lazy_App_Codex_Core
 
         private void OnResize(object? sender, EventArgs e)
         {
-            ApplyResponsiveLayout();
 
             if (WindowState == FormWindowState.Minimized)
             {
@@ -144,32 +141,6 @@ namespace Lazy_App_Codex_Core
             {
                 RegisterHotkeysForWindowState();
             }
-        }
-
-        private void ApplyResponsiveLayout()
-        {
-            if (!IsHandleCreated)
-            {
-                return;
-            }
-
-            int panelWidth = splitContainer1.Panel1.ClientSize.Width;
-            if (panelWidth <= 0)
-            {
-                return;
-            }
-
-            int leftMargin = ddlScript.Left;
-            int rightMargin = Math.Max(16, leftMargin);
-            int statusGap = 8;
-            int rightEdge = Math.Max(leftMargin + 120, panelWidth - rightMargin);
-            int statusIndicatorLeft = Math.Max(leftMargin + 120, rightEdge - statusDot.Width);
-            int contentWidth = Math.Max(120, rightEdge - leftMargin);
-
-            statusDot.Left = statusIndicatorLeft;
-            statusDot.Top = ddlScript.Top + (ddlScript.Height - statusDot.Height) / 2;
-            ddlScript.Width = Math.Max(120, statusIndicatorLeft - leftMargin - statusGap);
-            liveStatusLayout.Width = contentWidth;
         }
 
         private void RegisterHotkeysForWindowState()
@@ -269,7 +240,7 @@ namespace Lazy_App_Codex_Core
             }
 
             _runCts = new CancellationTokenSource();
-            taLog.Clear();
+            _debugLog.Clear();
             SetRunningState(true);
             Text = $"{_baseTitle} - Running: {target.Name}";
 
@@ -573,8 +544,11 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            taLog.AppendText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + ": " + text + Environment.NewLine);
-            taLog.ScrollToCaret();
+            _debugLog.Add(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + ": " + text);
+            if (_debugLog.Count > 500)
+            {
+                _debugLog.RemoveRange(0, _debugLog.Count - 500);
+            }
         }
 
         private void UpdateHotkeyStatus(bool success)

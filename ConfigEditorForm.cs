@@ -89,14 +89,35 @@ namespace Lazy_App_Codex_Core
 
             Text = "Lazy App Config";
             StartPosition = FormStartPosition.CenterParent;
-            MinimumSize = new Size(980, 620);
-            Size = new Size(1120, 760);
+            MinimumSize = new Size(760, 520);
+            Size = new Size(1000, 720);
             ShowIcon = false;
 
             BuildLayout();
             LoadTabs();
             RefreshEntryList();
             WireDirtyTracking();
+            Shown += (_, _) => FitToWorkingArea();
+        }
+
+
+        private void FitToWorkingArea()
+        {
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            int targetWidth = Math.Min(Width, workingArea.Width - 40);
+            int targetHeight = Math.Min(Height, workingArea.Height - 40);
+
+            if (targetWidth > 0 && targetHeight > 0 && (targetWidth != Width || targetHeight != Height))
+            {
+                Size = new Size(Math.Max(MinimumSize.Width, targetWidth), Math.Max(MinimumSize.Height, targetHeight));
+            }
+
+            if (!workingArea.Contains(Bounds))
+            {
+                Location = new Point(
+                    Math.Max(workingArea.Left, workingArea.Left + (workingArea.Width - Width) / 2),
+                    Math.Max(workingArea.Top, workingArea.Top + (workingArea.Height - Height) / 2));
+            }
         }
 
         public bool ConfigSaved { get; private set; }
@@ -106,7 +127,7 @@ namespace Lazy_App_Codex_Core
         private void BuildLayout()
         {
             _tabs.Dock = DockStyle.Top;
-            _tabs.Height = 36;
+            _tabs.Height = 42;
             _tabs.SelectedIndexChanged += (_, _) =>
             {
                 if (_loading)
@@ -129,13 +150,13 @@ namespace Lazy_App_Codex_Core
             };
 
             var main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 310));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(8) };
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
             _searchBox.Dock = DockStyle.Fill;
             _searchBox.PlaceholderText = "Search";
             _searchBox.TextChanged += (_, _) => RefreshEntryList();
@@ -157,15 +178,15 @@ namespace Lazy_App_Codex_Core
             var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(8) };
             right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             right.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-            var editorHost = new Panel { Dock = DockStyle.Fill };
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+            var editorHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
             editorHost.Controls.Add(BuildSequenceEditor());
             editorHost.Controls.Add(BuildScriptEditor());
             editorHost.Controls.Add(BuildOffsetEditor());
             editorHost.Controls.Add(BuildSettingsEditor());
             _statusLabel.Dock = DockStyle.Fill;
             _statusLabel.ForeColor = Color.DimGray;
-            var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
+            var bottom = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
             ConfigureButton(_closeButton, "Close", (_, _) => Close(), 90);
             ConfigureButton(_saveButton, "Save All && Close", (_, _) => SaveAndClose(), 145);
             var openFolder = new Button();
@@ -193,7 +214,7 @@ namespace Lazy_App_Codex_Core
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.Controls.Add(Label("Start Hotkey"), 0, 0);
             panel.Controls.Add(CreateHelpButton("Set global start/stop hotkeys. Leave blank to disable a hotkey."), 1, 0);
@@ -224,18 +245,21 @@ namespace Lazy_App_Codex_Core
         private Control BuildScriptEditor()
         {
             var panel = new TableLayoutPanel { Name = "scriptEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4 };
-            for (int i = 0; i < 4; i++) info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
-            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(info, "Name", _scriptNameBox, 0);
             AddNumberField(info, "Loop Count", _loopBox, 1);
@@ -243,7 +267,9 @@ namespace Lazy_App_Codex_Core
             AddNumberField(info, "Interval Max", _intervalMaxBox, 3);
             info.Controls.Add(CreateHelpButton("Script info controls the loop count, interval, optional default offset, and action groups saved under config[]."), 4, 0);
             _defaultOffsetEnabledBox.Text = "Enable Default Offset";
+            _defaultOffsetEnabledBox.AutoSize = true;
             _defaultOffsetEnabledBox.Dock = DockStyle.Fill;
+            _defaultOffsetEnabledBox.Margin = new Padding(0, 4, 4, 2);
             _defaultOffsetEnabledBox.CheckedChanged += (_, _) => _defaultOffsetBox.Enabled = _defaultOffsetEnabledBox.Checked;
             _defaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _defaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
@@ -251,13 +277,13 @@ namespace Lazy_App_Codex_Core
             info.Controls.Add(Label("Default Offset"), 1, 2);
             info.Controls.Add(_defaultOffsetBox, 1, 3);
 
-            var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 8, 0, 8) };
-            groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-            groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+            var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
+            groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
             groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             _groupList.Dock = DockStyle.Fill;
             _groupList.SelectedIndexChanged += (_, _) => SelectGroup();
-            var groupButtons = new TableLayoutPanel { Dock = DockStyle.Top, Height = 96, ColumnCount = 2, RowCount = 3, Padding = new Padding(8, 0, 8, 0) };
+            var groupButtons = new TableLayoutPanel { Dock = DockStyle.Top, Height = 104, ColumnCount = 2, RowCount = 3, Padding = new Padding(4, 0, 4, 0) };
             groupButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             groupButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             groupButtons.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
@@ -273,20 +299,21 @@ namespace Lazy_App_Codex_Core
             groupButtons.Controls.Add(_cloneGroupButton, 0, 1);
             groupButtons.Controls.Add(_groupUpButton, 0, 2);
             groupButtons.Controls.Add(_groupDownButton, 1, 2);
-            var repeatPanel = new TableLayoutPanel { Dock = DockStyle.Top, Height = 58, ColumnCount = 1, RowCount = 2, Padding = new Padding(8, 0, 0, 0) };
+            var repeatPanel = new TableLayoutPanel { Dock = DockStyle.Top, Height = 60, ColumnCount = 1, RowCount = 2, Padding = new Padding(6, 0, 0, 0) };
             repeatPanel.Controls.Add(Label("Repeat Count"), 0, 0);
             repeatPanel.Controls.Add(_groupRepeatBox, 0, 1);
             groups.Controls.Add(_groupList, 0, 0);
             groups.Controls.Add(groupButtons, 1, 0);
             groups.Controls.Add(repeatPanel, 2, 0);
 
-            var rowTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 0, 0, 14) };
+            var rowTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_cloneRowButton, "Clone Row", (_, _) => CloneRow(), 92);
             ConfigureButton(_deleteRowButton, "Delete Row", (_, _) => DeleteRow(), 92);
             ConfigureButton(_rowUpButton, "Row Up", (_, _) => MoveRow(-1), 82);
             ConfigureButton(_rowDownButton, "Row Down", (_, _) => MoveRow(1), 92);
             rowTools.Controls.AddRange(new Control[] { _cloneRowButton, _deleteRowButton, _rowUpButton, _rowDownButton });
             ConfigureStepGrid(_stepGrid);
+            _stepGrid.MinimumSize = new Size(0, 120);
             _stepTotalLabel.Dock = DockStyle.Fill;
             _stepTotalLabel.Font = new Font(_stepTotalLabel.Font, FontStyle.Bold);
 
@@ -301,16 +328,19 @@ namespace Lazy_App_Codex_Core
         private Control BuildSequenceEditor()
         {
             var panel = new TableLayoutPanel { Name = "sequenceEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4 };
-            for (int i = 0; i < 4; i++) namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
+            namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
-            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(namePanel, "Name", _sequenceNameBox, 0);
             AddNumberField(namePanel, "Loop Count", _sequenceLoopBox, 1);
@@ -318,14 +348,16 @@ namespace Lazy_App_Codex_Core
             AddNumberField(namePanel, "Interval Max", _sequenceIntervalMaxBox, 3);
             namePanel.Controls.Add(CreateHelpButton("Sequences run script items and direct action items in order. Sequence items cannot reference another sequence."), 4, 0);
             _sequenceDefaultOffsetEnabledBox.Text = "Enable Default Offset";
+            _sequenceDefaultOffsetEnabledBox.AutoSize = true;
             _sequenceDefaultOffsetEnabledBox.Dock = DockStyle.Fill;
+            _sequenceDefaultOffsetEnabledBox.Margin = new Padding(0, 4, 4, 2);
             _sequenceDefaultOffsetEnabledBox.CheckedChanged += (_, _) => _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
             _sequenceDefaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _sequenceDefaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
             namePanel.Controls.Add(_sequenceDefaultOffsetEnabledBox, 0, 2);
             namePanel.Controls.Add(Label("Default Offset"), 1, 2);
             namePanel.Controls.Add(_sequenceDefaultOffsetBox, 1, 3);
-            var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+            var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_addScriptItemButton, "Add Script", (_, _) => AddSequenceItem("script"), 100);
             ConfigureButton(_addActionItemButton, "Add Action", (_, _) => AddSequenceItem("action"), 102);
             ConfigureButton(_removeItemButton, "Remove", (_, _) => RemoveSequenceItem(), 82);
@@ -334,6 +366,7 @@ namespace Lazy_App_Codex_Core
             ConfigureButton(_itemDownButton, "Down", (_, _) => MoveSequenceItem(1), 70);
             itemTools.Controls.AddRange(new Control[] { _addScriptItemButton, _addActionItemButton, _removeItemButton, _cloneItemButton, _itemUpButton, _itemDownButton });
             ConfigureSequenceGrid();
+            _sequenceGrid.MinimumSize = new Size(0, 160);
             _sequenceTotalLabel.Dock = DockStyle.Fill;
             _sequenceTotalLabel.Font = new Font(_sequenceTotalLabel.Font, FontStyle.Bold);
             panel.Controls.Add(namePanel, 0, 0);
@@ -349,6 +382,7 @@ namespace Lazy_App_Codex_Core
             grid.AllowUserToAddRows = true;
             grid.AllowUserToDeleteRows = true;
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            grid.ScrollBars = ScrollBars.Both;
             grid.Columns.Add(CreateActionColumn());
             grid.Columns.Add(TextColumn("x", "X", 58));
             grid.Columns.Add(TextColumn("y", "Y", 58));
@@ -368,11 +402,12 @@ namespace Lazy_App_Codex_Core
         {
             _sequenceGrid.Dock = DockStyle.Fill;
             _sequenceGrid.AllowUserToAddRows = false;
-            _sequenceGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            var typeCol = new DataGridViewComboBoxColumn { Name = "type", HeaderText = "Type", Width = 80 };
+            _sequenceGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _sequenceGrid.ScrollBars = ScrollBars.Both;
+            var typeCol = new DataGridViewComboBoxColumn { Name = "type", HeaderText = "Type", Width = 80, MinimumWidth = 70 };
             typeCol.Items.AddRange("script", "action");
             _sequenceGrid.Columns.Add(typeCol);
-            var scriptCol = new DataGridViewComboBoxColumn { Name = "scriptId", HeaderText = "Script" };
+            var scriptCol = new DataGridViewComboBoxColumn { Name = "scriptId", HeaderText = "Script", Width = 170, MinimumWidth = 120 };
             _sequenceGrid.Columns.Add(scriptCol);
             _sequenceGrid.Columns.Add(TextColumn("repeat", "Repeat", 70));
             _sequenceGrid.Columns.Add(TextColumn("imin", "Delay Min", 80));
@@ -386,17 +421,19 @@ namespace Lazy_App_Codex_Core
             _sequenceGrid.Columns.Add(TextColumn("randY", "RY", 58));
             _sequenceGrid.Columns.Add(TextColumn("sleepMin", "Min", 58));
             _sequenceGrid.Columns.Add(TextColumn("sleepMax", "Max", 58));
-            _sequenceGrid.CellValueChanged += (_, _) => { UpdateSelectedSequenceFromGrid(); UpdateSequenceTotals(); MarkDirty(); };
-            _sequenceGrid.RowsAdded += (_, _) => { UpdateSelectedSequenceFromGrid(); UpdateSequenceTotals(); MarkDirty(); };
-            _sequenceGrid.RowsRemoved += (_, _) => { UpdateSelectedSequenceFromGrid(); UpdateSequenceTotals(); MarkDirty(); };
-            _sequenceGrid.DataError += (_, e) => e.ThrowException = false;
             _sequenceGrid.CellValueChanged += (_, e) =>
             {
                 if (e.RowIndex >= 0)
                 {
                     ApplySequenceRowState(_sequenceGrid.Rows[e.RowIndex]);
                 }
+                UpdateSelectedSequenceFromGrid();
+                UpdateSequenceTotals();
+                MarkDirty();
             };
+            _sequenceGrid.RowsAdded += (_, _) => { UpdateSelectedSequenceFromGrid(); UpdateSequenceTotals(); MarkDirty(); };
+            _sequenceGrid.RowsRemoved += (_, _) => { UpdateSelectedSequenceFromGrid(); UpdateSequenceTotals(); MarkDirty(); };
+            _sequenceGrid.DataError += (_, e) => e.ThrowException = false;
             _sequenceGrid.CurrentCellDirtyStateChanged += (_, _) => { if (_sequenceGrid.IsCurrentCellDirty) _sequenceGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
         }
 
@@ -1757,7 +1794,7 @@ namespace Lazy_App_Codex_Core
 
         private static Label Label(string text)
         {
-            return new Label { Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+            return new Label { Text = text, Dock = DockStyle.Fill, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(0, 0, 2, 0) };
         }
 
         private static void AddTextField(TableLayoutPanel layout, string label, TextBox input, int column)
@@ -1777,8 +1814,9 @@ namespace Lazy_App_Codex_Core
         private void ConfigureButton(Button button, string text, EventHandler handler, int width = 82)
         {
             button.Text = text;
-            button.Size = new Size(width, 26);
-            button.Margin = new Padding(4, 2, 4, 2);
+            button.AutoSize = false;
+            button.Size = new Size(width, 32);
+            button.Margin = new Padding(4, 3, 4, 3);
             button.UseVisualStyleBackColor = true;
             button.Click += handler;
         }
