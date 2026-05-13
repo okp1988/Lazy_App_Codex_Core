@@ -33,6 +33,9 @@ jobs:
       - name: Publish
         run: dotnet publish Lazy_App_Codex_Core.csproj --configuration Release --no-restore --output publish
 
+      - name: Include default config
+        run: Copy-Item config.json publish\config.json -Force
+
       - name: Package release
         run: Compress-Archive -Path publish\* -DestinationPath lazy-app-release.zip -Force
 
@@ -42,14 +45,21 @@ jobs:
           name: lazy-app-release
           path: lazy-app-release.zip
 
-      - name: Create GitHub Release
+      - name: Create latest GitHub Release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: auto-release-${{ github.run_number }}
+          TAG_NAME: latest
         run: |
+          gh release delete $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --yes --cleanup-tag 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+
+          git push origin ":refs/tags/$env:TAG_NAME" 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+
           gh release create $env:TAG_NAME lazy-app-release.zip `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
-            --title "Lazy App $env:TAG_NAME" `
-            --notes "Automated release for commit $env:GITHUB_SHA"
+            --title "Lazy App latest" `
+            --notes "Automated latest release for commit $env:GITHUB_SHA" `
+            --latest

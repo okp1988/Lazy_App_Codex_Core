@@ -24,7 +24,9 @@ adb kill-server
 ## Main Window
 
 - Use the Script/Sequence dropdown to select what to run.
-- Type in the dropdown to search; up to 15 matching records are shown.
+- Click the Script/Sequence dropdown to open a custom picker.
+- The first dropdown row is a search box; matching Scripts and Sequences are shown below.
+- Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
 - The status dot is green when idle/ready and red while running.
@@ -59,18 +61,6 @@ A Script has:
 - Action groups saved under `config`
 
 Script names must be unique. Cloned scripts are named with `_copy`, `_copy2`, `_copy3`, and so on. Scripts can also be manually ordered; the main window follows the saved order.
-
-Action groups use the compatible JSON shape:
-
-```json
-{
-  "steps": [
-    { "a": "drag", "s": [537, 1680], "s2": [547, 1072], "r": [100, 20], "t": [3, 4] },
-    { "a": "drag", "s": [544, 1120], "s2": [544, 1557], "r": [100, 20], "t": [3, 4] }
-  ],
-  "repeat": 4
-}
-```
 
 ## Sequences
 
@@ -117,8 +107,6 @@ Lazy App keeps the editable configuration in `config.json` next to the app. The 
 - Restore Config
 
 Backups are written under the config folder's `backup` directory with timestamped filenames.
-
-The build output executable and Windows metadata use the display name `Lazy App`. Internal project, namespace, and source file names may still use `Lazy_App_Codex_Core`.
 
 ## Compact JSON Aliases
 
