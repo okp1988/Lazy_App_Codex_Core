@@ -8,7 +8,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -30,9 +30,26 @@ jobs:
       - name: Build
         run: dotnet build Lazy_App_Codex_Core.sln --configuration Release --no-restore
 
+      - name: Publish
+        run: dotnet publish Lazy_App_Codex_Core.csproj --configuration Release --no-restore --output publish
+
+      - name: Package release
+        run: Compress-Archive -Path publish\* -DestinationPath lazy-app-release.zip -Force
+
       - name: Upload Lazy App artifact
         uses: actions/upload-artifact@v4
         with:
           name: lazy-app-release
-          path: |
-            bin/Release/net8.0-windows/**/*
+          path: lazy-app-release.zip
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: auto-release-${{ github.run_number }}
+        run: |
+          gh release create $env:TAG_NAME lazy-app-release.zip `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "Lazy App $env:TAG_NAME" `
+            --notes "Automated release for commit $env:GITHUB_SHA"
