@@ -61,6 +61,7 @@ namespace Lazy_App_Codex_Core
             _listBox.Margin = new Padding(0);
             _listBox.MouseDoubleClick += (_, _) => CommitHighlightedItem();
             _listBox.Click += (_, _) => CommitHighlightedItem();
+            _listBox.MouseMove += ListBox_MouseMove;
             _listBox.KeyDown += ListBox_KeyDown;
 
             var panel = new TableLayoutPanel
@@ -209,7 +210,7 @@ namespace Lazy_App_Codex_Core
             ClearSearch();
             SizeDropDown(out Point dropLocation);
             ApplyFilter();
-            _dropDown.Show(this, dropLocation);
+            _dropDown.Show(this, dropLocation, ToolStripDropDownDirection.BelowRight);
             _searchTextBox.Focus();
         }
 
@@ -229,9 +230,7 @@ namespace Lazy_App_Codex_Core
             int requestedHeight = searchHeight + requestedListHeight;
 
             int spaceBelow = workingArea.Bottom - (screenLocation.Y + Height) - 8;
-            int spaceAbove = screenLocation.Y - workingArea.Top - 8;
-            bool showAbove = spaceBelow < requestedHeight && spaceAbove > spaceBelow;
-            int availableHeight = Math.Max(LogicalToDeviceUnits(80), showAbove ? spaceAbove : spaceBelow);
+            int availableHeight = Math.Max(LogicalToDeviceUnits(80), spaceBelow);
             int height = Math.Min(requestedHeight, availableHeight);
 
             if (_dropDown.Items[0] is ToolStripControlHost host && host.Control is Control panel)
@@ -240,7 +239,7 @@ namespace Lazy_App_Codex_Core
                 host.Size = panel.Size;
             }
 
-            dropLocation = showAbove ? new Point(0, -height) : new Point(0, Height);
+            dropLocation = new Point(0, Height);
         }
 
         private void ApplyFilter()
@@ -303,6 +302,15 @@ namespace Lazy_App_Codex_Core
             {
                 _dropDown.Close();
                 e.Handled = true;
+            }
+        }
+
+        private void ListBox_MouseMove(object? sender, MouseEventArgs e)
+        {
+            int index = _listBox.IndexFromPoint(e.Location);
+            if (index >= 0 && index < _listBox.Items.Count && _listBox.SelectedIndex != index)
+            {
+                _listBox.SelectedIndex = index;
             }
         }
 

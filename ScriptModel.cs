@@ -15,6 +15,8 @@ namespace Lazy_App_Codex_Core
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
+        public string Tag { get; set; } = "";
+        public bool Hidden { get; set; }
         public int Order { get; set; }
         public int Duration { get; set; }        // 0 = unlimited, >0 = loop count
         public int Interval_Min { get; set; }    // seconds
@@ -48,6 +50,7 @@ namespace Lazy_App_Codex_Core
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
+        public string Tag { get; set; } = "";
         public int Order { get; set; }
         public int Duration { get; set; }
         public int Interval_Min { get; set; }
