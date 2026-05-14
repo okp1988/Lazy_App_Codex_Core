@@ -4,9 +4,13 @@ Lazy App runs ADB-based tap, back, and drag workflows for Android devices. No ap
 
 ## Requirements
 
-1. Install ADB, for example at `C:\adb`.
-2. Enable USB Debugging or Wireless Debugging on the phone.
-3. Connect the device before running a Script or Sequence.
+1. Use Windows with the .NET 8 SDK installed.
+2. For Visual Studio development, use Visual Studio 2022 version 17.8 or newer, or Visual Studio 2026, with the .NET desktop development workload installed. Visual Studio can read `.vsconfig` from this repository to install the required workload.
+3. Install ADB, for example at `C:\adb`.
+4. Enable USB Debugging or Wireless Debugging on the phone.
+5. Connect the device before running a Script or Sequence.
+
+Open `Lazy_App_Codex_Core.sln` in Visual Studio. The project is an SDK-style Windows Forms app targeting `net8.0-windows`, so no legacy project migration is required. The WinForms designer metadata for `Form1`, `ConfigEditorForm`, and `SearchableDropdown` is stored in the shared project file instead of user-local `.csproj.user` settings.
 
 Useful ADB commands:
 
@@ -44,16 +48,18 @@ The config editor uses in-memory changes while open. Switching tabs or selecting
 
 Available tabs:
 
-- Settings: start/stop hotkeys.
+- Settings: start/stop hotkeys and the tag list used by Scripts and Sequences.
 - Offset: offset profiles such as `s26` or `s13`.
-- Scripts: script info, default offset, action groups, and step rows.
-- Sequences: sequence info, default offset, and mixed script/action items.
+- Scripts: script info, tag, hide-from-main toggle, default offset, action groups, and step rows.
+- Sequences: sequence info, tag, default offset, and mixed script/action items.
 
 ## Scripts
 
 A Script has:
 
 - Name
+- Tag
+- Hide from Main toggle
 - Loop Count (`d`)
 - Interval Min (`imin`)
 - Interval Max (`imax`)
@@ -72,6 +78,8 @@ A Sequence can run:
 A Sequence cannot contain another Sequence.
 
 Sequence script items store only the script internal ID, so renaming a Script does not break Sequence references.
+
+Scripts and Sequences may have one tag or a blank tag. The main window tag filter is below the offset selector. `All` is always the first filter option and shows all visible Scripts plus all Sequences. Selecting a configured tag shows entries with that tag plus entries without a tag. Hidden Scripts stay available for Sequence items, but do not appear in the main Script/Sequence dropdown.
 
 When a Script is run inside a Sequence:
 

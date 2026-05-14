@@ -11,6 +11,9 @@ namespace Lazy_App_Codex_Core
 
         [JsonProperty("hotkeyStop")]
         public string HotkeyStop { get; set; } = "CTRL+ALT+D";
+
+        [JsonProperty("tag")]
+        public List<string> Tags { get; set; } = new();
     }
 
     public sealed class ScriptConfigRepository
@@ -160,6 +163,7 @@ namespace Lazy_App_Codex_Core
             NormalizeSettingKey(root, "HotkeyStop", "hotkeyStop");
             EnsureSetting(root, "hotkeyStart", "CTRL+ALT+S");
             EnsureSetting(root, "hotkeyStop", "CTRL+ALT+D");
+            EnsureTagSettings(root);
         }
 
         private static void EnsureCategory(JObject root, string name)
@@ -200,6 +204,8 @@ namespace Lazy_App_Codex_Core
 
         private static void MigrateConfig(JObject root)
         {
+            var tags = ReadSettingsTags(root);
+            var tagSet = new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
             var scripts = (JObject)root["scripts"]!;
             int order = 0;
             foreach (var property in scripts.Properties().ToList())
@@ -212,6 +218,11 @@ namespace Lazy_App_Codex_Core
                 script["id"] ??= NewId("scr");
                 script["name"] ??= property.Name;
                 script["order"] ??= order;
+                if (script["tag"] == null || (script["tag"]!.ToString().Length > 0 && !tagSet.Contains(script["tag"]!.ToString())))
+                {
+                    script["tag"] = "";
+                }
+                script["hide"] ??= false;
                 script["defaultOffsetEnabled"] ??= false;
                 script["defaultOffset"] ??= "0";
                 if (script["config"] is not JArray)
@@ -234,6 +245,10 @@ namespace Lazy_App_Codex_Core
                 sequence["id"] ??= NewId("seq");
                 sequence["name"] ??= property.Name;
                 sequence["order"] ??= order++;
+                if (sequence["tag"] == null || (sequence["tag"]!.ToString().Length > 0 && !tagSet.Contains(sequence["tag"]!.ToString())))
+                {
+                    sequence["tag"] = "";
+                }
                 sequence["d"] ??= 1;
                 sequence["imin"] ??= 0;
                 sequence["imax"] ??= 0;
@@ -241,6 +256,56 @@ namespace Lazy_App_Codex_Core
                 sequence["defaultOffset"] ??= "0";
                 sequence["items"] ??= new JArray();
             }
+        }
+
+        private static void EnsureTagSettings(JObject root)
+        {
+            var settings = (JObject)root["settings"]!;
+            if (settings["tag"] is JArray existingTags)
+            {
+                var normalized = NormalizeTags(existingTags.Select(tag => tag?.ToString() ?? ""));
+                settings["tag"] = new JArray(normalized);
+                return;
+            }
+
+            if (settings["tags"] is JArray legacyTags)
+            {
+                settings["tag"] = new JArray(NormalizeTags(legacyTags.Select(tag => tag?.ToString() ?? "")));
+                settings.Property("tags")?.Remove();
+                return;
+            }
+
+            settings["tag"] = new JArray();
+        }
+
+        private static List<string> ReadSettingsTags(JObject root)
+        {
+            var settings = (JObject)root["settings"]!;
+            if (settings["tag"] is JArray tags)
+            {
+                return NormalizeTags(tags.Select(tag => tag?.ToString() ?? ""));
+            }
+
+            return new List<string>();
+        }
+
+        private static List<string> NormalizeTags(IEnumerable<string> tags)
+        {
+            var normalized = new List<string>();
+            foreach (string tag in tags)
+            {
+                string value = tag.Trim();
+                if (value.Length == 0 ||
+                    value.Equals("All", StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Any(existing => existing.Equals(value, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                normalized.Add(value);
+            }
+
+            return normalized;
         }
 
         private void LoadOffsets(JObject root)
@@ -274,6 +339,8 @@ namespace Lazy_App_Codex_Core
             {
                 Id = ReadString(scriptObj, null, NewId("scr"), "id"),
                 Name = ReadString(scriptObj, null, key, "name"),
+                Tag = ReadString(scriptObj, null, "", "tag"),
+                Hidden = ReadBool(scriptObj, false, "hide", "hidden"),
                 Order = ReadInt(scriptObj, null, fallbackOrder, -1, "order"),
                 Duration = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, -1, "duration", "d"),
                 Interval_Min = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, 0, "interval_min", "imin", "interval", "i"),
@@ -326,6 +393,7 @@ namespace Lazy_App_Codex_Core
             {
                 Id = ReadString(sequenceObj, null, NewId("seq"), "id"),
                 Name = ReadString(sequenceObj, null, key, "name"),
+                Tag = ReadString(sequenceObj, null, "", "tag"),
                 Order = ReadInt(sequenceObj, null, fallbackOrder, -1, "order"),
                 Duration = ReadInt(sequenceObj, null, 1, -1, "duration", "d"),
                 Interval_Min = ReadInt(sequenceObj, null, 0, 0, "interval_min", "imin", "interval", "i"),
@@ -372,6 +440,8 @@ namespace Lazy_App_Codex_Core
             {
                 ["id"] = string.IsNullOrWhiteSpace(script.Id) ? NewId("scr") : script.Id,
                 ["name"] = script.Name,
+                ["tag"] = script.Tag,
+                ["hide"] = script.Hidden,
                 ["order"] = script.Order,
                 ["d"] = script.Duration,
                 ["imin"] = script.Interval_Min,
@@ -388,6 +458,7 @@ namespace Lazy_App_Codex_Core
             {
                 ["id"] = string.IsNullOrWhiteSpace(sequence.Id) ? NewId("seq") : sequence.Id,
                 ["name"] = sequence.Name,
+                ["tag"] = sequence.Tag,
                 ["order"] = sequence.Order,
                 ["d"] = sequence.Duration,
                 ["imin"] = sequence.Interval_Min,

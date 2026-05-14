@@ -1,7 +1,8 @@
 ﻿{
     "settings": {
         "hotkeyStart": "ALT+S",
-        "hotkeyStop": "ALT+S"
+        "hotkeyStop": "ALT+S",
+        "tag": []
     },
     "offset": {
         "s01": [
@@ -13,6 +14,8 @@
         "DRAG": {
             "id": "scr_b6c7c0dc",
             "name": "DRAG",
+            "tag": "",
+            "hide": false,
             "order": 0,
             "d": 1,
             "imin": 1,
@@ -70,6 +73,7 @@
         "DRAG_30": {
             "id": "seq_fb250eb5",
             "name": "DRAG_30",
+            "tag": "",
             "order": 0,
             "d": 1,
             "imin": 0,
@@ -89,6 +93,7 @@
         "DRAG_60": {
             "id": "seq_edc240e9",
             "name": "DRAG_60",
+            "tag": "",
             "order": 1,
             "d": 1,
             "imin": 0,

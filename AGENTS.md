@@ -7,6 +7,7 @@
 - `Form1.cs` owns the main window, global hotkey routing, run/stop state, offset selection, taskbar overlay icons, and opening the config editor.
 - `SearchableDropdown.cs` is the custom main Script/Sequence picker. Its popup owns search text and clears it on close; the main field should only show the selected item.
 - `ConfigEditorForm.cs` is a hand-built WinForms editor for the four config categories: `settings`, `offset`, `scripts`, and `sequences`.
+- In `ConfigEditorForm`, new button rows are easy to clip at the bottom. Prefer `TableLayoutPanel` rows with explicit heights and docked buttons over auto-sized or tight `FlowLayoutPanel` rows, and leave enough bottom padding when placing buttons inside scrollable/editor panels.
 - `ScriptConfigRespository.cs` loads, migrates, normalizes, and saves `config.json`; preserve its alias support when changing script/config behavior.
 - `ScriptRunner.cs` expands normalized steps into ADB commands and sleeps; it supports an `ADB OFF` path where commands are skipped but statuses/timing still update.
 - `AdbShellController.cs` shells out to `C:\adb\adb.exe` by default and works in physical device-pixel coordinates.
@@ -22,6 +23,8 @@
 - Only left-click steps consume the selected UI offset. A per-step `offset`/`o` value of `x` or `y` overrides the axis selected in the main window.
 - The config editor currently writes compact script output (`d`, `imin`, `imax`, `config`, `a`, `s`, `s2`, `r`, `t`) and only exposes `left`, `right`, and `drag` in its action grids.
 - Sequences are first-class config entries. Sequence items may reference scripts by `scriptId` or contain direct actions; sequences must not reference other sequences.
+- `settings.tag` is the canonical tag list and may be empty. Scripts and sequences may store one configured `tag` or a blank tag; selecting a tag in the main filter shows that tag plus blank-tag entries. The main window tag filter always includes `All` at index 0 before configured tags.
+- Script `hide` controls whether a script appears in the main Script/Sequence dropdown. Hidden scripts still remain valid sequence script items.
 
 ## Run Behavior
 

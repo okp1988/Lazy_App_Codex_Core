@@ -30,6 +30,7 @@ namespace Lazy_App_Codex_Core
             actionPanel = new TableLayoutPanel();
             btnRun = new Button();
             ddlOffset = new ComboBox();
+            ddlTagFilter = new ComboBox();
             btnConfig = new Button();
             mainLayout.SuspendLayout();
             contentLayout.SuspendLayout();
@@ -140,17 +141,19 @@ namespace Lazy_App_Codex_Core
             actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             actionPanel.Controls.Add(btnRun, 0, 0);
             actionPanel.Controls.Add(ddlOffset, 0, 1);
-            actionPanel.Controls.Add(btnConfig, 0, 2);
+            actionPanel.Controls.Add(ddlTagFilter, 0, 2);
+            actionPanel.Controls.Add(btnConfig, 0, 3);
             actionPanel.Dock = DockStyle.Top;
             actionPanel.Location = new Point(480, 10);
             actionPanel.Margin = new Padding(0);
             actionPanel.Name = "actionPanel";
-            actionPanel.RowCount = 4;
+            actionPanel.RowCount = 5;
+            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            actionPanel.Size = new Size(150, 132);
+            actionPanel.Size = new Size(150, 172);
             actionPanel.TabIndex = 1;
             // 
             // btnRun
@@ -179,15 +182,28 @@ namespace Lazy_App_Codex_Core
             ddlOffset.Size = new Size(150, 28);
             ddlOffset.TabIndex = 1;
             // 
+            // ddlTagFilter
+            // 
+            ddlTagFilter.Dock = DockStyle.Fill;
+            ddlTagFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+            ddlTagFilter.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ddlTagFilter.FormattingEnabled = true;
+            ddlTagFilter.Location = new Point(0, 80);
+            ddlTagFilter.Margin = new Padding(0, 4, 0, 6);
+            ddlTagFilter.Name = "ddlTagFilter";
+            ddlTagFilter.Size = new Size(150, 28);
+            ddlTagFilter.TabIndex = 2;
+            ddlTagFilter.SelectedIndexChanged += ddlTagFilter_SelectedIndexChanged;
+            // 
             // btnConfig
             // 
             btnConfig.Dock = DockStyle.Fill;
             btnConfig.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnConfig.Location = new Point(0, 80);
+            btnConfig.Location = new Point(0, 120);
             btnConfig.Margin = new Padding(0, 2, 0, 6);
             btnConfig.Name = "btnConfig";
             btnConfig.Size = new Size(150, 32);
-            btnConfig.TabIndex = 2;
+            btnConfig.TabIndex = 3;
             btnConfig.Text = "Config";
             btnConfig.UseVisualStyleBackColor = true;
             btnConfig.Click += btnConfig_Click;
@@ -252,6 +268,7 @@ namespace Lazy_App_Codex_Core
         private System.Windows.Forms.Label lblNextAtValue;
         private System.Windows.Forms.Label lblEstimatedEndValue;
         private System.Windows.Forms.ComboBox ddlOffset;
+        private System.Windows.Forms.ComboBox ddlTagFilter;
         private System.Windows.Forms.Button btnConfig;
     }
 }

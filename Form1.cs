@@ -165,6 +165,7 @@ namespace Lazy_App_Codex_Core
         private void LoadConfig()
         {
             string? selectedId = ddlScript.SelectedItem is RunTarget selected ? selected.Id : null;
+            string selectedTag = ddlTagFilter.SelectedItem?.ToString() ?? "All";
 
             try
             {
@@ -180,29 +181,91 @@ namespace Lazy_App_Codex_Core
             _runTargets.Clear();
             ddlScript.ClearSelection();
 
+            LoadTagFilter(selectedTag);
+            RebuildRunTargets(selectedId);
+        }
+
+        private void LoadTagFilter(string selectedTag)
+        {
+            ddlTagFilter.BeginUpdate();
+            ddlTagFilter.Items.Clear();
+            ddlTagFilter.Items.Add("All");
+            foreach (string tag in NormalizeTags(_configRepository.Settings.Tags))
+            {
+                if (!string.IsNullOrWhiteSpace(tag))
+                {
+                    ddlTagFilter.Items.Add(tag);
+                }
+            }
+
+            int selectedIndex = ddlTagFilter.FindStringExact(selectedTag);
+            ddlTagFilter.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+            ddlTagFilter.EndUpdate();
+        }
+
+        private void RebuildRunTargets(string? selectedId = null)
+        {
+            string selectedTag = ddlTagFilter.SelectedItem?.ToString() ?? "All";
+            _runTargets.Clear();
+            ddlScript.ClearSelection();
+
             foreach (var script in _library.Scripts)
             {
-                _runTargets.Add(new RunTarget("script", script.Id, script.Name));
+                if (!script.Hidden && MatchesSelectedTag(script.Tag, selectedTag))
+                {
+                    _runTargets.Add(new RunTarget("script", script.Id, script.Name, script.Tag));
+                }
             }
 
             foreach (var sequence in _library.Sequences)
             {
-                _runTargets.Add(new RunTarget("sequence", sequence.Id, sequence.Name));
+                if (MatchesSelectedTag(sequence.Tag, selectedTag))
+                {
+                    _runTargets.Add(new RunTarget("sequence", sequence.Id, sequence.Name, sequence.Tag));
+                }
             }
 
             ddlScript.SetItems(_runTargets.Cast<object>());
 
-            if (!string.IsNullOrWhiteSpace(selectedId))
+            if (string.IsNullOrWhiteSpace(selectedId))
             {
-                foreach (var target in _runTargets)
+                return;
+            }
+
+            foreach (var target in _runTargets)
+            {
+                if (target.Id == selectedId)
                 {
-                    if (target.Id == selectedId)
-                    {
-                        ddlScript.SelectedItem = target;
-                        break;
-                    }
+                    ddlScript.SelectedItem = target;
+                    break;
                 }
             }
+        }
+
+        private static bool MatchesSelectedTag(string itemTag, string selectedTag)
+        {
+            return selectedTag == "All" ||
+                string.IsNullOrWhiteSpace(itemTag) ||
+                itemTag.Equals(selectedTag, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static List<string> NormalizeTags(IEnumerable<string> tags)
+        {
+            var normalized = new List<string>();
+            foreach (string tag in tags)
+            {
+                string value = tag.Trim();
+                if (value.Length == 0 ||
+                    value.Equals("All", StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Any(existing => existing.Equals(value, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                normalized.Add(value);
+            }
+
+            return normalized;
         }
 
         private async void btnRun_Click(object sender, EventArgs e)
@@ -363,6 +426,7 @@ namespace Lazy_App_Codex_Core
             _isRunning = isRunning;
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
+            ddlTagFilter.Enabled = !isRunning;
             btnConfig.Enabled = !isRunning;
             btnRun.Text = isRunning ? "Stop" : "Run";
             SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
@@ -573,6 +637,17 @@ namespace Lazy_App_Codex_Core
             WriteLog("CONFIG UPDATED.");
         }
 
+        private void ddlTagFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_library.Scripts.Count == 0 && _library.Sequences.Count == 0)
+            {
+                return;
+            }
+
+            RebuildRunTargets();
+            ResetOffsetSelection();
+        }
+
         private void ResetOffsetSelection()
         {
             int zeroOffsetIndex = ddlOffset.FindStringExact("0");
@@ -664,7 +739,7 @@ namespace Lazy_App_Codex_Core
             _runCts?.Cancel();
         }
 
-        private sealed record RunTarget(string Kind, string Id, string Name)
+        private sealed record RunTarget(string Kind, string Id, string Name, string Tag)
         {
             public override string ToString()
             {

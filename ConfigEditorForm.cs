@@ -20,12 +20,19 @@ namespace Lazy_App_Codex_Core
         private readonly Button _closeButton = new();
         private readonly Label _statusLabel = new();
         private readonly ToolTip _toolTip = new();
+        private readonly TableLayoutPanel _hotkeySettingsPanel = new();
+        private readonly TableLayoutPanel _tagSettingsPanel = new();
 
         private readonly TextBox _scriptNameBox = new();
         private readonly TextBox _sequenceNameBox = new();
         private readonly TextBox _offsetNameBox = new();
         private readonly TextBox _hotkeyStartBox = new();
         private readonly TextBox _hotkeyStopBox = new();
+        private readonly TextBox _tagNameBox = new();
+        private readonly ListBox _tagList = new();
+        private readonly Button _addTagButton = new();
+        private readonly Button _updateTagButton = new();
+        private readonly Button _deleteTagButton = new();
         private readonly NumericUpDown _offsetXBox = CreateNumberBox();
         private readonly NumericUpDown _offsetYBox = CreateNumberBox();
         private readonly NumericUpDown _loopBox = CreateNumberBox();
@@ -36,8 +43,11 @@ namespace Lazy_App_Codex_Core
         private readonly NumericUpDown _sequenceIntervalMaxBox = CreateNumberBox();
         private readonly CheckBox _defaultOffsetEnabledBox = new();
         private readonly ComboBox _defaultOffsetBox = new();
+        private readonly ComboBox _scriptTagBox = new();
+        private readonly CheckBox _scriptHiddenBox = new();
         private readonly CheckBox _sequenceDefaultOffsetEnabledBox = new();
         private readonly ComboBox _sequenceDefaultOffsetBox = new();
+        private readonly ComboBox _sequenceTagBox = new();
         private readonly ListBox _groupList = new();
         private readonly NumericUpDown _groupRepeatBox = CreateNumberBox(1);
         private readonly DataGridView _stepGrid = new();
@@ -67,6 +77,7 @@ namespace Lazy_App_Codex_Core
         private JObject _workingOffsets;
         private ScriptModel? _selectedScript;
         private SequenceModel? _selectedSequence;
+        private string _selectedSettingsKey = "hotkeys";
         private string? _selectedOffsetKey;
         private int _loadedGroupIndex = -1;
         private bool _dirty;
@@ -83,7 +94,8 @@ namespace Lazy_App_Codex_Core
             _workingSettings = new AppSettings
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
-                HotkeyStop = _repository.Settings.HotkeyStop
+                HotkeyStop = _repository.Settings.HotkeyStop,
+                Tags = NormalizeTags(_repository.Settings.Tags)
             };
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
 
@@ -208,23 +220,73 @@ namespace Lazy_App_Codex_Core
 
         private Control BuildSettingsEditor()
         {
-            var panel = new TableLayoutPanel { Name = "settingsEditor", Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Visible = false };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            panel.Controls.Add(Label("Start Hotkey"), 0, 0);
-            panel.Controls.Add(CreateHelpButton("Set global start/stop hotkeys. Leave blank to disable a hotkey."), 1, 0);
-            panel.Controls.Add(_hotkeyStartBox, 0, 1);
-            panel.SetColumnSpan(_hotkeyStartBox, 2);
-            panel.Controls.Add(Label("Stop Hotkey"), 0, 2);
-            panel.Controls.Add(_hotkeyStopBox, 0, 3);
-            panel.SetColumnSpan(_hotkeyStopBox, 2);
+            var panel = new Panel { Name = "settingsEditor", Dock = DockStyle.Fill, Visible = false };
+
+            _hotkeySettingsPanel.Dock = DockStyle.Fill;
+            _hotkeySettingsPanel.ColumnCount = 2;
+            _hotkeySettingsPanel.RowCount = 5;
+            _hotkeySettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            _hotkeySettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            _hotkeySettingsPanel.Controls.Add(Label("Start Hotkey"), 0, 0);
+            _hotkeySettingsPanel.Controls.Add(CreateHelpButton("Set global start/stop hotkeys. Leave blank to disable a hotkey."), 1, 0);
+            _hotkeySettingsPanel.Controls.Add(_hotkeyStartBox, 0, 1);
+            _hotkeySettingsPanel.SetColumnSpan(_hotkeyStartBox, 2);
+            _hotkeySettingsPanel.Controls.Add(Label("Stop Hotkey"), 0, 2);
+            _hotkeySettingsPanel.Controls.Add(_hotkeyStopBox, 0, 3);
+            _hotkeySettingsPanel.SetColumnSpan(_hotkeyStopBox, 2);
+
+            _tagSettingsPanel.Dock = DockStyle.Fill;
+            _tagSettingsPanel.ColumnCount = 2;
+            _tagSettingsPanel.RowCount = 3;
+            _tagSettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            _tagSettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+            _tagSettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            _tagSettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+            _tagSettingsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            _tagSettingsPanel.Controls.Add(Label("Tags"), 0, 0);
+            _tagSettingsPanel.Controls.Add(CreateHelpButton("Tags control the main window filter. Scripts and Sequences can also be left untagged."), 1, 0);
+            var tagEditor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 0, 0, 8) };
+            tagEditor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            tagEditor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+            tagEditor.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            tagEditor.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tagEditor.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            _tagList.Dock = DockStyle.Fill;
+            _tagList.IntegralHeight = false;
+            _tagList.SelectedIndexChanged += (_, _) => SelectTagFromList();
+            _tagNameBox.Dock = DockStyle.Fill;
+            var tagButtons = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 6, 0, 0) };
+            tagButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            tagButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            tagButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+            tagButtons.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            ConfigureButton(_addTagButton, "Add", (_, _) => AddTag(), 72);
+            ConfigureButton(_updateTagButton, "Update", (_, _) => UpdateTag(), 82);
+            ConfigureButton(_deleteTagButton, "Delete", (_, _) => DeleteTag(), 76);
+            foreach (Button button in new[] { _addTagButton, _updateTagButton, _deleteTagButton })
+            {
+                button.Dock = DockStyle.Fill;
+                button.Margin = new Padding(4, 0, 4, 0);
+            }
+
+            tagButtons.Controls.Add(_addTagButton, 0, 0);
+            tagButtons.Controls.Add(_updateTagButton, 1, 0);
+            tagButtons.Controls.Add(_deleteTagButton, 2, 0);
+            tagEditor.Controls.Add(_tagList, 0, 0);
+            tagEditor.SetRowSpan(_tagList, 3);
+            tagEditor.Controls.Add(_tagNameBox, 1, 0);
+            tagEditor.Controls.Add(tagButtons, 1, 2);
+            _tagSettingsPanel.Controls.Add(tagEditor, 0, 1);
+            _tagSettingsPanel.SetColumnSpan(tagEditor, 2);
             _hotkeyStartBox.Dock = DockStyle.Fill;
             _hotkeyStopBox.Dock = DockStyle.Fill;
+            panel.Controls.Add(_tagSettingsPanel);
+            panel.Controls.Add(_hotkeySettingsPanel);
             return panel;
         }
 
@@ -245,13 +307,13 @@ namespace Lazy_App_Codex_Core
         private Control BuildScriptEditor()
         {
             var panel = new TableLayoutPanel { Name = "scriptEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 5, Padding = new Padding(0, 4, 0, 4) };
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -259,6 +321,7 @@ namespace Lazy_App_Codex_Core
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(info, "Name", _scriptNameBox, 0);
@@ -273,9 +336,17 @@ namespace Lazy_App_Codex_Core
             _defaultOffsetEnabledBox.CheckedChanged += (_, _) => _defaultOffsetBox.Enabled = _defaultOffsetEnabledBox.Checked;
             _defaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _defaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
+            _scriptTagBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _scriptHiddenBox.Text = "Hide from Main";
+            _scriptHiddenBox.AutoSize = true;
+            _scriptHiddenBox.Dock = DockStyle.Fill;
+            _scriptHiddenBox.Margin = new Padding(0, 4, 4, 2);
             info.Controls.Add(_defaultOffsetEnabledBox, 0, 2);
             info.Controls.Add(Label("Default Offset"), 1, 2);
             info.Controls.Add(_defaultOffsetBox, 1, 3);
+            info.Controls.Add(Label("Tag"), 2, 2);
+            info.Controls.Add(_scriptTagBox, 2, 3);
+            info.Controls.Add(_scriptHiddenBox, 3, 2);
 
             var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
             groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
@@ -328,11 +399,11 @@ namespace Lazy_App_Codex_Core
         private Control BuildSequenceEditor()
         {
             var panel = new TableLayoutPanel { Name = "sequenceEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
+            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 5, Padding = new Padding(0, 4, 0, 4) };
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -340,6 +411,7 @@ namespace Lazy_App_Codex_Core
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(namePanel, "Name", _sequenceNameBox, 0);
@@ -354,9 +426,12 @@ namespace Lazy_App_Codex_Core
             _sequenceDefaultOffsetEnabledBox.CheckedChanged += (_, _) => _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
             _sequenceDefaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _sequenceDefaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
+            _sequenceTagBox.DropDownStyle = ComboBoxStyle.DropDownList;
             namePanel.Controls.Add(_sequenceDefaultOffsetEnabledBox, 0, 2);
             namePanel.Controls.Add(Label("Default Offset"), 1, 2);
             namePanel.Controls.Add(_sequenceDefaultOffsetBox, 1, 3);
+            namePanel.Controls.Add(Label("Tag"), 2, 2);
+            namePanel.Controls.Add(_sequenceTagBox, 2, 3);
             var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_addScriptItemButton, "Add Script", (_, _) => AddSequenceItem("script"), 100);
             ConfigureButton(_addActionItemButton, "Add Action", (_, _) => AddSequenceItem("action"), 102);
@@ -455,6 +530,7 @@ namespace Lazy_App_Codex_Core
                 "scripts" => _selectedScript?.Id,
                 "sequences" => _selectedSequence?.Id,
                 "offset" => _selectedOffsetKey,
+                "settings" => _selectedSettingsKey,
                 _ => null
             };
 
@@ -477,7 +553,8 @@ namespace Lazy_App_Codex_Core
             }
             else if (CurrentTab == "settings")
             {
-                _entryList.Items.Add(new EntryRef("Hotkeys", "settings"));
+                _entryList.Items.Add(new EntryRef("Hotkeys", "hotkeys"));
+                _entryList.Items.Add(new EntryRef("Tag", "tag"));
             }
             else
             {
@@ -539,6 +616,7 @@ namespace Lazy_App_Codex_Core
 
         private void SetSelectedEntry(EntryRef entry)
         {
+            _selectedSettingsKey = CurrentTab == "settings" ? entry.Id : _selectedSettingsKey;
             _selectedScript = CurrentTab == "scripts" ? _library.Scripts.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedSequence = CurrentTab == "sequences" ? _library.Sequences.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedOffsetKey = CurrentTab == "offset" ? entry.Id : null;
@@ -550,8 +628,17 @@ namespace Lazy_App_Codex_Core
             ClearEditorValues();
             if (CurrentTab == "settings")
             {
-                _hotkeyStartBox.Text = _workingSettings.HotkeyStart;
-                _hotkeyStopBox.Text = _workingSettings.HotkeyStop;
+                if (_selectedSettingsKey == "tag")
+                {
+                    RefreshTagList();
+                }
+                else
+                {
+                    _hotkeyStartBox.Text = _workingSettings.HotkeyStart;
+                    _hotkeyStopBox.Text = _workingSettings.HotkeyStop;
+                }
+
+                ShowSettingsPanel();
             }
             else if (CurrentTab == "offset")
             {
@@ -569,6 +656,8 @@ namespace Lazy_App_Codex_Core
                 _defaultOffsetEnabledBox.Checked = _selectedScript.DefaultOffsetEnabled;
                 _defaultOffsetBox.Enabled = _defaultOffsetEnabledBox.Checked;
                 _defaultOffsetBox.SelectedItem = OffsetOptions.Contains(_selectedScript.DefaultOffset) ? _selectedScript.DefaultOffset : "0";
+                RefreshTagCombo(_scriptTagBox, _selectedScript.Tag);
+                _scriptHiddenBox.Checked = _selectedScript.Hidden;
                 RefreshGroupList();
                 UpdateGroupButtonStates();
             }
@@ -581,6 +670,7 @@ namespace Lazy_App_Codex_Core
                 _sequenceDefaultOffsetEnabledBox.Checked = _selectedSequence.DefaultOffsetEnabled;
                 _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 _sequenceDefaultOffsetBox.SelectedItem = OffsetOptions.Contains(_selectedSequence.DefaultOffset) ? _selectedSequence.DefaultOffset : "0";
+                RefreshTagCombo(_sequenceTagBox, _selectedSequence.Tag);
                 RefreshSequenceGrid();
             }
 
@@ -622,6 +712,8 @@ namespace Lazy_App_Codex_Core
             _offsetNameBox.Clear();
             _hotkeyStartBox.Clear();
             _hotkeyStopBox.Clear();
+            _tagNameBox.Clear();
+            _tagList.Items.Clear();
             _offsetXBox.Value = 0;
             _offsetYBox.Value = 0;
             _loopBox.Value = 0;
@@ -633,9 +725,12 @@ namespace Lazy_App_Codex_Core
             _defaultOffsetEnabledBox.Checked = false;
             _defaultOffsetBox.Enabled = false;
             _defaultOffsetBox.SelectedItem = "0";
+            _scriptTagBox.Items.Clear();
+            _scriptHiddenBox.Checked = false;
             _sequenceDefaultOffsetEnabledBox.Checked = false;
             _sequenceDefaultOffsetBox.Enabled = false;
             _sequenceDefaultOffsetBox.SelectedItem = "0";
+            _sequenceTagBox.Items.Clear();
             _groupList.Items.Clear();
             _loadedGroupIndex = -1;
             _stepGrid.Rows.Clear();
@@ -686,6 +781,7 @@ namespace Lazy_App_Codex_Core
                 {
                     Id = ScriptConfigRepository.NewId("scr"),
                     Name = UniqueName("SCRIPT", _library.Scripts.Select(s => s.Name)),
+                    Tag = "",
                     Order = _library.Scripts.Count,
                     Interval_Max = 1,
                     Groups = new List<ActionGroup> { new() }
@@ -702,6 +798,7 @@ namespace Lazy_App_Codex_Core
                 {
                     Id = ScriptConfigRepository.NewId("seq"),
                     Name = UniqueName("SEQ", _library.Sequences.Select(s => s.Name)),
+                    Tag = "",
                     Order = _library.Sequences.Count,
                     Duration = 1
                 };
@@ -840,8 +937,17 @@ namespace Lazy_App_Codex_Core
         {
             if (tabKey == "settings")
             {
-                _workingSettings.HotkeyStart = _hotkeyStartBox.Text.Trim();
-                _workingSettings.HotkeyStop = _hotkeyStopBox.Text.Trim();
+                if (_selectedSettingsKey == "tag")
+                {
+                    _workingSettings.Tags = NormalizeTags(_workingSettings.Tags);
+                    EnsureTaggedEntriesUseKnownTags();
+                }
+                else
+                {
+                    _workingSettings.HotkeyStart = _hotkeyStartBox.Text.Trim();
+                    _workingSettings.HotkeyStop = _hotkeyStopBox.Text.Trim();
+                }
+
                 return true;
             }
 
@@ -895,6 +1001,8 @@ namespace Lazy_App_Codex_Core
                 _selectedScript.Interval_Max = (int)_intervalMaxBox.Value;
                 _selectedScript.DefaultOffsetEnabled = _defaultOffsetEnabledBox.Checked;
                 _selectedScript.DefaultOffset = _defaultOffsetBox.SelectedItem?.ToString() ?? "0";
+                _selectedScript.Tag = RequireSelectedTag(_scriptTagBox);
+                _selectedScript.Hidden = _scriptHiddenBox.Checked;
                 return true;
             }
 
@@ -919,6 +1027,7 @@ namespace Lazy_App_Codex_Core
                 _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
                 _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 _selectedSequence.DefaultOffset = _sequenceDefaultOffsetBox.SelectedItem?.ToString() ?? "0";
+                _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
                 _selectedSequence.Items = ReadSequenceItemsFromGrid();
                 return true;
             }
@@ -951,10 +1060,13 @@ namespace Lazy_App_Codex_Core
 
         private void SaveLibraryToRoot()
         {
+            _workingSettings.Tags = NormalizeTags(_workingSettings.Tags);
+            EnsureTaggedEntriesUseKnownTags();
             _root["settings"] = new JObject
             {
                 ["hotkeyStart"] = _workingSettings.HotkeyStart,
-                ["hotkeyStop"] = _workingSettings.HotkeyStop
+                ["hotkeyStop"] = _workingSettings.HotkeyStop,
+                ["tag"] = new JArray(NormalizeTags(_workingSettings.Tags))
             };
             _root["offset"] = _workingOffsets.DeepClone();
 
@@ -1373,6 +1485,202 @@ namespace Lazy_App_Codex_Core
             return (min, max);
         }
 
+        private void RefreshTagList()
+        {
+            _tagList.BeginUpdate();
+            _tagList.Items.Clear();
+            foreach (string tag in NormalizeTags(_workingSettings.Tags))
+            {
+                _tagList.Items.Add(tag);
+            }
+
+            _tagList.EndUpdate();
+            if (_tagList.Items.Count > 0 && _tagList.SelectedIndex < 0)
+            {
+                _tagList.SelectedIndex = 0;
+            }
+        }
+
+        private void ShowSettingsPanel()
+        {
+            _hotkeySettingsPanel.Visible = _selectedSettingsKey != "tag";
+            _tagSettingsPanel.Visible = _selectedSettingsKey == "tag";
+            if (_hotkeySettingsPanel.Visible)
+            {
+                _hotkeySettingsPanel.BringToFront();
+            }
+            else
+            {
+                _tagSettingsPanel.BringToFront();
+            }
+        }
+
+        private void SelectTagFromList()
+        {
+            if (_tagList.SelectedItem != null)
+            {
+                _tagNameBox.Text = _tagList.SelectedItem.ToString();
+            }
+        }
+
+        private void AddTag()
+        {
+            string tag = _tagNameBox.Text.Trim();
+            if (!ValidateNewTag(tag, null))
+            {
+                return;
+            }
+
+            _workingSettings.Tags.Add(tag);
+            RefreshTagList();
+            SelectTag(tag);
+            MarkDirty();
+        }
+
+        private void UpdateTag()
+        {
+            if (_tagList.SelectedItem == null)
+            {
+                return;
+            }
+
+            string oldTag = _tagList.SelectedItem.ToString() ?? "";
+            string newTag = _tagNameBox.Text.Trim();
+            if (!ValidateNewTag(newTag, oldTag))
+            {
+                return;
+            }
+
+            int index = _workingSettings.Tags.FindIndex(tag => tag.Equals(oldTag, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                _workingSettings.Tags[index] = newTag;
+            }
+
+            foreach (var script in _library.Scripts.Where(script => script.Tag.Equals(oldTag, StringComparison.OrdinalIgnoreCase)))
+            {
+                script.Tag = newTag;
+            }
+
+            foreach (var sequence in _library.Sequences.Where(sequence => sequence.Tag.Equals(oldTag, StringComparison.OrdinalIgnoreCase)))
+            {
+                sequence.Tag = newTag;
+            }
+
+            RefreshTagList();
+            SelectTag(newTag);
+            MarkDirty();
+        }
+
+        private void DeleteTag()
+        {
+                if (_tagList.SelectedItem == null)
+                {
+                    return;
+                }
+
+            string tag = _tagList.SelectedItem.ToString() ?? "";
+            if (MessageBox.Show($"Delete tag \"{tag}\"?", "Delete Tag", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                return;
+            }
+
+            _workingSettings.Tags.RemoveAll(item => item.Equals(tag, StringComparison.OrdinalIgnoreCase));
+            foreach (var script in _library.Scripts.Where(script => script.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+            {
+                script.Tag = "";
+            }
+
+            foreach (var sequence in _library.Sequences.Where(sequence => sequence.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+            {
+                sequence.Tag = "";
+            }
+
+            RefreshTagList();
+            MarkDirty();
+        }
+
+        private bool ValidateNewTag(string tag, string? currentTag)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                ShowValidation("Tag name is required.");
+                return false;
+            }
+
+            if (tag.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowValidation("All is reserved for the main window filter.");
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(currentTag) && tag.Equals(currentTag, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (_workingSettings.Tags.Any(existing => existing.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowValidation("Duplicate tag names are not allowed.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private void SelectTag(string tag)
+        {
+            for (int i = 0; i < _tagList.Items.Count; i++)
+            {
+                if ((_tagList.Items[i]?.ToString() ?? "").Equals(tag, StringComparison.OrdinalIgnoreCase))
+                {
+                    _tagList.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        private void RefreshTagCombo(ComboBox combo, string selectedTag)
+        {
+            combo.BeginUpdate();
+            combo.Items.Clear();
+            combo.Items.Add("");
+            foreach (string tag in NormalizeTags(_workingSettings.Tags))
+            {
+                combo.Items.Add(tag);
+            }
+
+            combo.EndUpdate();
+            int index = combo.FindStringExact(selectedTag);
+            combo.SelectedIndex = index >= 0 ? index : 0;
+        }
+
+        private string RequireSelectedTag(ComboBox combo)
+        {
+            string? selected = combo.SelectedItem?.ToString();
+            return string.IsNullOrWhiteSpace(selected) ? "" : selected;
+        }
+
+        private void EnsureTaggedEntriesUseKnownTags()
+        {
+            var knownTags = new HashSet<string>(NormalizeTags(_workingSettings.Tags), StringComparer.OrdinalIgnoreCase);
+            foreach (var script in _library.Scripts)
+            {
+                if (!string.IsNullOrWhiteSpace(script.Tag) && !knownTags.Contains(script.Tag))
+                {
+                    script.Tag = "";
+                }
+            }
+
+            foreach (var sequence in _library.Sequences)
+            {
+                if (!string.IsNullOrWhiteSpace(sequence.Tag) && !knownTags.Contains(sequence.Tag))
+                {
+                    sequence.Tag = "";
+                }
+            }
+        }
+
         private void OpenConfigFolder()
         {
             Directory.CreateDirectory(_repository.ConfigFolder);
@@ -1415,7 +1723,8 @@ namespace Lazy_App_Codex_Core
             _workingSettings = new AppSettings
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
-                HotkeyStop = _repository.Settings.HotkeyStop
+                HotkeyStop = _repository.Settings.HotkeyStop,
+                Tags = NormalizeTags(_repository.Settings.Tags)
             };
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
             _dirty = false;
@@ -1522,6 +1831,7 @@ namespace Lazy_App_Codex_Core
             _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
             _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
             _selectedSequence.DefaultOffset = _sequenceDefaultOffsetBox.SelectedItem?.ToString() ?? "0";
+            _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
             UpdateSequenceTotals();
         }
 
@@ -1592,6 +1902,10 @@ namespace Lazy_App_Codex_Core
         {
             _selectedScript = null;
             _selectedSequence = null;
+            if (CurrentTab == "settings")
+            {
+                _selectedSettingsKey = "hotkeys";
+            }
             _selectedOffsetKey = null;
             _dirty = false;
         }
@@ -1633,6 +1947,8 @@ namespace Lazy_App_Codex_Core
             {
                 Id = source.Id,
                 Name = source.Name,
+                Tag = source.Tag,
+                Hidden = source.Hidden,
                 Order = source.Order,
                 Duration = source.Duration,
                 Interval_Min = source.Interval_Min,
@@ -1654,6 +1970,7 @@ namespace Lazy_App_Codex_Core
             {
                 Id = source.Id,
                 Name = source.Name,
+                Tag = source.Tag,
                 Order = source.Order,
                 Duration = source.Duration,
                 Interval_Min = source.Interval_Min,
@@ -1711,6 +2028,25 @@ namespace Lazy_App_Codex_Core
         private static bool Matches(string value, string filter)
         {
             return string.IsNullOrWhiteSpace(filter) || value.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static List<string> NormalizeTags(IEnumerable<string> tags)
+        {
+            var normalized = new List<string>();
+            foreach (string tag in tags)
+            {
+                string value = tag.Trim();
+                if (value.Length == 0 ||
+                    value.Equals("All", StringComparison.OrdinalIgnoreCase) ||
+                    normalized.Any(existing => existing.Equals(value, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                normalized.Add(value);
+            }
+
+            return normalized;
         }
 
         private static IEnumerable<Control> AllControls(Control root)
