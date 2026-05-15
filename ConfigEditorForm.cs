@@ -5,7 +5,7 @@ namespace Lazy_App_Codex_Core
 {
     public sealed class ConfigEditorForm : Form
     {
-        private static readonly string[] OffsetOptions = { "-2:y", "-1:y", "0", "1:y", "2:y", "-2:x", "-1:x", "1:x", "2:x" };
+        private static readonly OffsetDisplayOption[] OffsetOptions = OffsetDisplayOption.All;
 
         private readonly ScriptConfigRepository _repository;
         private readonly TabControl _tabs = new();
@@ -16,12 +16,16 @@ namespace Lazy_App_Codex_Core
         private readonly Button _removeButton = new();
         private readonly Button _moveUpButton = new();
         private readonly Button _moveDownButton = new();
+        private readonly Button _trackTouchButton = new();
         private readonly Button _saveButton = new();
         private readonly Button _closeButton = new();
         private readonly Label _statusLabel = new();
         private readonly ToolTip _toolTip = new();
         private readonly TableLayoutPanel _hotkeySettingsPanel = new();
         private readonly TableLayoutPanel _tagSettingsPanel = new();
+        private readonly Func<AdbDeviceStatus>? _getAdbStatus;
+        private readonly AdbShellController _adbController = new();
+        private readonly System.Windows.Forms.Timer _trackTouchStateTimer = new();
 
         private readonly TextBox _scriptNameBox = new();
         private readonly TextBox _sequenceNameBox = new();
@@ -85,10 +89,18 @@ namespace Lazy_App_Codex_Core
         private bool _savedAndClosing;
         private int _currentTabIndex;
         private string _activeEditorTab = "scripts";
+        private Process? _trackTouchProcess;
+        private bool _trackTouchEnabled;
+        private int? _trackedTouchX;
+        private int? _trackedTouchY;
+        private Dictionary<string, TouchCoordinateMapper> _touchMappers = new(StringComparer.OrdinalIgnoreCase);
+        private TouchCoordinateMapper? _activeTouchMapper;
+        private string _activeTouchDevice = "";
 
-        public ConfigEditorForm(ScriptConfigRepository repository)
+        public ConfigEditorForm(ScriptConfigRepository repository, Func<AdbDeviceStatus>? getAdbStatus = null)
         {
             _repository = repository;
+            _getAdbStatus = getAdbStatus;
             _root = _repository.LoadRawConfig();
             _library = _repository.LoadLibrary();
             _workingSettings = new AppSettings
@@ -109,6 +121,9 @@ namespace Lazy_App_Codex_Core
             LoadTabs();
             RefreshEntryList();
             WireDirtyTracking();
+            _trackTouchStateTimer.Interval = 1000;
+            _trackTouchStateTimer.Tick += (_, _) => SyncTrackTouchAvailability();
+            _trackTouchStateTimer.Start();
             Shown += (_, _) => FitToWorkingArea();
         }
 
@@ -168,7 +183,7 @@ namespace Lazy_App_Codex_Core
             var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(8) };
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
             _searchBox.Dock = DockStyle.Fill;
             _searchBox.PlaceholderText = "Search";
             _searchBox.TextChanged += (_, _) => RefreshEntryList();
@@ -176,13 +191,30 @@ namespace Lazy_App_Codex_Core
             _entryList.IntegralHeight = false;
             _entryList.SelectedIndexChanged += (_, _) => SelectEntryFromList();
 
-            var listButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true };
+            var listButtons = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 4, 0, 0) };
+            listButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            listButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            listButtons.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            listButtons.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            listButtons.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             ConfigureButton(_addButton, "Add", (_, _) => AddEntry());
             ConfigureButton(_cloneButton, "Clone", (_, _) => CloneEntry());
             ConfigureButton(_removeButton, "Remove", (_, _) => RemoveEntry());
             ConfigureButton(_moveUpButton, "Move Up", (_, _) => MoveEntry(-1));
             ConfigureButton(_moveDownButton, "Move Down", (_, _) => MoveEntry(1));
-            listButtons.Controls.AddRange(new Control[] { _addButton, _cloneButton, _removeButton, _moveUpButton, _moveDownButton });
+            ConfigureButton(_trackTouchButton, "Track Touch", (_, _) => ToggleTrackTouch(), 100);
+            foreach (Button button in new[] { _addButton, _cloneButton, _removeButton, _moveUpButton, _moveDownButton, _trackTouchButton })
+            {
+                button.Dock = DockStyle.Fill;
+                button.Margin = new Padding(4, 3, 4, 3);
+            }
+
+            listButtons.Controls.Add(_addButton, 0, 0);
+            listButtons.Controls.Add(_cloneButton, 1, 0);
+            listButtons.Controls.Add(_removeButton, 0, 1);
+            listButtons.Controls.Add(_moveUpButton, 1, 1);
+            listButtons.Controls.Add(_moveDownButton, 0, 2);
+            listButtons.Controls.Add(_trackTouchButton, 1, 2);
             left.Controls.Add(_searchBox, 0, 0);
             left.Controls.Add(_entryList, 0, 1);
             left.Controls.Add(listButtons, 0, 2);
@@ -655,7 +687,7 @@ namespace Lazy_App_Codex_Core
                 _intervalMaxBox.Value = ClampNumeric(_selectedScript.Interval_Max);
                 _defaultOffsetEnabledBox.Checked = _selectedScript.DefaultOffsetEnabled;
                 _defaultOffsetBox.Enabled = _defaultOffsetEnabledBox.Checked;
-                _defaultOffsetBox.SelectedItem = OffsetOptions.Contains(_selectedScript.DefaultOffset) ? _selectedScript.DefaultOffset : "0";
+                SelectOffsetValue(_defaultOffsetBox, _selectedScript.DefaultOffset);
                 RefreshTagCombo(_scriptTagBox, _selectedScript.Tag);
                 _scriptHiddenBox.Checked = _selectedScript.Hidden;
                 RefreshGroupList();
@@ -669,7 +701,7 @@ namespace Lazy_App_Codex_Core
                 _sequenceIntervalMaxBox.Value = ClampNumeric(_selectedSequence.Interval_Max);
                 _sequenceDefaultOffsetEnabledBox.Checked = _selectedSequence.DefaultOffsetEnabled;
                 _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
-                _sequenceDefaultOffsetBox.SelectedItem = OffsetOptions.Contains(_selectedSequence.DefaultOffset) ? _selectedSequence.DefaultOffset : "0";
+                SelectOffsetValue(_sequenceDefaultOffsetBox, _selectedSequence.DefaultOffset);
                 RefreshTagCombo(_sequenceTagBox, _selectedSequence.Tag);
                 RefreshSequenceGrid();
             }
@@ -724,12 +756,12 @@ namespace Lazy_App_Codex_Core
             _sequenceIntervalMaxBox.Value = 0;
             _defaultOffsetEnabledBox.Checked = false;
             _defaultOffsetBox.Enabled = false;
-            _defaultOffsetBox.SelectedItem = "0";
+            SelectOffsetValue(_defaultOffsetBox, "0");
             _scriptTagBox.Items.Clear();
             _scriptHiddenBox.Checked = false;
             _sequenceDefaultOffsetEnabledBox.Checked = false;
             _sequenceDefaultOffsetBox.Enabled = false;
-            _sequenceDefaultOffsetBox.SelectedItem = "0";
+            SelectOffsetValue(_sequenceDefaultOffsetBox, "0");
             _sequenceTagBox.Items.Clear();
             _groupList.Items.Clear();
             _loadedGroupIndex = -1;
@@ -759,6 +791,7 @@ namespace Lazy_App_Codex_Core
             _removeButton.Enabled = listEditable;
             _moveUpButton.Enabled = CurrentTab is "scripts" or "sequences";
             _moveDownButton.Enabled = CurrentTab is "scripts" or "sequences";
+            SyncTrackTouchAvailability();
         }
 
         private Panel EditorHost => (Panel)((TableLayoutPanel)Controls[0]).GetControlFromPosition(1, 0)!.Controls[0];
@@ -1000,7 +1033,7 @@ namespace Lazy_App_Codex_Core
                 _selectedScript.Interval_Min = (int)_intervalMinBox.Value;
                 _selectedScript.Interval_Max = (int)_intervalMaxBox.Value;
                 _selectedScript.DefaultOffsetEnabled = _defaultOffsetEnabledBox.Checked;
-                _selectedScript.DefaultOffset = _defaultOffsetBox.SelectedItem?.ToString() ?? "0";
+                _selectedScript.DefaultOffset = OffsetDisplayOption.ReadValue(_defaultOffsetBox.SelectedItem);
                 _selectedScript.Tag = RequireSelectedTag(_scriptTagBox);
                 _selectedScript.Hidden = _scriptHiddenBox.Checked;
                 return true;
@@ -1026,7 +1059,7 @@ namespace Lazy_App_Codex_Core
                 _selectedSequence.Interval_Min = (int)_sequenceIntervalMinBox.Value;
                 _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
                 _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
-                _selectedSequence.DefaultOffset = _sequenceDefaultOffsetBox.SelectedItem?.ToString() ?? "0";
+                _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
                 _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
                 _selectedSequence.Items = ReadSequenceItemsFromGrid();
                 return true;
@@ -1501,6 +1534,21 @@ namespace Lazy_App_Codex_Core
             }
         }
 
+        private static void SelectOffsetValue(ComboBox combo, string value)
+        {
+            for (int index = 0; index < combo.Items.Count; index++)
+            {
+                if (combo.Items[index] is OffsetDisplayOption option &&
+                    option.Value.Equals(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    combo.SelectedIndex = index;
+                    return;
+                }
+            }
+
+            combo.SelectedIndex = combo.Items.Count > 0 ? 0 : -1;
+        }
+
         private void ShowSettingsPanel()
         {
             _hotkeySettingsPanel.Visible = _selectedSettingsKey != "tag";
@@ -1733,8 +1781,308 @@ namespace Lazy_App_Codex_Core
             SetStatus("Config restored.");
         }
 
+        private void ToggleTrackTouch()
+        {
+            if (_trackTouchEnabled)
+            {
+                StopTrackTouch("Track touch stopped.");
+                return;
+            }
+
+            var adbStatus = _getAdbStatus?.Invoke();
+            if (adbStatus?.State != AdbDeviceState.OneDevice)
+            {
+                ShowValidation(adbStatus?.Tooltip ?? "ADB must have exactly 1 ready device before tracking touch.");
+                return;
+            }
+
+            StartTrackTouch();
+        }
+
+        private async void StartTrackTouch()
+        {
+            try
+            {
+                StopTrackTouch(null);
+                _trackedTouchX = null;
+                _trackedTouchY = null;
+                _activeTouchMapper = null;
+                _activeTouchDevice = "";
+                _touchMappers = await LoadTouchCoordinateMappersAsync();
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = _adbController.AdbPath,
+                        Arguments = "shell getevent -l",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        StandardOutputEncoding = System.Text.Encoding.UTF8,
+                        StandardErrorEncoding = System.Text.Encoding.UTF8
+                    },
+                    EnableRaisingEvents = true
+                };
+
+                process.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data == null)
+                    {
+                        BeginInvoke((Action)(() => StopTrackTouch("Track touch ended.")));
+                        return;
+                    }
+
+                    HandleTrackTouchLine(e.Data);
+                };
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(e.Data))
+                    {
+                        AppLogger.LogWarning("Track touch stderr: " + e.Data);
+                    }
+                };
+                process.Exited += (_, _) =>
+                {
+                    if (!_trackTouchEnabled)
+                    {
+                        return;
+                    }
+
+                    BeginInvoke((Action)(() => StopTrackTouch("Track touch ended.")));
+                };
+
+                if (!process.Start())
+                {
+                    process.Dispose();
+                    ShowValidation("Failed to start adb shell getevent -l.");
+                    return;
+                }
+
+                _trackTouchProcess = process;
+                _trackTouchEnabled = true;
+                ApplyTrackTouchButtonState();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                SetStatus("Track touch on. Touch the phone screen to read coordinates.");
+            }
+            catch (Exception ex)
+            {
+                ShowValidation("Failed to start track touch. " + ex.Message);
+            }
+        }
+
+        private void StopTrackTouch(string? statusMessage)
+        {
+            _trackTouchEnabled = false;
+            ApplyTrackTouchButtonState();
+            _touchMappers.Clear();
+            _activeTouchMapper = null;
+            _activeTouchDevice = "";
+            var process = _trackTouchProcess;
+            _trackTouchProcess = null;
+            if (process != null)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                    }
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(statusMessage))
+            {
+                SetStatus(statusMessage);
+            }
+        }
+
+        private void SyncTrackTouchAvailability()
+        {
+            bool availableTab = CurrentTab is "scripts" or "sequences";
+            bool adbReady = _getAdbStatus?.Invoke().State == AdbDeviceState.OneDevice;
+            _trackTouchButton.Enabled = availableTab && (adbReady || _trackTouchEnabled);
+            if (_trackTouchEnabled && !adbReady)
+            {
+                StopTrackTouch("Track touch stopped because ADB is not green.");
+            }
+        }
+
+        private void HandleTrackTouchLine(string line)
+        {
+            string? devicePath = ReadGetEventDevicePath(line);
+            if (devicePath != null && _touchMappers.TryGetValue(devicePath, out var mapper))
+            {
+                _activeTouchMapper = mapper;
+                _activeTouchDevice = devicePath;
+            }
+
+            if (TryReadGetEventValue(line, "ABS_MT_POSITION_X", out int x) || TryReadGetEventValue(line, "ABS_X", out x))
+            {
+                _trackedTouchX = x;
+            }
+
+            if (TryReadGetEventValue(line, "ABS_MT_POSITION_Y", out int y) || TryReadGetEventValue(line, "ABS_Y", out y))
+            {
+                _trackedTouchY = y;
+            }
+
+            if (line.Contains("SYN_REPORT", StringComparison.OrdinalIgnoreCase) && _trackedTouchX.HasValue && _trackedTouchY.HasValue)
+            {
+                var activeMapper = _activeTouchMapper;
+                if (activeMapper == null)
+                {
+                    string missingMapperDeviceInfo = string.IsNullOrWhiteSpace(_activeTouchDevice) ? "device unknown" : _activeTouchDevice;
+                    BeginInvoke((Action)(() => SetStatus($"Track touch cannot map to screen coordinates: {missingMapperDeviceInfo}, range unknown. Raw X {_trackedTouchX.Value}, Y {_trackedTouchY.Value}.", true)));
+                    return;
+                }
+
+                var (screenX, screenY) = activeMapper.Map(_trackedTouchX.Value, _trackedTouchY.Value);
+                BeginInvoke((Action)(() => SetStatus($"Touch position: X {screenX}, Y {screenY}")));
+            }
+        }
+
+        private async Task<Dictionary<string, TouchCoordinateMapper>> LoadTouchCoordinateMappersAsync()
+        {
+            using var cts = new CancellationTokenSource(5000);
+            var (width, height) = await _adbController.GetDeviceSizeAsync(cts.Token);
+            var (_, output, _) = await _adbController.RunCaptureAsync("shell getevent -lp", cts.Token, 5000);
+            return CreateTouchMappers(output, width, height);
+        }
+
+        private static Dictionary<string, TouchCoordinateMapper> CreateTouchMappers(string output, int screenWidth, int screenHeight)
+        {
+            var ranges = new Dictionary<string, TouchRangeBuilder>(StringComparer.OrdinalIgnoreCase);
+            string? currentDevice = null;
+
+            foreach (string line in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string? devicePath = ReadGetEventDevicePath(line);
+                if (devicePath != null)
+                {
+                    currentDevice = devicePath;
+                    ranges.TryAdd(currentDevice, new TouchRangeBuilder());
+                    continue;
+                }
+
+                if (currentDevice == null)
+                {
+                    continue;
+                }
+
+                var range = ranges[currentDevice];
+                if (line.Contains("ABS_MT_POSITION_X", StringComparison.OrdinalIgnoreCase) || line.Contains("ABS_X", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryReadAbsRange(line, out var minX, out var maxX))
+                    {
+                        range.MinX = minX;
+                        range.MaxX = maxX;
+                    }
+                }
+                else if (line.Contains("ABS_MT_POSITION_Y", StringComparison.OrdinalIgnoreCase) || line.Contains("ABS_Y", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryReadAbsRange(line, out var minY, out var maxY))
+                    {
+                        range.MinY = minY;
+                        range.MaxY = maxY;
+                    }
+                }
+            }
+
+            var mappers = new Dictionary<string, TouchCoordinateMapper>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in ranges)
+            {
+                var range = item.Value;
+                if (range.MinX.HasValue && range.MaxX.HasValue && range.MinY.HasValue && range.MaxY.HasValue &&
+                    range.MaxX > range.MinX && range.MaxY > range.MinY)
+                {
+                    mappers[item.Key] = new TouchCoordinateMapper(range.MinX.Value, range.MaxX.Value, range.MinY.Value, range.MaxY.Value, screenWidth, screenHeight);
+                }
+            }
+
+            return mappers;
+        }
+
+        private static string? ReadGetEventDevicePath(string line)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(line, @"/dev/input/event\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            return match.Value;
+        }
+
+        private static bool TryReadAbsRange(string line, out int? minimum, out int? maximum)
+        {
+            minimum = null;
+            maximum = null;
+            var match = System.Text.RegularExpressions.Regex.Match(line, @"min\s+(-?\d+),\s*max\s+(-?\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            if (int.TryParse(match.Groups[1].Value, out int minValue) && int.TryParse(match.Groups[2].Value, out int maxValue))
+            {
+                minimum = minValue;
+                maximum = maxValue;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void ApplyTrackTouchButtonState()
+        {
+            if (_trackTouchEnabled)
+            {
+                _trackTouchButton.Text = "TRACK ON";
+                _trackTouchButton.BackColor = Color.LimeGreen;
+                _trackTouchButton.ForeColor = Color.Black;
+                _trackTouchButton.UseVisualStyleBackColor = false;
+            }
+            else
+            {
+                _trackTouchButton.Text = "Track Touch";
+                _trackTouchButton.BackColor = SystemColors.Control;
+                _trackTouchButton.ForeColor = SystemColors.ControlText;
+                _trackTouchButton.UseVisualStyleBackColor = true;
+            }
+        }
+
+        private static bool TryReadGetEventValue(string line, string key, out int value)
+        {
+            value = 0;
+            int keyIndex = line.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+            if (keyIndex < 0)
+            {
+                return false;
+            }
+
+            string tail = line[(keyIndex + key.Length)..].Trim();
+            string token = tail.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            if (token.Length == 0)
+            {
+                return false;
+            }
+
+            return int.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out value) ||
+                int.TryParse(token, out value);
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            StopTrackTouch(null);
             if (!_savedAndClosing && !ConfirmCloseSaveDiscardCancel())
             {
                 e.Cancel = true;
@@ -1830,7 +2178,7 @@ namespace Lazy_App_Codex_Core
             _selectedSequence.Interval_Min = (int)_sequenceIntervalMinBox.Value;
             _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
             _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
-            _selectedSequence.DefaultOffset = _sequenceDefaultOffsetBox.SelectedItem?.ToString() ?? "0";
+            _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
             _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
             UpdateSequenceTotals();
         }
@@ -2214,6 +2562,31 @@ namespace Lazy_App_Codex_Core
         private sealed record EntryRef(string Text, string Id)
         {
             public override string ToString() => Text;
+        }
+
+        private sealed record TouchCoordinateMapper(int MinX, int MaxX, int MinY, int MaxY, int ScreenWidth, int ScreenHeight)
+        {
+            public (int x, int y) Map(int rawX, int rawY)
+            {
+                int x = Scale(rawX, MinX, MaxX, ScreenWidth);
+                int y = Scale(rawY, MinY, MaxY, ScreenHeight);
+                return (x, y);
+            }
+
+            private static int Scale(int raw, int minimum, int maximum, int size)
+            {
+                double ratio = (raw - minimum) / (double)(maximum - minimum);
+                ratio = Math.Max(0D, Math.Min(1D, ratio));
+                return (int)Math.Round(ratio * Math.Max(0, size - 1));
+            }
+        }
+
+        private sealed class TouchRangeBuilder
+        {
+            public int? MinX { get; set; }
+            public int? MaxX { get; set; }
+            public int? MinY { get; set; }
+            public int? MaxY { get; set; }
         }
     }
 }

@@ -93,7 +93,65 @@ namespace Lazy_App_Codex_Core
         public Task<(int exitCode, string stdout, string stderr)> RunCaptureAsync(string args, CancellationToken ct, int timeoutMs = 10000) =>
             RunCoreAsync(args, ct, timeoutMs, capture: true);
 
+        public Task<bool> IsServerRunningAsync(CancellationToken ct) => IsAdbServerListeningAsync(ct);
+
+        public static AdbDeviceStatus BuildDeviceStatus(IEnumerable<(string Serial, string State)> devices)
+        {
+            var deviceList = devices.ToList();
+            int connectedCount = deviceList.Count(device => device.State.Equals("device", StringComparison.OrdinalIgnoreCase));
+            if (connectedCount == 0)
+            {
+                return new AdbDeviceStatus(AdbDeviceState.NoDevice, connectedCount, "ADB server is running, but no ready device is connected.");
+            }
+
+            if (connectedCount == 1)
+            {
+                return new AdbDeviceStatus(AdbDeviceState.OneDevice, connectedCount, "ADB server is running with 1 device connected.");
+            }
+
+            return new AdbDeviceStatus(AdbDeviceState.MultipleDevices, connectedCount, $"ADB server is running with {connectedCount} devices connected.");
+        }
+
         // ---------- Private core ----------
+
+        private static async Task<bool> IsAdbServerListeningAsync(CancellationToken ct)
+        {
+            try
+            {
+                using var client = new System.Net.Sockets.TcpClient();
+                var connectTask = client.ConnectAsync("127.0.0.1", 5037);
+                var completed = await Task.WhenAny(connectTask, Task.Delay(600, ct)).ConfigureAwait(false);
+                if (completed != connectTask)
+                {
+                    return false;
+                }
+
+                await connectTask.ConfigureAwait(false);
+                return client.Connected;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static IEnumerable<(string Serial, string State)> ParseDeviceLines(string output)
+        {
+            foreach (string rawLine in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    yield return (parts[0], parts[1]);
+                }
+            }
+        }
 
         private async Task<(int exitCode, string stdout, string stderr)> RunCoreAsync(string args, CancellationToken ct, int timeoutMs, bool capture)
         {
@@ -240,4 +298,14 @@ namespace Lazy_App_Codex_Core
             return sb.ToString();
         }
     }
+
+    public enum AdbDeviceState
+    {
+        NoServer,
+        NoDevice,
+        OneDevice,
+        MultipleDevices
+    }
+
+    public sealed record AdbDeviceStatus(AdbDeviceState State, int DeviceCount, string Tooltip);
 }

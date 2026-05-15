@@ -5,9 +5,11 @@
 - This is a single-project Windows Forms app targeting `net8.0-windows` with `UseWindowsForms=true`; the solution contains no separate test project.
 - The app is an ADB-backed Android automation runner. `config.json` is the editable runtime script source and is intentionally not copied to build/publish output by the `.csproj`.
 - `Form1.cs` owns the main window, global hotkey routing, run/stop state, offset selection, taskbar overlay icons, and opening the config editor.
+- Main-window status dots are separate: `statusDot` is global hotkey registration, and `adbStatusDot` is ADB server/device status from the background `adb track-devices` monitor. ADB status colors are dark gray for no server, yellow for server with no ready device, green for one ready device, and red for multiple ready devices.
 - `SearchableDropdown.cs` is the custom main Script/Sequence picker. Its popup owns search text and clears it on close; the main field should only show the selected item.
 - `ConfigEditorForm.cs` is a hand-built WinForms editor for the four config categories: `settings`, `offset`, `scripts`, and `sequences`.
 - In `ConfigEditorForm`, new button rows are easy to clip at the bottom. Prefer `TableLayoutPanel` rows with explicit heights and docked buttons over auto-sized or tight `FlowLayoutPanel` rows, and leave enough bottom padding when placing buttons inside scrollable/editor panels.
+- `ConfigEditorForm` owns a shared Script/Sequence `Track Touch` toggle. It should only run while main ADB status is green, reads display size plus touch ABS ranges per `/dev/input/event*` device, starts one long-running `adb shell getevent -l` process, maps coordinates using the same event device that emitted the touch line, parses `ABS_MT_POSITION_X`/`ABS_MT_POSITION_Y` or `ABS_X`/`ABS_Y`, displays scaled screen coordinates only, warns instead of displaying raw values when mapping fails, gives the active button a strong visible ON style, and must kill the process on toggle-off, loss of green ADB status, or editor close.
 - `ScriptConfigRespository.cs` loads, migrates, normalizes, and saves `config.json`; preserve its alias support when changing script/config behavior.
 - `ScriptRunner.cs` expands normalized steps into ADB commands and sleeps; it supports an `ADB OFF` path where commands are skipped but statuses/timing still update.
 - `AdbShellController.cs` shells out to `C:\adb\adb.exe` by default and works in physical device-pixel coordinates.
@@ -49,6 +51,10 @@
 ## Local Runtime Assumptions
 
 - ADB is expected at `C:\adb\adb.exe` unless code is changed to pass a different path.
+- ADB status checks should not block opening Config. First check localhost port `5037`; only start the background `adb track-devices` monitor when the server is already listening. While no server is detected, retry every 30 seconds and also refresh on Run/Config actions. Pressing Run should refresh ADB status even when no script/sequence is selected, then validate selection. Run should trust cached yellow/red statuses and prompt immediately; only dark gray should attempt a fresh ADB monitor start/check before showing a message or running. Run starts only when exactly one ready device is detected.
+- If `adb track-devices` starts successfully but does not emit an initial device block before the Run timeout, treat that as yellow/no ready device rather than dark gray/no server, because the server is known to be running.
+- ADB monitor/run gating changes should log decision points with `AppLogger.LogInfo("[ADB] ...")`: trigger source, tracker process state, port check result, `track-devices` output blocks, process exit, and Run allow/block.
+- Do not add a separate polling/health-check path to cover `track-devices` bugs. `adbStatusDot` should be driven by the `track-devices` process output close, stderr, or exit events plus the no-server retry timer.
 - Wireless ADB setup is manual; README documents `adb pair`, `adb connect`, `adb devices`, `adb disconnect`, `adb start-server`, and `adb kill-server`.
 - `config.json` in the repo is the file loaded by `Form1` via `new ScriptConfigRepository("config.json")`; changing the working directory changes which config file is used.
 - The app can be used without executing ADB actions when `IsAdbActionEnabled` is false, but the UI still plans steps and waits through configured sleeps.

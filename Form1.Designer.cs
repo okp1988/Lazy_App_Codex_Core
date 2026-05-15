@@ -20,6 +20,7 @@ namespace Lazy_App_Codex_Core
             selectorLayout = new TableLayoutPanel();
             ddlScript = new SearchableDropdown();
             statusDot = new Panel();
+            adbStatusDot = new Panel();
             liveStatusLayout = new TableLayoutPanel();
             lblCurrentActionValue = new Label();
             lblStepValue = new Label();
@@ -74,11 +75,13 @@ namespace Lazy_App_Codex_Core
             // 
             // selectorLayout
             // 
-            selectorLayout.ColumnCount = 2;
+            selectorLayout.ColumnCount = 3;
             selectorLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            selectorLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18F));
             selectorLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18F));
             selectorLayout.Controls.Add(ddlScript, 0, 0);
             selectorLayout.Controls.Add(statusDot, 1, 0);
+            selectorLayout.Controls.Add(adbStatusDot, 2, 0);
             selectorLayout.Dock = DockStyle.Fill;
             selectorLayout.Location = new Point(0, 0);
             selectorLayout.Margin = new Padding(0);
@@ -110,6 +113,17 @@ namespace Lazy_App_Codex_Core
             statusDot.Size = new Size(12, 12);
             statusDot.TabIndex = 1;
             statusDot.Paint += statusDot_Paint;
+            // 
+            // adbStatusDot
+            // 
+            adbStatusDot.Anchor = AnchorStyles.None;
+            adbStatusDot.BackColor = Color.Transparent;
+            adbStatusDot.Location = new Point(443, 13);
+            adbStatusDot.Margin = new Padding(0);
+            adbStatusDot.Name = "adbStatusDot";
+            adbStatusDot.Size = new Size(12, 12);
+            adbStatusDot.TabIndex = 2;
+            adbStatusDot.Paint += statusDot_Paint;
             // 
             // liveStatusLayout
             // 
@@ -175,7 +189,7 @@ namespace Lazy_App_Codex_Core
             ddlOffset.DropDownStyle = ComboBoxStyle.DropDownList;
             ddlOffset.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             ddlOffset.FormattingEnabled = true;
-            ddlOffset.Items.AddRange(new object[] { "-2:y", "-1:y", "0", "1:y", "2:y", "-2:x", "-1:x", "1:x", "2:x" });
+            ddlOffset.Items.AddRange(OffsetDisplayOption.All.Cast<object>().ToArray());
             ddlOffset.Location = new Point(0, 40);
             ddlOffset.Margin = new Padding(0, 4, 0, 6);
             ddlOffset.Name = "ddlOffset";
@@ -260,6 +274,7 @@ namespace Lazy_App_Codex_Core
         private System.Windows.Forms.Button btnRun;
         private SearchableDropdown ddlScript;
         private System.Windows.Forms.Panel statusDot;
+        private System.Windows.Forms.Panel adbStatusDot;
         private System.Windows.Forms.TableLayoutPanel liveStatusLayout;
         private System.Windows.Forms.Label lblCurrentActionValue;
         private System.Windows.Forms.Label lblStepValue;

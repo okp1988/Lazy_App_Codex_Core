@@ -14,6 +14,8 @@ namespace Lazy_App_Codex_Core
         private object? _selectedItem;
         private bool _showingNoMatches;
         private string _placeholderText = "";
+        private bool _suppressNextClickToggle;
+        private DateTime _lastDropDownClosedAt = DateTime.MinValue;
 
         public SearchableDropdown()
         {
@@ -28,6 +30,9 @@ namespace Lazy_App_Codex_Core
             MinimumSize = new Size(LogicalToDeviceUnits(160), LogicalToDeviceUnits(28));
             BackColor = SystemColors.Window;
             Padding = new Padding(LogicalToDeviceUnits(5), LogicalToDeviceUnits(5), LogicalToDeviceUnits(1), LogicalToDeviceUnits(1));
+            Cursor = Cursors.Hand;
+            Click += (_, _) => ToggleDropDownFromClick();
+            MouseDown += (_, _) => ToggleDropDownFromMouseDown();
 
             _displayTextBox.BorderStyle = BorderStyle.None;
             _displayTextBox.Dock = DockStyle.Fill;
@@ -35,7 +40,8 @@ namespace Lazy_App_Codex_Core
             _displayTextBox.TabStop = false;
             _displayTextBox.Cursor = Cursors.Default;
             _displayTextBox.BackColor = SystemColors.Window;
-            _displayTextBox.Click += (_, _) => ShowDropDown();
+            _displayTextBox.Click += (_, _) => ToggleDropDownFromClick();
+            _displayTextBox.MouseDown += (_, _) => ToggleDropDownFromMouseDown();
 
             _dropButton.Dock = DockStyle.Right;
             _dropButton.Width = LogicalToDeviceUnits(24);
@@ -45,7 +51,8 @@ namespace Lazy_App_Codex_Core
             _dropButton.Cursor = Cursors.Hand;
             _dropButton.Margin = Padding.Empty;
             _dropButton.Padding = Padding.Empty;
-            _dropButton.Click += (_, _) => ShowDropDown();
+            _dropButton.Click += (_, _) => ToggleDropDownFromClick();
+            _dropButton.MouseDown += (_, _) => ToggleDropDownFromMouseDown();
 
             // Add the button first, then the fill textbox, so both controls render as one bordered selector.
             Controls.Add(_dropButton);
@@ -90,7 +97,11 @@ namespace Lazy_App_Codex_Core
             _dropDown.AutoClose = true;
             _dropDown.Padding = Padding.Empty;
             _dropDown.Items.Add(host);
-            _dropDown.Closed += (_, _) => ClearSearch();
+            _dropDown.Closed += (_, _) =>
+            {
+                _lastDropDownClosedAt = DateTime.UtcNow;
+                ClearSearch();
+            };
         }
 
         public event EventHandler? SelectionChanged;
@@ -202,7 +213,7 @@ namespace Lazy_App_Codex_Core
 
         private void ShowDropDown()
         {
-            if (!Enabled)
+            if (!Enabled || _dropDown.Visible)
             {
                 return;
             }
@@ -212,6 +223,49 @@ namespace Lazy_App_Codex_Core
             ApplyFilter();
             _dropDown.Show(this, dropLocation, ToolStripDropDownDirection.BelowRight);
             _searchTextBox.Focus();
+        }
+
+        private void ToggleDropDownFromMouseDown()
+        {
+            _suppressNextClickToggle = true;
+            if (WasDropDownJustClosed())
+            {
+                return;
+            }
+
+            ToggleDropDown();
+        }
+
+        private void ToggleDropDownFromClick()
+        {
+            if (_suppressNextClickToggle)
+            {
+                _suppressNextClickToggle = false;
+                return;
+            }
+
+            ToggleDropDown();
+        }
+
+        private void ToggleDropDown()
+        {
+            if (!Enabled)
+            {
+                return;
+            }
+
+            if (_dropDown.Visible)
+            {
+                _dropDown.Close();
+                return;
+            }
+
+            ShowDropDown();
+        }
+
+        private bool WasDropDownJustClosed()
+        {
+            return (DateTime.UtcNow - _lastDropDownClosedAt).TotalMilliseconds < 250;
         }
 
         private void SizeDropDown(out Point dropLocation)

@@ -38,6 +38,7 @@ namespace Lazy_App_Codex_Core
         private readonly HotkeyManager _hotkeys = new HotkeyManager();
         private readonly ScriptConfigRepository _configRepository = new ScriptConfigRepository("config.json");
         private readonly ScriptRunner _runner = new ScriptRunner();
+        private readonly AdbShellController _adbController = new AdbShellController();
 
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
@@ -46,8 +47,16 @@ namespace Lazy_App_Codex_Core
         private bool _isRunning;
         private LiveRunStatus _liveStatus = new LiveRunStatus { Idle = true };
         private Color _statusDotColor = Color.Red;
+        private Color _adbStatusDotColor = Color.DarkGray;
         private bool? _lastHotkeyRegistrationSucceeded;
         private readonly System.Windows.Forms.Timer _clockTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer _adbRetryTimer = new System.Windows.Forms.Timer();
+        private readonly ToolTip _statusToolTip = new ToolTip();
+        private AdbDeviceStatus _adbDeviceStatus = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status has not been checked yet.");
+        private System.Diagnostics.Process? _adbTrackProcess;
+        private TaskCompletionSource<AdbDeviceStatus>? _adbTrackFirstStatus;
+        private bool _adbMonitorStarting;
+        private bool _closing;
         private readonly string _baseTitle;
         private readonly Icon _baseIcon;
         private readonly Icon _runningIcon;
@@ -80,6 +89,10 @@ namespace Lazy_App_Codex_Core
             _clockTimer.Interval = 1000;
             _clockTimer.Tick += (_, _) => UpdateLiveStatusLabels();
             _clockTimer.Start();
+            _adbRetryTimer.Interval = 30000;
+            _adbRetryTimer.Tick += async (_, _) => await EnsureAdbTrackMonitorAsync("retry timer");
+            _statusToolTip.SetToolTip(statusDot, "Global hotkey status has not been checked yet.");
+            _statusToolTip.SetToolTip(adbStatusDot, "ADB status has not been checked yet.");
             UpdateLiveStatusLabels();
             SetRunningState(false);
         }
@@ -110,6 +123,7 @@ namespace Lazy_App_Codex_Core
         {
             RegisterHotkeysForWindowState();
             SetTaskbarOverlayIcon(_stoppedIcon, "Stopped");
+            _ = EnsureAdbTrackMonitorAsync("load");
         }
 
         private void OnActivated(object? sender, EventArgs e)
@@ -276,17 +290,13 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (ddlScript.SelectedItem is not RunTarget)
-            {
-                MessageBox.Show("Select a script or sequence before run");
-                return;
-            }
-
             await StartRunAsync();
         }
 
         private async Task StartRunAsync()
         {
+            await RefreshAdbStatusForRunAsync();
+
             RunTarget? target = ddlScript.SelectedItem as RunTarget;
             if (target == null)
             {
@@ -301,6 +311,15 @@ namespace Lazy_App_Codex_Core
                 MessageBox.Show($"Missing config ({target.Name})");
                 return;
             }
+
+            if (_adbDeviceStatus.State != AdbDeviceState.OneDevice)
+            {
+                LogAdbStatus($"Run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, message={_adbDeviceStatus.Tooltip}");
+                MessageBox.Show(_adbDeviceStatus.Tooltip, "ADB Not Ready", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            LogAdbStatus($"Run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
 
             _runCts = new CancellationTokenSource();
             _debugLog.Clear();
@@ -329,6 +348,39 @@ namespace Lazy_App_Codex_Core
             }
         }
 
+        private async Task RefreshAdbStatusForRunAsync()
+        {
+            LogAdbStatus($"Run refresh requested. Cached={_adbDeviceStatus.State}, tracker={FormatTrackerState()}.");
+            if (_adbDeviceStatus.State is AdbDeviceState.NoDevice or AdbDeviceState.MultipleDevices)
+            {
+                LogAdbStatus($"Run using cached blocking background status immediately: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
+                return;
+            }
+
+            if (_adbDeviceStatus.State == AdbDeviceState.OneDevice && _adbTrackProcess != null && !_adbTrackProcess.HasExited)
+            {
+                LogAdbStatus($"Run using cached background status: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
+                return;
+            }
+
+            if (_adbTrackProcess == null || _adbTrackProcess.HasExited)
+            {
+                StartTrackDevicesProcess();
+            }
+
+            try
+            {
+                var status = await WaitForTrackDevicesStatusAsync(3500);
+                LogAdbStatus($"Run track-devices result: {status.State}, devices={status.DeviceCount}, message={status.Tooltip}");
+                ApplyAdbDeviceStatusOnUi(status);
+            }
+            catch (Exception ex)
+            {
+                LogAdbStatus("Run track-devices check failed: " + ex.Message);
+                ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB track-devices check failed: " + ex.Message));
+            }
+        }
+
         private async Task RunSelectedTargetAsync(RunTarget target, ScriptModel? script, SequenceModel? sequence, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
@@ -354,7 +406,7 @@ namespace Lazy_App_Codex_Core
 
         private (int value, string axis) GetSelectedOffset(string scriptName)
         {
-            string raw = ddlOffset.SelectedItem?.ToString() ?? "0";
+            string raw = OffsetDisplayOption.ReadValue(ddlOffset.SelectedItem);
             if (raw == "0")
             {
                 return (0, "y");
@@ -544,7 +596,8 @@ namespace Lazy_App_Codex_Core
             path.AddEllipse(0, 0, dot.Width - 1, dot.Height - 1);
             dot.Region = new Region(path);
 
-            using var brush = new SolidBrush(_statusDotColor);
+            Color dotColor = ReferenceEquals(dot, adbStatusDot) ? _adbStatusDotColor : _statusDotColor;
+            using var brush = new SolidBrush(dotColor);
             using var border = new Pen(Color.FromArgb(120, Color.Black));
             var bounds = new Rectangle(0, 0, dot.Width - 1, dot.Height - 1);
             e.Graphics.FillEllipse(brush, bounds);
@@ -618,12 +671,18 @@ namespace Lazy_App_Codex_Core
         private void UpdateHotkeyStatus(bool success)
         {
             _statusDotColor = success ? Color.Green : Color.Red;
+            _statusToolTip.SetToolTip(
+                statusDot,
+                success
+                    ? $"Global hotkeys are registered. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}."
+                    : $"Global hotkeys are not registered. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}.");
             statusDot.Invalidate();
         }
 
         private void btnConfig_Click(object sender, EventArgs e)
         {
-            using var editor = new ConfigEditorForm(_configRepository);
+            _ = EnsureAdbTrackMonitorAsync("config");
+            using var editor = new ConfigEditorForm(_configRepository, () => _adbDeviceStatus);
             if (editor.ShowDialog(this) != DialogResult.OK || !editor.ConfigSaved)
             {
                 return;
@@ -650,8 +709,7 @@ namespace Lazy_App_Codex_Core
 
         private void ResetOffsetSelection()
         {
-            int zeroOffsetIndex = ddlOffset.FindStringExact("0");
-            ddlOffset.SelectedIndex = zeroOffsetIndex >= 0 ? zeroOffsetIndex : -1;
+            SelectOffsetValue("0");
         }
 
         private void ApplySelectedDefaultOffset()
@@ -683,11 +741,291 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            int index = ddlOffset.FindStringExact(defaultOffset);
-            if (index >= 0)
+            SelectOffsetValue(defaultOffset);
+        }
+
+        private void SelectOffsetValue(string value)
+        {
+            for (int index = 0; index < ddlOffset.Items.Count; index++)
             {
-                ddlOffset.SelectedIndex = index;
+                if (ddlOffset.Items[index] is OffsetDisplayOption option &&
+                    option.Value.Equals(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    ddlOffset.SelectedIndex = index;
+                    return;
+                }
             }
+
+            ddlOffset.SelectedIndex = -1;
+        }
+
+        private async Task EnsureAdbTrackMonitorAsync(string trigger)
+        {
+            if (_adbMonitorStarting || (_adbTrackProcess != null && !_adbTrackProcess.HasExited))
+            {
+                LogAdbStatus($"Ensure skipped from {trigger}. starting={_adbMonitorStarting}, tracker={FormatTrackerState()}, cached={_adbDeviceStatus.State}.");
+                return;
+            }
+
+            _adbMonitorStarting = true;
+            LogAdbStatus($"Ensure started from {trigger}. cached={_adbDeviceStatus.State}.");
+            try
+            {
+                using var cts = new CancellationTokenSource(3500);
+                bool serverRunning = await _adbController.IsServerRunningAsync(cts.Token);
+                LogAdbStatus($"Port 5037 check from {trigger}: serverRunning={serverRunning}.");
+                if (!serverRunning)
+                {
+                    ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running."));
+                    return;
+                }
+
+                LogAdbStatus($"Starting track-devices from {trigger}.");
+                StartTrackDevicesProcess();
+            }
+            catch (Exception ex)
+            {
+                LogAdbStatus($"Ensure failed from {trigger}: {ex.Message}");
+                ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status check failed: " + ex.Message));
+            }
+            finally
+            {
+                _adbMonitorStarting = false;
+            }
+        }
+
+        private void StartTrackDevicesProcess()
+        {
+            try
+            {
+                StopTrackDevicesProcess();
+                _adbTrackFirstStatus = new TaskCompletionSource<AdbDeviceStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = _adbController.AdbPath,
+                        Arguments = "track-devices",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        StandardOutputEncoding = System.Text.Encoding.UTF8,
+                        StandardErrorEncoding = System.Text.Encoding.UTF8
+                    },
+                    EnableRaisingEvents = true
+                };
+
+                var lines = new List<string>();
+                process.OutputDataReceived += (_, e) =>
+                {
+                    if (_closing)
+                    {
+                        return;
+                    }
+
+                    if (e.Data == null)
+                    {
+                        LogAdbStatus("track-devices stdout closed. Marking ADB server as not running.");
+                        var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running.");
+                        _adbTrackFirstStatus?.TrySetResult(status);
+                        ApplyAdbDeviceStatusOnUi(status);
+                        return;
+                    }
+
+                    string line = e.Data.Trim();
+                    if (line.Length == 0)
+                    {
+                        LogAdbStatus("track-devices block: " + (lines.Count == 0 ? "(no devices)" : string.Join(" | ", lines)));
+                        ApplyTrackedDeviceLines(lines);
+                        lines.Clear();
+                        return;
+                    }
+
+                    if (line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogAdbStatus("track-devices header received.");
+                        lines.Clear();
+                        return;
+                    }
+
+                    LogAdbStatus("track-devices line: " + line);
+                    lines.Add(line);
+                    ApplyTrackedDeviceLines(lines);
+                };
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (_closing || e.Data == null)
+                    {
+                        return;
+                    }
+
+                    LogAdbStatus("track-devices stderr: " + e.Data);
+                };
+                process.Exited += (_, _) =>
+                {
+                    if (!_closing)
+                    {
+                        string exitDetail;
+                        try
+                        {
+                            exitDetail = " exitCode=" + process.ExitCode;
+                        }
+                        catch
+                        {
+                            exitDetail = "";
+                        }
+
+                        LogAdbStatus("adb track-devices exited." + exitDetail + " Marking ADB server as not running.");
+                        var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running.");
+                        _adbTrackFirstStatus?.TrySetResult(status);
+                        ApplyAdbDeviceStatusOnUi(status);
+                    }
+                };
+
+                if (process.Start())
+                {
+                    _adbTrackProcess = process;
+                    LogAdbStatus($"Started adb track-devices. pid={process.Id}.");
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                    var initialStatus = new AdbDeviceStatus(AdbDeviceState.NoDevice, 0, "ADB server is running, but no ready device is connected.");
+                    _adbTrackFirstStatus?.TrySetResult(initialStatus);
+                    ApplyAdbDeviceStatusOnUi(initialStatus);
+                }
+                else
+                {
+                    process.Dispose();
+                    LogAdbStatus("adb track-devices did not start.");
+                    var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "Could not start adb track-devices.");
+                    _adbTrackFirstStatus?.TrySetResult(status);
+                    ApplyAdbDeviceStatusOnUi(status);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAdbStatus("Could not start adb track-devices: " + ex.Message);
+                var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "Could not start adb track-devices: " + ex.Message);
+                _adbTrackFirstStatus?.TrySetResult(status);
+                ApplyAdbDeviceStatusOnUi(status);
+            }
+        }
+
+        private void ApplyTrackedDeviceLines(List<string> lines)
+        {
+            var status = AdbShellController.BuildDeviceStatus(AdbShellController.ParseDeviceLines(string.Join(Environment.NewLine, lines)));
+            _adbTrackFirstStatus?.TrySetResult(status);
+            ApplyAdbDeviceStatusOnUi(status);
+        }
+
+        private async Task<AdbDeviceStatus> WaitForTrackDevicesStatusAsync(int timeoutMs)
+        {
+            var statusTask = _adbTrackFirstStatus?.Task;
+            if (statusTask == null || statusTask.IsCompleted)
+            {
+                return _adbDeviceStatus;
+            }
+
+            var completed = await Task.WhenAny(statusTask, Task.Delay(timeoutMs));
+            return completed == statusTask
+                ? await statusTask
+                : (_adbTrackProcess != null && !_adbTrackProcess.HasExited
+                    ? new AdbDeviceStatus(AdbDeviceState.NoDevice, 0, "ADB server is running, but no ready device is connected.")
+                    : new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running."));
+        }
+
+        private void ApplyAdbDeviceStatusOnUi(AdbDeviceStatus status)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => ApplyAdbDeviceStatus(status)));
+                return;
+            }
+
+            ApplyAdbDeviceStatus(status);
+        }
+
+        private void StopTrackDevicesProcess()
+        {
+            var process = _adbTrackProcess;
+            _adbTrackProcess = null;
+            if (process == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        private void ApplyAdbDeviceStatus(AdbDeviceStatus status)
+        {
+            if (_adbDeviceStatus.State != status.State || _adbDeviceStatus.DeviceCount != status.DeviceCount || _adbDeviceStatus.Tooltip != status.Tooltip)
+            {
+                LogAdbStatus($"Status changed: {_adbDeviceStatus.State}/{_adbDeviceStatus.DeviceCount} -> {status.State}/{status.DeviceCount}. {status.Tooltip}");
+            }
+
+            _adbDeviceStatus = status;
+            _adbStatusDotColor = status.State switch
+            {
+                AdbDeviceState.NoServer => Color.DarkGray,
+                AdbDeviceState.NoDevice => Color.Goldenrod,
+                AdbDeviceState.OneDevice => Color.Green,
+                AdbDeviceState.MultipleDevices => Color.Red,
+                _ => Color.DarkGray
+            };
+
+            _statusToolTip.SetToolTip(adbStatusDot, status.Tooltip);
+            adbStatusDot.Invalidate();
+
+            if (status.State == AdbDeviceState.NoServer)
+            {
+                if (!_adbRetryTimer.Enabled)
+                {
+                    _adbRetryTimer.Start();
+                }
+            }
+            else
+            {
+                if (_adbRetryTimer.Enabled)
+                {
+                    _adbRetryTimer.Stop();
+                }
+            }
+        }
+
+        private string FormatTrackerState()
+        {
+            if (_adbTrackProcess == null)
+            {
+                return "none";
+            }
+
+            try
+            {
+                return _adbTrackProcess.HasExited ? $"exited pid={_adbTrackProcess.Id}" : $"running pid={_adbTrackProcess.Id}";
+            }
+            catch
+            {
+                return "unknown";
+            }
+        }
+
+        private static void LogAdbStatus(string message)
+        {
+            AppLogger.LogInfo("[ADB] " + message);
         }
 
         private static string FormatStatusTime(DateTime? time)
@@ -729,10 +1067,15 @@ namespace Lazy_App_Codex_Core
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            _closing = true;
             _hotkeys.UnregisterAll(Handle);
             SetTaskbarOverlayIcon(null, "");
             _clockTimer.Stop();
             _clockTimer.Dispose();
+            _adbRetryTimer.Stop();
+            _adbRetryTimer.Dispose();
+            StopTrackDevicesProcess();
+            _statusToolTip.Dispose();
             _runningIcon.Dispose();
             _stoppedIcon.Dispose();
             _baseIcon.Dispose();

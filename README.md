@@ -33,11 +33,14 @@ adb kill-server
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
-- The status dot is green when idle/ready and red while running.
+- The first small status dot reports global hotkey registration. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, yellow means server running with no ready device, green means one ready device, and red means more than one ready device.
 - Offset options are:
 
 ```text
--2:y, -1:y, 0, 1:y, 2:y, -2:x, -1:x, 1:x, 2:x
+No offset, Y offset up 3 steps, Y offset up 2 steps, Y offset up 1 step,
+Y offset down 1 step, Y offset down 2 steps, Y offset down 3 steps,
+X offset left 3 steps, X offset left 2 steps, X offset left 1 step,
+X offset right 1 step, X offset right 2 steps, X offset right 3 steps
 ```
 
 The live status panel shows current action, step, cycle, next action, next action time, and estimated end. If ADB or the device is not available, the panel shows an error state instead of relying on a visible log box.
@@ -52,6 +55,8 @@ Available tabs:
 - Offset: offset profiles such as `s26` or `s13`.
 - Scripts: script info, tag, hide-from-main toggle, default offset, action groups, and step rows.
 - Sequences: sequence info, tag, default offset, and mixed script/action items.
+
+The Scripts and Sequences tabs share a `Track Touch` toggle. It is enabled only when ADB status is green. While enabled, the editor reads touch ranges per `/dev/input/event*` device, runs `adb shell getevent -l` in the background, scales raw touch events from the matching event device into screen coordinates, and shows the latest screen coordinate in the status line. The button turns bright green while active. If the app cannot match a touch range, it warns instead of showing raw values as screen coordinates. The process stops when toggled off, when ADB is no longer green, or when the config editor closes.
 
 ## Scripts
 

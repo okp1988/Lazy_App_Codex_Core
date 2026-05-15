@@ -17,6 +17,11 @@ namespace Lazy_App_Codex_Core
             Write("WARN", message, exception);
         }
 
+        public static void LogInfo(string message, Exception? exception = null)
+        {
+            Write("INFO", message, exception);
+        }
+
         public static void LogError(string message, Exception? exception = null)
         {
             Write("ERROR", message, exception);
