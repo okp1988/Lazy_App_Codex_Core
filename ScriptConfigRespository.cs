@@ -14,6 +14,27 @@ namespace Lazy_App_Codex_Core
 
         [JsonProperty("tag")]
         public List<string> Tags { get; set; } = new();
+
+        [JsonProperty("devices")]
+        public Dictionary<string, DeviceInfo> Devices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public sealed class DeviceInfo
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; } = "";
+
+        [JsonProperty("manufacturer")]
+        public string Manufacturer { get; set; } = "";
+
+        [JsonProperty("model")]
+        public string Model { get; set; } = "";
+
+        [JsonProperty("lastSerial")]
+        public string LastSerial { get; set; } = "";
+
+        [JsonProperty("lastSeen")]
+        public string LastSeen { get; set; } = "";
     }
 
     public sealed class ScriptConfigRepository
@@ -57,6 +78,7 @@ namespace Lazy_App_Codex_Core
         {
             var root = LoadRawConfig();
             Settings = root["settings"]?.ToObject<AppSettings>() ?? new AppSettings();
+            Settings.Devices ??= new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
             LoadOffsets(root);
 
             var library = new ConfigLibrary();
@@ -164,6 +186,7 @@ namespace Lazy_App_Codex_Core
             EnsureSetting(root, "hotkeyStart", "CTRL+ALT+S");
             EnsureSetting(root, "hotkeyStop", "CTRL+ALT+D");
             EnsureTagSettings(root);
+            EnsureDeviceSettings(root);
         }
 
         private static void EnsureCategory(JObject root, string name)
@@ -178,6 +201,15 @@ namespace Lazy_App_Codex_Core
         {
             var settings = (JObject)root["settings"]!;
             settings[key] ??= defaultValue;
+        }
+
+        private static void EnsureDeviceSettings(JObject root)
+        {
+            var settings = (JObject)root["settings"]!;
+            if (settings["devices"] is not JObject)
+            {
+                settings["devices"] = new JObject();
+            }
         }
 
         private static void MigrateSetting(JObject root, string oldKey, string newKey)

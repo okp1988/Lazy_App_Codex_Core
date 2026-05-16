@@ -95,21 +95,92 @@ namespace Lazy_App_Codex_Core
 
         public Task<bool> IsServerRunningAsync(CancellationToken ct) => IsAdbServerListeningAsync(ct);
 
+        public async Task<DeviceInfo> ReadDeviceInfoAsync(string serial, CancellationToken ct, int timeoutMs = 5000)
+        {
+            var adb = new AdbShellController(AdbPath, serial);
+            string manufacturer = await adb.ReadPropAsync("ro.product.manufacturer", ct, timeoutMs).ConfigureAwait(false);
+            string model = await adb.ReadPropAsync("ro.product.model", ct, timeoutMs).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                model = await adb.ReadPropAsync("ro.product.device", ct, timeoutMs).ConfigureAwait(false);
+            }
+
+            return new DeviceInfo
+            {
+                Name = BuildDefaultDeviceName(manufacturer, model, GetDeviceKey(serial)),
+                Manufacturer = manufacturer,
+                Model = model,
+                LastSerial = serial,
+                LastSeen = DateTimeOffset.Now.ToString("O")
+            };
+        }
+
+        public static string GetDeviceKey(string serial)
+        {
+            serial = (serial ?? "").Trim();
+            int colonIndex = serial.LastIndexOf(':');
+            if (colonIndex > 0 && colonIndex < serial.Length - 1)
+            {
+                string port = serial[(colonIndex + 1)..];
+                if (port.All(char.IsDigit))
+                {
+                    return serial[..colonIndex];
+                }
+            }
+
+            return serial;
+        }
+
+        public static string BuildDefaultDeviceName(string manufacturer, string model, string fallback)
+        {
+            manufacturer = (manufacturer ?? "").Trim();
+            model = (model ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(manufacturer) && !string.IsNullOrWhiteSpace(model))
+            {
+                return manufacturer + " : " + model;
+            }
+
+            if (!string.IsNullOrWhiteSpace(manufacturer))
+            {
+                return manufacturer;
+            }
+
+            return string.IsNullOrWhiteSpace(model) ? fallback : model;
+        }
+
         public static AdbDeviceStatus BuildDeviceStatus(IEnumerable<(string Serial, string State)> devices)
         {
-            var deviceList = devices.ToList();
+            var deviceList = devices
+                .Where(device => !string.IsNullOrWhiteSpace(device.Serial))
+                .Select(device => new AdbTrackedDevice(device.Serial, device.State))
+                .ToList();
             int connectedCount = deviceList.Count(device => device.State.Equals("device", StringComparison.OrdinalIgnoreCase));
             if (connectedCount == 0)
             {
-                return new AdbDeviceStatus(AdbDeviceState.NoDevice, connectedCount, "ADB server is running, but no ready device is connected.");
+                return new AdbDeviceStatus(AdbDeviceState.NoDevice, connectedCount, "ADB server is running, but no ready device is connected.")
+                {
+                    Devices = deviceList
+                };
             }
 
             if (connectedCount == 1)
             {
-                return new AdbDeviceStatus(AdbDeviceState.OneDevice, connectedCount, "ADB server is running with 1 device connected.");
+                return new AdbDeviceStatus(AdbDeviceState.OneDevice, connectedCount, "ADB server is running with 1 device connected.")
+                {
+                    Devices = deviceList
+                };
             }
 
-            return new AdbDeviceStatus(AdbDeviceState.MultipleDevices, connectedCount, $"ADB server is running with {connectedCount} devices connected.");
+            return new AdbDeviceStatus(AdbDeviceState.MultipleDevices, connectedCount, $"ADB server is running with {connectedCount} devices connected.")
+            {
+                Devices = deviceList
+            };
+        }
+
+        private async Task<string> ReadPropAsync(string propName, CancellationToken ct, int timeoutMs)
+        {
+            var (code, stdout, _) = await RunCaptureAsync("shell getprop " + propName, ct, timeoutMs).ConfigureAwait(false);
+            return code == 0 ? stdout.Trim() : "";
         }
 
         // ---------- Private core ----------
@@ -145,12 +216,60 @@ namespace Lazy_App_Codex_Core
                     continue;
                 }
 
+                StripTrackDevicesPacketPrefixes(ref line);
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+
                 var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2)
                 {
                     yield return (parts[0], parts[1]);
                 }
             }
+        }
+
+        private static void StripTrackDevicesPacketPrefixes(ref string line)
+        {
+            while (line.Length >= 4 && IsHexLengthPrefix(line.AsSpan(0, 4)))
+            {
+                line = line[4..].TrimStart();
+            }
+        }
+
+        private static bool IsHexLengthPrefix(ReadOnlySpan<char> value)
+        {
+            if (value.Length != 4)
+            {
+                return false;
+            }
+
+            int length = 0;
+            foreach (char c in value)
+            {
+                int digit;
+                if (c >= '0' && c <= '9')
+                {
+                    digit = c - '0';
+                }
+                else if (c >= 'a' && c <= 'f')
+                {
+                    digit = c - 'a' + 10;
+                }
+                else if (c >= 'A' && c <= 'F')
+                {
+                    digit = c - 'A' + 10;
+                }
+                else
+                {
+                    return false;
+                }
+
+                length = (length << 4) + digit;
+            }
+
+            return length <= 1024;
         }
 
         private async Task<(int exitCode, string stdout, string stderr)> RunCoreAsync(string args, CancellationToken ct, int timeoutMs, bool capture)
@@ -307,5 +426,13 @@ namespace Lazy_App_Codex_Core
         MultipleDevices
     }
 
-    public sealed record AdbDeviceStatus(AdbDeviceState State, int DeviceCount, string Tooltip);
+    public sealed record AdbTrackedDevice(string Serial, string State)
+    {
+        public bool IsReady => State.Equals("device", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public sealed record AdbDeviceStatus(AdbDeviceState State, int DeviceCount, string Tooltip)
+    {
+        public IReadOnlyList<AdbTrackedDevice> Devices { get; init; } = Array.Empty<AdbTrackedDevice>();
+    }
 }

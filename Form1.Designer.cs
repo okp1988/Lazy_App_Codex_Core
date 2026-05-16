@@ -32,6 +32,7 @@ namespace Lazy_App_Codex_Core
             btnRun = new Button();
             ddlOffset = new ComboBox();
             ddlTagFilter = new ComboBox();
+            ddlDevice = new ComboBox();
             btnConfig = new Button();
             mainLayout.SuspendLayout();
             contentLayout.SuspendLayout();
@@ -156,18 +157,20 @@ namespace Lazy_App_Codex_Core
             actionPanel.Controls.Add(btnRun, 0, 0);
             actionPanel.Controls.Add(ddlOffset, 0, 1);
             actionPanel.Controls.Add(ddlTagFilter, 0, 2);
-            actionPanel.Controls.Add(btnConfig, 0, 3);
+            actionPanel.Controls.Add(ddlDevice, 0, 3);
+            actionPanel.Controls.Add(btnConfig, 0, 4);
             actionPanel.Dock = DockStyle.Top;
             actionPanel.Location = new Point(480, 10);
             actionPanel.Margin = new Padding(0);
             actionPanel.Name = "actionPanel";
-            actionPanel.RowCount = 5;
+            actionPanel.RowCount = 6;
+            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            actionPanel.Size = new Size(150, 172);
+            actionPanel.Size = new Size(150, 212);
             actionPanel.TabIndex = 1;
             // 
             // btnRun
@@ -209,15 +212,28 @@ namespace Lazy_App_Codex_Core
             ddlTagFilter.TabIndex = 2;
             ddlTagFilter.SelectedIndexChanged += ddlTagFilter_SelectedIndexChanged;
             // 
+            // ddlDevice
+            // 
+            ddlDevice.Dock = DockStyle.Fill;
+            ddlDevice.DropDownStyle = ComboBoxStyle.DropDownList;
+            ddlDevice.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ddlDevice.FormattingEnabled = true;
+            ddlDevice.Location = new Point(0, 120);
+            ddlDevice.Margin = new Padding(0, 4, 0, 6);
+            ddlDevice.Name = "ddlDevice";
+            ddlDevice.Size = new Size(150, 28);
+            ddlDevice.TabIndex = 3;
+            ddlDevice.SelectedIndexChanged += ddlDevice_SelectedIndexChanged;
+            // 
             // btnConfig
             // 
             btnConfig.Dock = DockStyle.Fill;
             btnConfig.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnConfig.Location = new Point(0, 120);
+            btnConfig.Location = new Point(0, 160);
             btnConfig.Margin = new Padding(0, 2, 0, 6);
             btnConfig.Name = "btnConfig";
             btnConfig.Size = new Size(150, 32);
-            btnConfig.TabIndex = 3;
+            btnConfig.TabIndex = 4;
             btnConfig.Text = "Config";
             btnConfig.UseVisualStyleBackColor = true;
             btnConfig.Click += btnConfig_Click;
@@ -284,6 +300,7 @@ namespace Lazy_App_Codex_Core
         private System.Windows.Forms.Label lblEstimatedEndValue;
         private System.Windows.Forms.ComboBox ddlOffset;
         private System.Windows.Forms.ComboBox ddlTagFilter;
+        private System.Windows.Forms.ComboBox ddlDevice;
         private System.Windows.Forms.Button btnConfig;
     }
 }

@@ -42,6 +42,9 @@ namespace Lazy_App_Codex_Core
 
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
+        private Dictionary<string, DeviceInfo> _deviceMetadata = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, DeviceInfo> _detectedDeviceMetadata = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _deviceInfoSyncing = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _runCts;
         private Task? _runTask;
         private bool _isRunning;
@@ -53,9 +56,12 @@ namespace Lazy_App_Codex_Core
         private readonly System.Windows.Forms.Timer _adbRetryTimer = new System.Windows.Forms.Timer();
         private readonly ToolTip _statusToolTip = new ToolTip();
         private AdbDeviceStatus _adbDeviceStatus = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status has not been checked yet.");
+        private string? _selectedDeviceSerial;
         private System.Diagnostics.Process? _adbTrackProcess;
         private TaskCompletionSource<AdbDeviceStatus>? _adbTrackFirstStatus;
         private bool _adbMonitorStarting;
+        private bool _updatingDeviceDropdown;
+        private bool _deviceLossStopRequested;
         private bool _closing;
         private readonly string _baseTitle;
         private readonly Icon _baseIcon;
@@ -81,6 +87,8 @@ namespace Lazy_App_Codex_Core
             Activated += OnActivated;
             Resize += OnResize;
             ddlScript.SelectionChanged += (_, _) => ApplySelectedDefaultOffset();
+            ddlDevice.DrawMode = DrawMode.OwnerDrawFixed;
+            ddlDevice.DrawItem += ddlDevice_DrawItem;
 
             ResetOffsetSelection();
 
@@ -93,6 +101,7 @@ namespace Lazy_App_Codex_Core
             _adbRetryTimer.Tick += async (_, _) => await EnsureAdbTrackMonitorAsync("retry timer");
             _statusToolTip.SetToolTip(statusDot, "Global hotkey status has not been checked yet.");
             _statusToolTip.SetToolTip(adbStatusDot, "ADB status has not been checked yet.");
+            _statusToolTip.SetToolTip(ddlDevice, "Select the ADB device to run commands on.");
             UpdateLiveStatusLabels();
             SetRunningState(false);
         }
@@ -184,10 +193,13 @@ namespace Lazy_App_Codex_Core
             try
             {
                 _library = _configRepository.LoadLibrary();
+                _deviceMetadata = CloneDevices(_configRepository.Settings.Devices);
             }
             catch (Exception ex)
             {
                 _library = new ConfigLibrary();
+                _deviceMetadata = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+                _detectedDeviceMetadata.Clear();
                 AppLogger.LogError("Failed to load script configuration.", ex);
                 MessageBox.Show("Failed to load config.json. Please check the logs folder.", "Config Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -312,21 +324,25 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (_adbDeviceStatus.State != AdbDeviceState.OneDevice)
+            string? selectedDeviceSerial = GetSelectedReadyDeviceSerial();
+            if (selectedDeviceSerial == null)
             {
-                LogAdbStatus($"Run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, message={_adbDeviceStatus.Tooltip}");
-                MessageBox.Show(_adbDeviceStatus.Tooltip, "ADB Not Ready", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                string message = _adbDeviceStatus.DeviceCount > 1
+                    ? "Select a device before run."
+                    : _adbDeviceStatus.Tooltip;
+                LogAdbStatus($"Run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={(string.IsNullOrWhiteSpace(_selectedDeviceSerial) ? "(none)" : _selectedDeviceSerial)}, message={message}");
+                MessageBox.Show(message, "ADB Not Ready", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            LogAdbStatus($"Run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
+            LogAdbStatus($"Run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={selectedDeviceSerial}.");
 
             _runCts = new CancellationTokenSource();
             _debugLog.Clear();
             SetRunningState(true);
             Text = $"{_baseTitle} - Running: {target.Name}";
 
-            _runTask = RunSelectedTargetAsync(target, script, sequence, _runCts.Token);
+            _runTask = RunSelectedTargetAsync(target, script, sequence, selectedDeviceSerial, _runCts.Token);
             try
             {
                 await _runTask;
@@ -351,13 +367,13 @@ namespace Lazy_App_Codex_Core
         private async Task RefreshAdbStatusForRunAsync()
         {
             LogAdbStatus($"Run refresh requested. Cached={_adbDeviceStatus.State}, tracker={FormatTrackerState()}.");
-            if (_adbDeviceStatus.State is AdbDeviceState.NoDevice or AdbDeviceState.MultipleDevices)
+            if (_adbDeviceStatus.State == AdbDeviceState.NoDevice)
             {
                 LogAdbStatus($"Run using cached blocking background status immediately: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
                 return;
             }
 
-            if (_adbDeviceStatus.State == AdbDeviceState.OneDevice && _adbTrackProcess != null && !_adbTrackProcess.HasExited)
+            if (_adbDeviceStatus.State is AdbDeviceState.OneDevice or AdbDeviceState.MultipleDevices && _adbTrackProcess != null && !_adbTrackProcess.HasExited)
             {
                 LogAdbStatus($"Run using cached background status: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
                 return;
@@ -365,7 +381,7 @@ namespace Lazy_App_Codex_Core
 
             if (_adbTrackProcess == null || _adbTrackProcess.HasExited)
             {
-                StartTrackDevicesProcess();
+                await EnsureAdbTrackMonitorAsync("run");
             }
 
             try
@@ -381,13 +397,13 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task RunSelectedTargetAsync(RunTarget target, ScriptModel? script, SequenceModel? sequence, CancellationToken token)
+        private async Task RunSelectedTargetAsync(RunTarget target, ScriptModel? script, SequenceModel? sequence, string deviceSerial, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
             WriteLog($"OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
             if (script != null)
             {
-                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, token, UpdateLiveStatus, IsAdbActionEnabled);
+                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, UpdateLiveStatus, IsAdbActionEnabled);
             }
             else if (sequence != null)
             {
@@ -398,6 +414,7 @@ namespace Lazy_App_Codex_Core
                     offsetValue,
                     offsetAxis,
                     scriptItem => GetSelectedOffset(scriptItem.Name),
+                    deviceSerial,
                     token,
                     UpdateLiveStatus,
                     IsAdbActionEnabled);
@@ -479,6 +496,7 @@ namespace Lazy_App_Codex_Core
             ddlScript.Enabled = !isRunning;
             ddlOffset.Enabled = !isRunning;
             ddlTagFilter.Enabled = !isRunning;
+            ddlDevice.Enabled = !isRunning && ddlDevice.Items.Count > 0;
             btnConfig.Enabled = !isRunning;
             btnRun.Text = isRunning ? "Stop" : "Run";
             SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
@@ -682,7 +700,7 @@ namespace Lazy_App_Codex_Core
         private void btnConfig_Click(object sender, EventArgs e)
         {
             _ = EnsureAdbTrackMonitorAsync("config");
-            using var editor = new ConfigEditorForm(_configRepository, () => _adbDeviceStatus);
+            using var editor = new ConfigEditorForm(_configRepository, () => _adbDeviceStatus, () => _selectedDeviceSerial);
             if (editor.ShowDialog(this) != DialogResult.OK || !editor.ConfigSaved)
             {
                 return;
@@ -693,6 +711,7 @@ namespace Lazy_App_Codex_Core
             _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
             _lastHotkeyRegistrationSucceeded = null;
             RegisterHotkeysForWindowState();
+            UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
             WriteLog("CONFIG UPDATED.");
         }
 
@@ -705,6 +724,37 @@ namespace Lazy_App_Codex_Core
 
             RebuildRunTargets();
             ResetOffsetSelection();
+        }
+
+        private void ddlDevice_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_updatingDeviceDropdown)
+            {
+                return;
+            }
+
+            _selectedDeviceSerial = (ddlDevice.SelectedItem as DeviceDisplayItem)?.Serial;
+            LogAdbStatus("Selected device changed: " + (_selectedDeviceSerial ?? "(none)"));
+        }
+
+        private void ddlDevice_DrawItem(object? sender, DrawItemEventArgs e)
+        {
+            e.DrawBackground();
+            if (e.Index < 0 || e.Index >= ddlDevice.Items.Count)
+            {
+                return;
+            }
+
+            if (ddlDevice.Items[e.Index] is not DeviceDisplayItem item)
+            {
+                return;
+            }
+
+            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            Color textColor = selected ? SystemColors.HighlightText : (item.MetadataMismatch ? Color.Firebrick : ddlDevice.ForeColor);
+            using Font fallbackFont = new Font(ddlDevice.Font, ddlDevice.Font.Style);
+            TextRenderer.DrawText(e.Graphics, item.ToString(), e.Font ?? fallbackFont, e.Bounds, textColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            e.DrawFocusRectangle();
         }
 
         private void ResetOffsetSelection()
@@ -842,9 +892,23 @@ namespace Lazy_App_Codex_Core
                         return;
                     }
 
+                    bool startsNewSnapshot = StripTrackDevicesPacketPrefixes(ref line);
+                    if (startsNewSnapshot)
+                    {
+                        lines.Clear();
+                    }
+
                     if (line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase))
                     {
                         LogAdbStatus("track-devices header received.");
+                        lines.Clear();
+                        return;
+                    }
+
+                    if (line.Length == 0)
+                    {
+                        LogAdbStatus("track-devices block: (no devices)");
+                        ApplyTrackedDeviceLines(lines);
                         lines.Clear();
                         return;
                     }
@@ -890,7 +954,6 @@ namespace Lazy_App_Codex_Core
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
                     var initialStatus = new AdbDeviceStatus(AdbDeviceState.NoDevice, 0, "ADB server is running, but no ready device is connected.");
-                    _adbTrackFirstStatus?.TrySetResult(initialStatus);
                     ApplyAdbDeviceStatusOnUi(initialStatus);
                 }
                 else
@@ -916,6 +979,52 @@ namespace Lazy_App_Codex_Core
             var status = AdbShellController.BuildDeviceStatus(AdbShellController.ParseDeviceLines(string.Join(Environment.NewLine, lines)));
             _adbTrackFirstStatus?.TrySetResult(status);
             ApplyAdbDeviceStatusOnUi(status);
+        }
+
+        private static bool StripTrackDevicesPacketPrefixes(ref string line)
+        {
+            bool stripped = false;
+            while (line.Length >= 4 && IsHexLengthPrefix(line.AsSpan(0, 4)))
+            {
+                stripped = true;
+                line = line[4..].TrimStart();
+            }
+
+            return stripped;
+        }
+
+        private static bool IsHexLengthPrefix(ReadOnlySpan<char> value)
+        {
+            if (value.Length != 4)
+            {
+                return false;
+            }
+
+            int length = 0;
+            foreach (char c in value)
+            {
+                int digit;
+                if (c >= '0' && c <= '9')
+                {
+                    digit = c - '0';
+                }
+                else if (c >= 'a' && c <= 'f')
+                {
+                    digit = c - 'a' + 10;
+                }
+                else if (c >= 'A' && c <= 'F')
+                {
+                    digit = c - 'A' + 10;
+                }
+                else
+                {
+                    return false;
+                }
+
+                length = (length << 4) + digit;
+            }
+
+            return length <= 1024;
         }
 
         private async Task<AdbDeviceStatus> WaitForTrackDevicesStatusAsync(int timeoutMs)
@@ -978,12 +1087,13 @@ namespace Lazy_App_Codex_Core
             }
 
             _adbDeviceStatus = status;
+            UpdateDeviceDropdown(status);
             _adbStatusDotColor = status.State switch
             {
                 AdbDeviceState.NoServer => Color.DarkGray,
-                AdbDeviceState.NoDevice => Color.Goldenrod,
+                AdbDeviceState.NoDevice => Color.Red,
                 AdbDeviceState.OneDevice => Color.Green,
-                AdbDeviceState.MultipleDevices => Color.Red,
+                AdbDeviceState.MultipleDevices => Color.Goldenrod,
                 _ => Color.DarkGray
             };
 
@@ -1004,6 +1114,252 @@ namespace Lazy_App_Codex_Core
                     _adbRetryTimer.Stop();
                 }
             }
+        }
+
+        private void UpdateDeviceDropdown(AdbDeviceStatus status, bool queueSync = true)
+        {
+            var readyDevices = status.Devices
+                .Where(device => device.IsReady)
+                .GroupBy(device => device.Serial, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(device => GetDeviceDisplayName(device.Serial), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (queueSync)
+            {
+                QueueDeviceInfoSync(readyDevices);
+            }
+
+            string? previousSelection = _selectedDeviceSerial;
+            bool selectedDeviceRemoved = previousSelection != null &&
+                !readyDevices.Any(device => device.Serial.Equals(previousSelection, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedDeviceRemoved)
+            {
+                _selectedDeviceSerial = null;
+            }
+
+            string? desiredSelection = _selectedDeviceSerial;
+            if (desiredSelection == null && readyDevices.Count == 1 && !selectedDeviceRemoved)
+            {
+                desiredSelection = readyDevices[0].Serial;
+            }
+
+            _updatingDeviceDropdown = true;
+            try
+            {
+                ddlDevice.BeginUpdate();
+                ddlDevice.Items.Clear();
+                foreach (var device in readyDevices)
+                {
+                    string key = AdbShellController.GetDeviceKey(device.Serial);
+                    _deviceMetadata.TryGetValue(key, out var metadata);
+                    _detectedDeviceMetadata.TryGetValue(key, out var detected);
+                    ddlDevice.Items.Add(new DeviceDisplayItem(device.Serial, GetDeviceDisplayName(device.Serial), HasDeviceMetadataMismatch(metadata, detected)));
+                }
+
+                ddlDevice.SelectedIndex = -1;
+                if (desiredSelection != null)
+                {
+                    for (int index = 0; index < ddlDevice.Items.Count; index++)
+                    {
+                        if (ddlDevice.Items[index] is DeviceDisplayItem item &&
+                            item.Serial.Equals(desiredSelection, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ddlDevice.SelectedIndex = index;
+                            _selectedDeviceSerial = item.Serial;
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                ddlDevice.EndUpdate();
+                _updatingDeviceDropdown = false;
+            }
+
+            ddlDevice.Enabled = !_isRunning && readyDevices.Count > 0;
+            _statusToolTip.SetToolTip(
+                ddlDevice,
+                readyDevices.Count == 0
+                    ? "No ready ADB device is connected."
+                    : "Select the ADB device to run commands on.");
+
+            if (selectedDeviceRemoved && _isRunning && !_deviceLossStopRequested)
+            {
+                _deviceLossStopRequested = true;
+                string removedDevice = GetDeviceDisplayName(previousSelection ?? "");
+                LogAdbStatus($"Selected device removed while running: {previousSelection}. Stopping run.");
+                _ = StopRunForMissingDeviceAsync(removedDevice);
+            }
+            else if (!_isRunning)
+            {
+                _deviceLossStopRequested = false;
+            }
+        }
+
+        private async Task StopRunForMissingDeviceAsync(string removedDevice)
+        {
+            await StopRunAsync();
+            if (!_closing)
+            {
+                MessageBox.Show(
+                    $"Selected device disconnected: {removedDevice}. Run stopped.",
+                    "ADB Device Removed",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            _deviceLossStopRequested = false;
+        }
+
+        private string? GetSelectedReadyDeviceSerial()
+        {
+            if (string.IsNullOrWhiteSpace(_selectedDeviceSerial))
+            {
+                return null;
+            }
+
+            return _adbDeviceStatus.Devices.Any(device =>
+                device.IsReady &&
+                device.Serial.Equals(_selectedDeviceSerial, StringComparison.OrdinalIgnoreCase))
+                    ? _selectedDeviceSerial
+                    : null;
+        }
+
+        private string GetDeviceDisplayName(string serial)
+        {
+            string key = AdbShellController.GetDeviceKey(serial);
+            if (_deviceMetadata.TryGetValue(key, out var metadata) && !string.IsNullOrWhiteSpace(metadata.Name))
+            {
+                return metadata.Name;
+            }
+
+            return key;
+        }
+
+        private void QueueDeviceInfoSync(IEnumerable<AdbTrackedDevice> readyDevices)
+        {
+            foreach (var device in readyDevices)
+            {
+                string key = AdbShellController.GetDeviceKey(device.Serial);
+                if (string.IsNullOrWhiteSpace(key) || _deviceInfoSyncing.Contains(key))
+                {
+                    continue;
+                }
+
+                _deviceInfoSyncing.Add(key);
+                _ = SyncDeviceInfoAsync(device.Serial, key);
+            }
+        }
+
+        private async Task SyncDeviceInfoAsync(string serial, string key)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(7000);
+                DeviceInfo detected = await _adbController.ReadDeviceInfoAsync(serial, cts.Token);
+                detected.LastSerial = serial;
+                detected.LastSeen = DateTimeOffset.Now.ToString("O");
+                _detectedDeviceMetadata[key] = detected;
+
+                bool changed = false;
+                if (!_deviceMetadata.TryGetValue(key, out var existing))
+                {
+                    _deviceMetadata[key] = detected;
+                    changed = true;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(existing.Name))
+                    {
+                        existing.Name = detected.Name;
+                        changed = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(existing.Manufacturer))
+                    {
+                        existing.Manufacturer = detected.Manufacturer;
+                        changed = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(existing.Model))
+                    {
+                        existing.Model = detected.Model;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    SaveDeviceMetadata();
+                }
+
+                BeginInvoke((Action)(() => UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false)));
+            }
+            catch (Exception ex)
+            {
+                LogAdbStatus($"Device info sync failed for {serial}: {ex.Message}");
+            }
+            finally
+            {
+                _deviceInfoSyncing.Remove(key);
+            }
+        }
+
+        private void SaveDeviceMetadata()
+        {
+            try
+            {
+                var root = _configRepository.LoadRawConfig();
+                var settings = (Newtonsoft.Json.Linq.JObject)root["settings"]!;
+                settings["devices"] = Newtonsoft.Json.Linq.JObject.FromObject(_deviceMetadata);
+                _configRepository.SaveRawConfig(root);
+            }
+            catch (Exception ex)
+            {
+                LogAdbStatus("Failed to save device metadata: " + ex.Message);
+            }
+        }
+
+        private static bool HasDeviceMetadataMismatch(DeviceInfo? metadata, DeviceInfo? detected)
+        {
+            if (metadata == null || detected == null)
+            {
+                return false;
+            }
+
+            bool manufacturerMismatch = !string.IsNullOrWhiteSpace(metadata.Manufacturer) &&
+                !string.IsNullOrWhiteSpace(detected.Manufacturer) &&
+                !metadata.Manufacturer.Equals(detected.Manufacturer, StringComparison.OrdinalIgnoreCase);
+            bool modelMismatch = !string.IsNullOrWhiteSpace(metadata.Model) &&
+                !string.IsNullOrWhiteSpace(detected.Model) &&
+                !metadata.Model.Equals(detected.Model, StringComparison.OrdinalIgnoreCase);
+            return manufacturerMismatch || modelMismatch;
+        }
+
+        private static Dictionary<string, DeviceInfo> CloneDevices(IDictionary<string, DeviceInfo>? devices)
+        {
+            var clone = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            if (devices == null)
+            {
+                return clone;
+            }
+
+            foreach (var item in devices)
+            {
+                clone[item.Key] = new DeviceInfo
+                {
+                    Name = item.Value.Name,
+                    Manufacturer = item.Value.Manufacturer,
+                    Model = item.Value.Model,
+                    LastSerial = item.Value.LastSerial,
+                    LastSeen = item.Value.LastSeen
+                };
+            }
+
+            return clone;
         }
 
         private string FormatTrackerState()
@@ -1087,6 +1443,14 @@ namespace Lazy_App_Codex_Core
             public override string ToString()
             {
                 return Kind == "sequence" ? "[Q] " + Name : "[S] " + Name;
+            }
+        }
+
+        private sealed record DeviceDisplayItem(string Serial, string DisplayName, bool MetadataMismatch)
+        {
+            public override string ToString()
+            {
+                return DisplayName;
             }
         }
     }

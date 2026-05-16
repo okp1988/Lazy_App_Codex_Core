@@ -1,0 +1,209 @@
+# Config And Settings
+
+## Config File Location
+
+The app loads `config.json` using:
+
+```text
+new ScriptConfigRepository("config.json")
+```
+
+This means the active config depends on the process working directory. The repository `config.json` is the editable source file during local development.
+
+The project file intentionally does not copy `config.json` to build or publish output.
+
+## Current Config Shape
+
+```json
+{
+  "settings": {},
+  "offset": {},
+  "scripts": {},
+  "sequences": {}
+}
+```
+
+Top-level legacy scripts are supported by repository migration rules. Category keys must be skipped when scanning legacy scripts.
+
+## Settings
+
+Canonical keys:
+
+- `hotkeyStart`
+- `hotkeyStop`
+- `tag`
+- `devices`
+
+Rules:
+
+- `hotkeyStartStopToggle` is legacy and migrates to `hotkeyStart`.
+- Do not reintroduce `hotkeyStartStopToggle` as canonical.
+- `settings.tag` is the canonical tag list.
+- `settings.tags` is legacy and migrates to `settings.tag`.
+- `All` is reserved for the main filter and must not be stored as a configured tag.
+- Duplicate tags are removed case-insensitively.
+- Blank tags are allowed on Scripts and Sequences.
+
+## Devices
+
+Device history and friendly names live under `settings.devices`.
+
+Example:
+
+```json
+{
+  "settings": {
+    "devices": {
+      "192.168.50.147": {
+        "name": "Samsung : SM-S948B",
+        "manufacturer": "samsung",
+        "model": "SM-S948B",
+        "lastSerial": "192.168.50.147:33487",
+        "lastSeen": "2026-05-16T16:39:49+08:00"
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+- Wi-Fi ADB keys use the IP address without the port.
+- USB and mDNS-style serials use the serial as reported by ADB.
+- Default names are built as `manufacturer : model`.
+- Users may edit only the friendly name in the Devices tab.
+- Sync refreshes manufacturer/model only when the device key is currently connected and ready.
+- Automatic sync may create missing entries or fill blank fields, but existing conflicting manufacturer/model data is not silently overwritten.
+
+## Hotkey Behavior
+
+- Empty hotkey text disables that hotkey.
+- If start and stop hotkeys are the same, only the primary hotkey is registered.
+- Same start/stop hotkey toggles start and stop.
+- Hotkeys are unregistered when the main window is minimized.
+- Hotkeys are re-registered when the window is restored or activated.
+- Registration state is shown by `statusDot`.
+
+## Offset Profiles
+
+Offset profiles live under `offset`.
+
+Preferred profile names:
+
+```text
+s<number>
+```
+
+Examples:
+
+```json
+{
+  "offset": {
+    "s26": [5, 5],
+    "s13": [8, 4]
+  }
+}
+```
+
+Fallback keys remain supported:
+
+- `offsetX`
+- `offsetY`
+- `ox`
+- `oy`
+- `x`
+- `y`
+- `s`
+
+Lookup rules:
+
+- The runnable name is scanned for digits.
+- Each digit group is tried as `s<number>`.
+- The selected axis chooses the profile X or Y value.
+- If no matching profile exists, fallback X/Y offset values are used.
+
+## Script JSON
+
+Compact script output uses:
+
+- `d`: duration or loop count
+- `imin`: interval minimum seconds
+- `imax`: interval maximum seconds
+- `config`: action groups
+- `a`: action
+- `s`: start coordinate `[x, y]`
+- `s2`: drag end coordinate `[x2, y2]`
+- `r`: randomization `[randX, randY]`
+- `t`: sleep range `[sleepMin, sleepMax]`
+- `o`: offset axis override
+
+Script fields:
+
+- `id`
+- `name`
+- `tag`
+- `hide`
+- `order`
+- `d`
+- `imin`
+- `imax`
+- `defaultOffsetEnabled`
+- `defaultOffset`
+- `config`
+
+Script names must be unique. Clones use `_copy`, `_copy2`, `_copy3`, and so on.
+
+## Sequence JSON
+
+Sequence fields:
+
+- `id`
+- `name`
+- `tag`
+- `order`
+- `d`
+- `imin`
+- `imax`
+- `defaultOffsetEnabled`
+- `defaultOffset`
+- `items`
+
+Sequence item types:
+
+- `script`: references a Script by `scriptId`
+- `action`: stores a direct action
+
+Rules:
+
+- Sequences must not reference other Sequences.
+- Sequence Script items store only Script IDs so Script renames do not break references.
+- Hidden Scripts remain valid for Sequence Script items.
+- Deleting a Script used by Sequences must ask for confirmation before deleting dependent Sequences.
+
+## Alias Compatibility
+
+These aliases are meaningful API and must remain compatible unless a deliberate migration is performed:
+
+- `d`
+- `imin`
+- `imax`
+- `i`
+- `config`
+- `steps`
+- nested `steps` with `repeat` or `rep`
+- `a`
+- `s`
+- `s2`
+- `p`
+- `p2`
+- `r`
+- `t`
+- `o`
+
+Action aliases:
+
+- `left` maps to `leftclick` behavior.
+- `right` maps to `rightclick` or back behavior.
+- `back` maps to right/back behavior.
+- Directional drag names remain usable.
+- Unknown actions should be logged and skipped, not converted to device touches.

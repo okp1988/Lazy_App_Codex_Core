@@ -19,11 +19,12 @@ namespace Lazy_App_Codex_Core
             ScriptModel script,
             int selectedOffset,
             string selectedOffsetAxis,
+            string deviceSerial,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
             bool isAdbEnabled)
         {
-            var adb = new AdbShellController();
+            var adb = new AdbShellController(deviceSerial: deviceSerial);
             if (script.Duration <= 0)
             {
                 long loop = 1;
@@ -46,11 +47,12 @@ namespace Lazy_App_Codex_Core
             int selectedOffset,
             string selectedOffsetAxis,
             Func<ScriptModel, (int value, string axis)> scriptOffsetResolver,
+            string deviceSerial,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
             bool isAdbEnabled)
         {
-            var adb = new AdbShellController();
+            var adb = new AdbShellController(deviceSerial: deviceSerial);
             if (sequence.Duration <= 0)
             {
                 long loop = 1;

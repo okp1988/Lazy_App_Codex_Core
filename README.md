@@ -2,6 +2,15 @@
 
 Lazy App runs ADB-based tap, back, and drag workflows for Android devices. No app or root access is needed on the phone.
 
+## Documentation
+
+- [Project Design](docs/PROJECT_DESIGN.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Config and Settings](docs/CONFIG_AND_SETTINGS.md)
+- [Run and ADB Behavior](docs/RUN_AND_ADB_BEHAVIOR.md)
+- [Contributing Guardrails](docs/CONTRIBUTING_GUARDRAILS.md)
+- [Current Code Review](docs/CODE_REVIEW.md)
+
 ## Requirements
 
 1. Use Windows with the .NET 8 SDK installed.
@@ -33,7 +42,8 @@ adb kill-server
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
-- The first small status dot reports global hotkey registration. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, yellow means server running with no ready device, green means one ready device, and red means more than one ready device.
+- The first small status dot reports global hotkey registration. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
+- The Device dropdown lists only currently ready devices from `adb track-devices`. One ready device is auto-selected; when multiple devices are ready, select the device before running. Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
 - Offset options are:
 
 ```text
@@ -52,11 +62,14 @@ The config editor uses in-memory changes while open. Switching tabs or selecting
 Available tabs:
 
 - Settings: start/stop hotkeys and the tag list used by Scripts and Sequences.
+- Devices: saved ADB device names and detected manufacturer/model data.
 - Offset: offset profiles such as `s26` or `s13`.
 - Scripts: script info, tag, hide-from-main toggle, default offset, action groups, and step rows.
 - Sequences: sequence info, tag, default offset, and mixed script/action items.
 
-The Scripts and Sequences tabs share a `Track Touch` toggle. It is enabled only when ADB status is green. While enabled, the editor reads touch ranges per `/dev/input/event*` device, runs `adb shell getevent -l` in the background, scales raw touch events from the matching event device into screen coordinates, and shows the latest screen coordinate in the status line. The button turns bright green while active. If the app cannot match a touch range, it warns instead of showing raw values as screen coordinates. The process stops when toggled off, when ADB is no longer green, or when the config editor closes.
+The Devices tab stores friendly names under `settings.devices`. New connected devices are synced from ADB properties and default to `manufacturer : model`; names can be edited manually. Wi-Fi device keys are stored without the port. Connected devices can be synced, while disconnected saved devices can still be renamed or deleted.
+
+The Scripts and Sequences tabs share a `Track Touch` toggle. It is enabled only when the selected ADB device is ready. While enabled, the editor reads touch ranges per `/dev/input/event*` device, runs `adb shell getevent -l` in the background for the selected device, scales raw touch events from the matching event device into screen coordinates, and shows the latest screen coordinate in the status line. The button turns bright green while active. If the app cannot match a touch range, it warns instead of showing raw values as screen coordinates. The process stops when toggled off, when the selected device is no longer ready, or when the config editor closes.
 
 ## Scripts
 

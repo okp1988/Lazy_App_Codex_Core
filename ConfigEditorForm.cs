@@ -23,7 +23,9 @@ namespace Lazy_App_Codex_Core
         private readonly ToolTip _toolTip = new();
         private readonly TableLayoutPanel _hotkeySettingsPanel = new();
         private readonly TableLayoutPanel _tagSettingsPanel = new();
+        private readonly TableLayoutPanel _deviceEditorPanel = new();
         private readonly Func<AdbDeviceStatus>? _getAdbStatus;
+        private readonly Func<string?>? _getSelectedDeviceSerial;
         private readonly AdbShellController _adbController = new();
         private readonly System.Windows.Forms.Timer _trackTouchStateTimer = new();
 
@@ -37,6 +39,15 @@ namespace Lazy_App_Codex_Core
         private readonly Button _addTagButton = new();
         private readonly Button _updateTagButton = new();
         private readonly Button _deleteTagButton = new();
+        private readonly TextBox _deviceNameBox = new();
+        private readonly TextBox _deviceKeyBox = new();
+        private readonly TextBox _deviceManufacturerBox = new();
+        private readonly TextBox _deviceModelBox = new();
+        private readonly TextBox _deviceLastSerialBox = new();
+        private readonly TextBox _deviceLastSeenBox = new();
+        private readonly Button _updateDeviceButton = new();
+        private readonly Button _deleteDeviceButton = new();
+        private readonly Button _syncDeviceButton = new();
         private readonly NumericUpDown _offsetXBox = CreateNumberBox();
         private readonly NumericUpDown _offsetYBox = CreateNumberBox();
         private readonly NumericUpDown _loopBox = CreateNumberBox();
@@ -79,8 +90,10 @@ namespace Lazy_App_Codex_Core
         private JObject _root;
         private AppSettings _workingSettings;
         private JObject _workingOffsets;
+        private Dictionary<string, DeviceInfo> _workingDevices = new(StringComparer.OrdinalIgnoreCase);
         private ScriptModel? _selectedScript;
         private SequenceModel? _selectedSequence;
+        private string? _selectedDeviceKey;
         private string _selectedSettingsKey = "hotkeys";
         private string? _selectedOffsetKey;
         private int _loadedGroupIndex = -1;
@@ -97,18 +110,21 @@ namespace Lazy_App_Codex_Core
         private TouchCoordinateMapper? _activeTouchMapper;
         private string _activeTouchDevice = "";
 
-        public ConfigEditorForm(ScriptConfigRepository repository, Func<AdbDeviceStatus>? getAdbStatus = null)
+        public ConfigEditorForm(ScriptConfigRepository repository, Func<AdbDeviceStatus>? getAdbStatus = null, Func<string?>? getSelectedDeviceSerial = null)
         {
             _repository = repository;
             _getAdbStatus = getAdbStatus;
+            _getSelectedDeviceSerial = getSelectedDeviceSerial;
             _root = _repository.LoadRawConfig();
             _library = _repository.LoadLibrary();
             _workingSettings = new AppSettings
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
                 HotkeyStop = _repository.Settings.HotkeyStop,
-                Tags = NormalizeTags(_repository.Settings.Tags)
+                Tags = NormalizeTags(_repository.Settings.Tags),
+                Devices = CloneDevices(_repository.Settings.Devices)
             };
+            _workingDevices = _workingSettings.Devices;
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
 
             Text = "Lazy App Config";
@@ -227,6 +243,7 @@ namespace Lazy_App_Codex_Core
             editorHost.Controls.Add(BuildSequenceEditor());
             editorHost.Controls.Add(BuildScriptEditor());
             editorHost.Controls.Add(BuildOffsetEditor());
+            editorHost.Controls.Add(BuildDeviceEditor());
             editorHost.Controls.Add(BuildSettingsEditor());
             _statusLabel.Dock = DockStyle.Fill;
             _statusLabel.ForeColor = Color.DimGray;
@@ -333,6 +350,48 @@ namespace Lazy_App_Codex_Core
             AddNumberField(panel, "X", _offsetXBox, 1);
             AddNumberField(panel, "Y", _offsetYBox, 2);
             panel.Controls.Add(CreateHelpButton("Offset profiles are saved as config offset entries such as s26 or s13. Existing profiles stay compatible."), 3, 0);
+            return panel;
+        }
+
+        private Control BuildDeviceEditor()
+        {
+            var panel = new TableLayoutPanel { Name = "devicesEditor", Dock = DockStyle.Top, ColumnCount = 4, RowCount = 8, Height = 344, Visible = false, Padding = new Padding(0, 4, 0, 14) };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+            for (int i = 0; i < 7; i++)
+            {
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, i % 2 == 0 ? 28 : 36));
+            }
+
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+            AddReadOnlyTextField(panel, "Device Key", _deviceKeyBox, 0, 0);
+            AddTextField(panel, "Name", _deviceNameBox, 1);
+            panel.Controls.Add(CreateHelpButton("Devices are remembered under settings.devices. Wi-Fi devices use the IP address without the port as the key."), 3, 0);
+            AddReadOnlyTextField(panel, "Manufacturer", _deviceManufacturerBox, 0, 2);
+            AddReadOnlyTextField(panel, "Model", _deviceModelBox, 1, 2);
+            AddReadOnlyTextField(panel, "Last Serial", _deviceLastSerialBox, 0, 4);
+            AddReadOnlyTextField(panel, "Last Seen", _deviceLastSeenBox, 1, 4);
+
+            var buttons = new TableLayoutPanel { Dock = DockStyle.Top, Height = 46, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 8, 0, 4) };
+            buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+            ConfigureButton(_updateDeviceButton, "Update Name", (_, _) => UpdateDeviceName(), 105);
+            ConfigureButton(_deleteDeviceButton, "Delete", (_, _) => DeleteDevice(), 85);
+            ConfigureButton(_syncDeviceButton, "Sync", async (_, _) => await SyncSelectedDeviceAsync(), 85);
+            foreach (Button button in new[] { _updateDeviceButton, _deleteDeviceButton, _syncDeviceButton })
+            {
+                button.Dock = DockStyle.Fill;
+                button.Margin = new Padding(4, 0, 4, 0);
+            }
+
+            buttons.Controls.Add(_updateDeviceButton, 0, 0);
+            buttons.Controls.Add(_deleteDeviceButton, 1, 0);
+            buttons.Controls.Add(_syncDeviceButton, 2, 0);
+            panel.Controls.Add(buttons, 0, 7);
+            panel.SetColumnSpan(buttons, 4);
             return panel;
         }
 
@@ -547,6 +606,7 @@ namespace Lazy_App_Codex_Core
         private void LoadTabs()
         {
             _tabs.TabPages.Add("settings", "Settings");
+            _tabs.TabPages.Add("devices", "Devices");
             _tabs.TabPages.Add("offset", "Offset");
             _tabs.TabPages.Add("scripts", "Scripts");
             _tabs.TabPages.Add("sequences", "Sequences");
@@ -563,6 +623,7 @@ namespace Lazy_App_Codex_Core
                 "sequences" => _selectedSequence?.Id,
                 "offset" => _selectedOffsetKey,
                 "settings" => _selectedSettingsKey,
+                "devices" => _selectedDeviceKey,
                 _ => null
             };
 
@@ -587,6 +648,22 @@ namespace Lazy_App_Codex_Core
             {
                 _entryList.Items.Add(new EntryRef("Hotkeys", "hotkeys"));
                 _entryList.Items.Add(new EntryRef("Tag", "tag"));
+            }
+            else if (CurrentTab == "devices")
+            {
+                foreach (var item in _workingDevices.OrderBy(item => item.Value.Name, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    string label = string.IsNullOrWhiteSpace(item.Value.Name) ? item.Key : item.Value.Name;
+                    if (!label.Equals(item.Key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        label += " (" + item.Key + ")";
+                    }
+
+                    if (Matches(label, filter) || Matches(item.Key, filter))
+                    {
+                        _entryList.Items.Add(new EntryRef(label, item.Key));
+                    }
+                }
             }
             else
             {
@@ -652,6 +729,7 @@ namespace Lazy_App_Codex_Core
             _selectedScript = CurrentTab == "scripts" ? _library.Scripts.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedSequence = CurrentTab == "sequences" ? _library.Sequences.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedOffsetKey = CurrentTab == "offset" ? entry.Id : null;
+            _selectedDeviceKey = CurrentTab == "devices" ? entry.Id : null;
         }
 
         private void LoadCurrentEditor()
@@ -678,6 +756,16 @@ namespace Lazy_App_Codex_Core
                 var token = string.IsNullOrWhiteSpace(_selectedOffsetKey) ? null : _workingOffsets[_selectedOffsetKey];
                 _offsetXBox.Value = ClampNumeric(ReadOffsetInt(token, 0));
                 _offsetYBox.Value = ClampNumeric(ReadOffsetInt(token, 1));
+            }
+            else if (CurrentTab == "devices" && _selectedDeviceKey != null && _workingDevices.TryGetValue(_selectedDeviceKey, out var device))
+            {
+                _deviceKeyBox.Text = _selectedDeviceKey;
+                _deviceNameBox.Text = device.Name;
+                _deviceManufacturerBox.Text = device.Manufacturer;
+                _deviceModelBox.Text = device.Model;
+                _deviceLastSerialBox.Text = device.LastSerial;
+                _deviceLastSeenBox.Text = device.LastSeen;
+                _syncDeviceButton.Enabled = IsDeviceKeyConnected(_selectedDeviceKey);
             }
             else if (_selectedScript != null)
             {
@@ -719,6 +807,7 @@ namespace Lazy_App_Codex_Core
                 "scripts" => _selectedScript != null,
                 "sequences" => _selectedSequence != null,
                 "offset" => !string.IsNullOrWhiteSpace(_selectedOffsetKey),
+                "devices" => !string.IsNullOrWhiteSpace(_selectedDeviceKey),
                 _ => true
             };
 
@@ -727,6 +816,7 @@ namespace Lazy_App_Codex_Core
                 "scripts" => "scriptEditor",
                 "sequences" => "sequenceEditor",
                 "offset" => "offsetEditor",
+                "devices" => "devicesEditor",
                 _ => "settingsEditor"
             };
 
@@ -746,6 +836,12 @@ namespace Lazy_App_Codex_Core
             _hotkeyStopBox.Clear();
             _tagNameBox.Clear();
             _tagList.Items.Clear();
+            _deviceKeyBox.Clear();
+            _deviceNameBox.Clear();
+            _deviceManufacturerBox.Clear();
+            _deviceModelBox.Clear();
+            _deviceLastSerialBox.Clear();
+            _deviceLastSeenBox.Clear();
             _offsetXBox.Value = 0;
             _offsetYBox.Value = 0;
             _loopBox.Value = 0;
@@ -778,6 +874,7 @@ namespace Lazy_App_Codex_Core
                 control.Visible = control.Name switch
                 {
                     "settingsEditor" => CurrentTab == "settings",
+                    "devicesEditor" => CurrentTab == "devices",
                     "offsetEditor" => CurrentTab == "offset",
                     "scriptEditor" => CurrentTab == "scripts",
                     "sequenceEditor" => CurrentTab == "sequences",
@@ -788,7 +885,7 @@ namespace Lazy_App_Codex_Core
             bool listEditable = CurrentTab is "scripts" or "sequences" or "offset";
             _addButton.Enabled = listEditable;
             _cloneButton.Enabled = listEditable;
-            _removeButton.Enabled = listEditable;
+            _removeButton.Enabled = listEditable || CurrentTab == "devices";
             _moveUpButton.Enabled = CurrentTab is "scripts" or "sequences";
             _moveDownButton.Enabled = CurrentTab is "scripts" or "sequences";
             SyncTrackTouchAvailability();
@@ -931,6 +1028,11 @@ namespace Lazy_App_Codex_Core
 
                 _workingOffsets.Property(_selectedOffsetKey)?.Remove();
             }
+            else if (CurrentTab == "devices")
+            {
+                DeleteDevice();
+                return;
+            }
 
             NormalizeOrders();
             RefreshEntryList();
@@ -981,6 +1083,24 @@ namespace Lazy_App_Codex_Core
                     _workingSettings.HotkeyStop = _hotkeyStopBox.Text.Trim();
                 }
 
+                return true;
+            }
+
+            if (tabKey == "devices")
+            {
+                if (_selectedDeviceKey == null || !_workingDevices.TryGetValue(_selectedDeviceKey, out var device))
+                {
+                    return true;
+                }
+
+                string name = _deviceNameBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    ShowValidation("Device name is required.");
+                    return false;
+                }
+
+                device.Name = name;
                 return true;
             }
 
@@ -1099,7 +1219,8 @@ namespace Lazy_App_Codex_Core
             {
                 ["hotkeyStart"] = _workingSettings.HotkeyStart,
                 ["hotkeyStop"] = _workingSettings.HotkeyStop,
-                ["tag"] = new JArray(NormalizeTags(_workingSettings.Tags))
+                ["tag"] = new JArray(NormalizeTags(_workingSettings.Tags)),
+                ["devices"] = JObject.FromObject(_workingDevices)
             };
             _root["offset"] = _workingOffsets.DeepClone();
 
@@ -1688,6 +1809,100 @@ namespace Lazy_App_Codex_Core
             }
         }
 
+        private void UpdateDeviceName()
+        {
+            if (_selectedDeviceKey == null || !_workingDevices.TryGetValue(_selectedDeviceKey, out var device))
+            {
+                return;
+            }
+
+            string name = _deviceNameBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                ShowValidation("Device name is required.");
+                return;
+            }
+
+            device.Name = name;
+            RefreshEntryList();
+            SelectById(_selectedDeviceKey);
+            MarkDirty();
+        }
+
+        private void DeleteDevice()
+        {
+            if (_selectedDeviceKey == null)
+            {
+                return;
+            }
+
+            if (MessageBox.Show($"Delete device \"{_selectedDeviceKey}\"?", "Delete Device", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                return;
+            }
+
+            _workingDevices.Remove(_selectedDeviceKey);
+            _selectedDeviceKey = null;
+            RefreshEntryList();
+            MarkDirty();
+        }
+
+        private async Task SyncSelectedDeviceAsync()
+        {
+            if (_selectedDeviceKey == null)
+            {
+                return;
+            }
+
+            string? serial = GetConnectedSerialForDeviceKey(_selectedDeviceKey);
+            if (string.IsNullOrWhiteSpace(serial))
+            {
+                ShowValidation("Device is not currently connected to ADB.");
+                return;
+            }
+
+            try
+            {
+                _syncDeviceButton.Enabled = false;
+                using var cts = new CancellationTokenSource(7000);
+                DeviceInfo detected = await _adbController.ReadDeviceInfoAsync(serial, cts.Token);
+                if (_workingDevices.TryGetValue(_selectedDeviceKey, out var existing) && !string.IsNullOrWhiteSpace(existing.Name))
+                {
+                    detected.Name = existing.Name;
+                }
+
+                detected.LastSerial = serial;
+                detected.LastSeen = DateTimeOffset.Now.ToString("O");
+                _workingDevices[_selectedDeviceKey] = detected;
+                RefreshEntryList();
+                SelectById(_selectedDeviceKey);
+                MarkDirty();
+                SetStatus("Device information synced.");
+            }
+            catch (Exception ex)
+            {
+                ShowValidation("Failed to sync device information. " + ex.Message);
+            }
+            finally
+            {
+                _syncDeviceButton.Enabled = _selectedDeviceKey != null && IsDeviceKeyConnected(_selectedDeviceKey);
+            }
+        }
+
+        private bool IsDeviceKeyConnected(string key)
+        {
+            return GetConnectedSerialForDeviceKey(key) != null;
+        }
+
+        private string? GetConnectedSerialForDeviceKey(string key)
+        {
+            var status = _getAdbStatus?.Invoke();
+            return status?.Devices
+                .Where(device => device.IsReady)
+                .Select(device => device.Serial)
+                .FirstOrDefault(serial => AdbShellController.GetDeviceKey(serial).Equals(key, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void RefreshTagCombo(ComboBox combo, string selectedTag)
         {
             combo.BeginUpdate();
@@ -1772,8 +1987,10 @@ namespace Lazy_App_Codex_Core
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
                 HotkeyStop = _repository.Settings.HotkeyStop,
-                Tags = NormalizeTags(_repository.Settings.Tags)
+                Tags = NormalizeTags(_repository.Settings.Tags),
+                Devices = CloneDevices(_repository.Settings.Devices)
             };
+            _workingDevices = _workingSettings.Devices;
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
             _dirty = false;
             RefreshEntryList();
@@ -1790,16 +2007,21 @@ namespace Lazy_App_Codex_Core
             }
 
             var adbStatus = _getAdbStatus?.Invoke();
-            if (adbStatus?.State != AdbDeviceState.OneDevice)
+            string? selectedSerial = _getSelectedDeviceSerial?.Invoke();
+            bool selectedDeviceReady = !string.IsNullOrWhiteSpace(selectedSerial) &&
+                adbStatus?.Devices.Any(device =>
+                    device.IsReady &&
+                    device.Serial.Equals(selectedSerial, StringComparison.OrdinalIgnoreCase)) == true;
+            if (!selectedDeviceReady)
             {
-                ShowValidation(adbStatus?.Tooltip ?? "ADB must have exactly 1 ready device before tracking touch.");
+                ShowValidation(adbStatus?.Tooltip ?? "Select a ready ADB device before tracking touch.");
                 return;
             }
 
-            StartTrackTouch();
+            StartTrackTouch(selectedSerial!);
         }
 
-        private async void StartTrackTouch()
+        private async void StartTrackTouch(string deviceSerial)
         {
             try
             {
@@ -1808,13 +2030,14 @@ namespace Lazy_App_Codex_Core
                 _trackedTouchY = null;
                 _activeTouchMapper = null;
                 _activeTouchDevice = "";
-                _touchMappers = await LoadTouchCoordinateMappersAsync();
+                var adb = new AdbShellController(_adbController.AdbPath, deviceSerial);
+                _touchMappers = await LoadTouchCoordinateMappersAsync(adb);
                 var process = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
-                        FileName = _adbController.AdbPath,
-                        Arguments = "shell getevent -l",
+                        FileName = adb.AdbPath,
+                        Arguments = adb.DeviceSelector + "shell getevent -l",
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         RedirectStandardOutput = true,
@@ -1908,11 +2131,16 @@ namespace Lazy_App_Codex_Core
         private void SyncTrackTouchAvailability()
         {
             bool availableTab = CurrentTab is "scripts" or "sequences";
-            bool adbReady = _getAdbStatus?.Invoke().State == AdbDeviceState.OneDevice;
+            var adbStatus = _getAdbStatus?.Invoke();
+            string? selectedSerial = _getSelectedDeviceSerial?.Invoke();
+            bool adbReady = !string.IsNullOrWhiteSpace(selectedSerial) &&
+                adbStatus?.Devices.Any(device =>
+                    device.IsReady &&
+                    device.Serial.Equals(selectedSerial, StringComparison.OrdinalIgnoreCase)) == true;
             _trackTouchButton.Enabled = availableTab && (adbReady || _trackTouchEnabled);
             if (_trackTouchEnabled && !adbReady)
             {
-                StopTrackTouch("Track touch stopped because ADB is not green.");
+                StopTrackTouch("Track touch stopped because the selected ADB device is not ready.");
             }
         }
 
@@ -1950,11 +2178,11 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task<Dictionary<string, TouchCoordinateMapper>> LoadTouchCoordinateMappersAsync()
+        private async Task<Dictionary<string, TouchCoordinateMapper>> LoadTouchCoordinateMappersAsync(AdbShellController adb)
         {
             using var cts = new CancellationTokenSource(5000);
-            var (width, height) = await _adbController.GetDeviceSizeAsync(cts.Token);
-            var (_, output, _) = await _adbController.RunCaptureAsync("shell getevent -lp", cts.Token, 5000);
+            var (width, height) = await adb.GetDeviceSizeAsync(cts.Token);
+            var (_, output, _) = await adb.RunCaptureAsync("shell getevent -lp", cts.Token, 5000);
             return CreateTouchMappers(output, width, height);
         }
 
@@ -2250,6 +2478,7 @@ namespace Lazy_App_Codex_Core
         {
             _selectedScript = null;
             _selectedSequence = null;
+            _selectedDeviceKey = null;
             if (CurrentTab == "settings")
             {
                 _selectedSettingsKey = "hotkeys";
@@ -2397,6 +2626,29 @@ namespace Lazy_App_Codex_Core
             return normalized;
         }
 
+        private static Dictionary<string, DeviceInfo> CloneDevices(IDictionary<string, DeviceInfo>? devices)
+        {
+            var clone = new Dictionary<string, DeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            if (devices == null)
+            {
+                return clone;
+            }
+
+            foreach (var item in devices)
+            {
+                clone[item.Key] = new DeviceInfo
+                {
+                    Name = item.Value.Name,
+                    Manufacturer = item.Value.Manufacturer,
+                    Model = item.Value.Model,
+                    LastSerial = item.Value.LastSerial,
+                    LastSeen = item.Value.LastSeen
+                };
+            }
+
+            return clone;
+        }
+
         private static IEnumerable<Control> AllControls(Control root)
         {
             foreach (Control child in root.Controls)
@@ -2486,6 +2738,14 @@ namespace Lazy_App_Codex_Core
             input.Dock = DockStyle.Fill;
             layout.Controls.Add(Label(label), column, 0);
             layout.Controls.Add(input, column, 1);
+        }
+
+        private static void AddReadOnlyTextField(TableLayoutPanel layout, string label, TextBox input, int column, int row)
+        {
+            input.Dock = DockStyle.Fill;
+            input.ReadOnly = true;
+            layout.Controls.Add(Label(label), column, row);
+            layout.Controls.Add(input, column, row + 1);
         }
 
         private static void AddNumberField(TableLayoutPanel layout, string label, NumericUpDown input, int column)
