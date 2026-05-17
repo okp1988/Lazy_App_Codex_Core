@@ -31,6 +31,8 @@ Canonical keys:
 
 - `hotkeyStart`
 - `hotkeyStop`
+- `hotkeyBackupStart`
+- `hotkeyBackupStop`
 - `tag`
 - `devices`
 
@@ -38,6 +40,7 @@ Rules:
 
 - `hotkeyStartStopToggle` is legacy and migrates to `hotkeyStart`.
 - Do not reintroduce `hotkeyStartStopToggle` as canonical.
+- `hotkeyBackupStart` and `hotkeyBackupStop` are optional fallback hotkeys. Blank values disable that backup side.
 - `settings.tag` is the canonical tag list.
 - `settings.tags` is legacy and migrates to `settings.tag`.
 - `All` is reserved for the main filter and must not be stored as a configured tag.
@@ -81,11 +84,12 @@ Rules:
 ## Hotkey Behavior
 
 - Empty hotkey text disables that hotkey.
-- If start and stop hotkeys are the same, only the primary hotkey is registered.
-- Same start/stop hotkey toggles start and stop.
+- Primary start/stop hotkeys are tried first.
+- Backup start/stop hotkeys are tried only when the primary set cannot register.
+- If the active start and stop hotkeys are the same, only one hotkey is registered and it toggles start and stop.
 - Hotkeys are unregistered when the main window is minimized.
 - Hotkeys are re-registered when the window is restored or activated.
-- Registration state is shown by `statusDot`.
+- Registration state is shown by `statusDot`: green for primary, yellow for backup, red for no registered hotkey.
 
 ## Offset Profiles
 
@@ -132,6 +136,7 @@ Compact script output uses:
 - `d`: duration or loop count
 - `imin`: interval minimum seconds
 - `imax`: interval maximum seconds
+- `emin`: enforced minimum cycle seconds
 - `config`: action groups
 - `a`: action
 - `s`: start coordinate `[x, y]`
@@ -150,6 +155,7 @@ Script fields:
 - `d`
 - `imin`
 - `imax`
+- `emin`
 - `defaultOffsetEnabled`
 - `defaultOffset`
 - `config`
@@ -167,6 +173,7 @@ Sequence fields:
 - `d`
 - `imin`
 - `imax`
+- `emin`
 - `defaultOffsetEnabled`
 - `defaultOffset`
 - `items`
@@ -190,6 +197,7 @@ These aliases are meaningful API and must remain compatible unless a deliberate 
 - `d`
 - `imin`
 - `imax`
+- `emin`
 - `i`
 - `config`
 - `steps`
@@ -210,3 +218,15 @@ Action aliases:
 - `back` maps to right/back behavior.
 - Directional drag names remain usable.
 - Unknown actions should be logged and skipped, not converted to device touches.
+
+## Cycle Enforcement
+
+Scripts and Sequences may set `emin` to force each cycle to last at least that many seconds.
+
+Rules:
+
+- `emin` is optional; `0` means disabled.
+- `emin` cannot be larger than the displayed max cycle time in the editor.
+- The runner computes the full cycle plan before executing the first action.
+- If the randomized plan is shorter than `emin`, the runner re-randomizes the currently lowest flexible sleep, delay, or interval upward until the plan reaches `emin`.
+- If `emin` equals the max cycle time, each flexible sleep, delay, and interval uses its maximum value.

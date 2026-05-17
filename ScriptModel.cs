@@ -21,6 +21,7 @@ namespace Lazy_App_Codex_Core
         public int Duration { get; set; }        // 0 = unlimited, >0 = loop count
         public int Interval_Min { get; set; }    // seconds
         public int Interval_Max { get; set; }    // seconds
+        public int Enforce_Min { get; set; }     // seconds, 0 = disabled
         public bool DefaultOffsetEnabled { get; set; }
         public string DefaultOffset { get; set; } = "0";
         public List<ActionGroup> Groups { get; set; } = new();
@@ -55,6 +56,7 @@ namespace Lazy_App_Codex_Core
         public int Duration { get; set; }
         public int Interval_Min { get; set; }
         public int Interval_Max { get; set; }
+        public int Enforce_Min { get; set; }
         public bool DefaultOffsetEnabled { get; set; }
         public string DefaultOffset { get; set; } = "0";
         public List<SequenceItem> Items { get; set; } = new();

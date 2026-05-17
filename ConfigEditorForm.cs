@@ -34,6 +34,8 @@ namespace Lazy_App_Codex_Core
         private readonly TextBox _offsetNameBox = new();
         private readonly TextBox _hotkeyStartBox = new();
         private readonly TextBox _hotkeyStopBox = new();
+        private readonly TextBox _hotkeyBackupStartBox = new();
+        private readonly TextBox _hotkeyBackupStopBox = new();
         private readonly TextBox _tagNameBox = new();
         private readonly ListBox _tagList = new();
         private readonly Button _addTagButton = new();
@@ -53,9 +55,11 @@ namespace Lazy_App_Codex_Core
         private readonly NumericUpDown _loopBox = CreateNumberBox();
         private readonly NumericUpDown _intervalMinBox = CreateNumberBox();
         private readonly NumericUpDown _intervalMaxBox = CreateNumberBox();
+        private readonly NumericUpDown _enforceMinBox = CreateNumberBox(0);
         private readonly NumericUpDown _sequenceLoopBox = CreateNumberBox();
         private readonly NumericUpDown _sequenceIntervalMinBox = CreateNumberBox();
         private readonly NumericUpDown _sequenceIntervalMaxBox = CreateNumberBox();
+        private readonly NumericUpDown _sequenceEnforceMinBox = CreateNumberBox(0);
         private readonly CheckBox _defaultOffsetEnabledBox = new();
         private readonly ComboBox _defaultOffsetBox = new();
         private readonly ComboBox _scriptTagBox = new();
@@ -121,6 +125,8 @@ namespace Lazy_App_Codex_Core
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
                 HotkeyStop = _repository.Settings.HotkeyStop,
+                HotkeyBackupStart = _repository.Settings.HotkeyBackupStart,
+                HotkeyBackupStop = _repository.Settings.HotkeyBackupStop,
                 Tags = NormalizeTags(_repository.Settings.Tags),
                 Devices = CloneDevices(_repository.Settings.Devices)
             };
@@ -273,21 +279,31 @@ namespace Lazy_App_Codex_Core
 
             _hotkeySettingsPanel.Dock = DockStyle.Fill;
             _hotkeySettingsPanel.ColumnCount = 2;
-            _hotkeySettingsPanel.RowCount = 5;
+            _hotkeySettingsPanel.RowCount = 9;
             _hotkeySettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             _hotkeySettingsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
             _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
             _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             _hotkeySettingsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             _hotkeySettingsPanel.Controls.Add(Label("Start Hotkey"), 0, 0);
-            _hotkeySettingsPanel.Controls.Add(CreateHelpButton("Set global start/stop hotkeys. Leave blank to disable a hotkey."), 1, 0);
+            _hotkeySettingsPanel.Controls.Add(CreateHelpButton("Set primary and optional backup global hotkeys. Backups are used when primary hotkeys are already registered by another app."), 1, 0);
             _hotkeySettingsPanel.Controls.Add(_hotkeyStartBox, 0, 1);
             _hotkeySettingsPanel.SetColumnSpan(_hotkeyStartBox, 2);
             _hotkeySettingsPanel.Controls.Add(Label("Stop Hotkey"), 0, 2);
             _hotkeySettingsPanel.Controls.Add(_hotkeyStopBox, 0, 3);
             _hotkeySettingsPanel.SetColumnSpan(_hotkeyStopBox, 2);
+            _hotkeySettingsPanel.Controls.Add(Label("Backup Start Hotkey"), 0, 4);
+            _hotkeySettingsPanel.Controls.Add(_hotkeyBackupStartBox, 0, 5);
+            _hotkeySettingsPanel.SetColumnSpan(_hotkeyBackupStartBox, 2);
+            _hotkeySettingsPanel.Controls.Add(Label("Backup Stop Hotkey"), 0, 6);
+            _hotkeySettingsPanel.Controls.Add(_hotkeyBackupStopBox, 0, 7);
+            _hotkeySettingsPanel.SetColumnSpan(_hotkeyBackupStopBox, 2);
 
             _tagSettingsPanel.Dock = DockStyle.Fill;
             _tagSettingsPanel.ColumnCount = 2;
@@ -334,6 +350,8 @@ namespace Lazy_App_Codex_Core
             _tagSettingsPanel.SetColumnSpan(tagEditor, 2);
             _hotkeyStartBox.Dock = DockStyle.Fill;
             _hotkeyStopBox.Dock = DockStyle.Fill;
+            _hotkeyBackupStartBox.Dock = DockStyle.Fill;
+            _hotkeyBackupStopBox.Dock = DockStyle.Fill;
             panel.Controls.Add(_tagSettingsPanel);
             panel.Controls.Add(_hotkeySettingsPanel);
             return panel;
@@ -398,13 +416,13 @@ namespace Lazy_App_Codex_Core
         private Control BuildScriptEditor()
         {
             var panel = new TableLayoutPanel { Name = "scriptEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 5, Padding = new Padding(0, 4, 0, 4) };
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 6, Padding = new Padding(0, 4, 0, 4) };
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -415,11 +433,12 @@ namespace Lazy_App_Codex_Core
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(info, "Name", _scriptNameBox, 0);
             AddNumberField(info, "Loop Count", _loopBox, 1);
             AddNumberField(info, "Interval Min", _intervalMinBox, 2);
             AddNumberField(info, "Interval Max", _intervalMaxBox, 3);
-            info.Controls.Add(CreateHelpButton("Script info controls the loop count, interval, optional default offset, and action groups saved under config[]."), 4, 0);
+            info.Controls.Add(CreateHelpButton("Enforce Min keeps each cycle at least that many seconds. It is capped by the displayed max cycle time."), 4, 0);
             _defaultOffsetEnabledBox.Text = "Enable Default Offset";
             _defaultOffsetEnabledBox.AutoSize = true;
             _defaultOffsetEnabledBox.Dock = DockStyle.Fill;
@@ -437,7 +456,9 @@ namespace Lazy_App_Codex_Core
             info.Controls.Add(_defaultOffsetBox, 1, 3);
             info.Controls.Add(Label("Tag"), 2, 2);
             info.Controls.Add(_scriptTagBox, 2, 3);
-            info.Controls.Add(_scriptHiddenBox, 3, 2);
+            info.Controls.Add(_scriptHiddenBox, 0, 3);
+            info.Controls.Add(Label("Enforce Min"), 3, 2);
+            info.Controls.Add(_enforceMinBox, 3, 3);
 
             var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
             groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
@@ -490,11 +511,11 @@ namespace Lazy_App_Codex_Core
         private Control BuildSequenceEditor()
         {
             var panel = new TableLayoutPanel { Name = "sequenceEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 5, Padding = new Padding(0, 4, 0, 4) };
+            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 6, Padding = new Padding(0, 4, 0, 4) };
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -505,11 +526,12 @@ namespace Lazy_App_Codex_Core
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            namePanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             AddTextField(namePanel, "Name", _sequenceNameBox, 0);
             AddNumberField(namePanel, "Loop Count", _sequenceLoopBox, 1);
             AddNumberField(namePanel, "Interval Min", _sequenceIntervalMinBox, 2);
             AddNumberField(namePanel, "Interval Max", _sequenceIntervalMaxBox, 3);
-            namePanel.Controls.Add(CreateHelpButton("Sequences run script items and direct action items in order. Sequence items cannot reference another sequence."), 4, 0);
+            namePanel.Controls.Add(CreateHelpButton("Enforce Min keeps each sequence cycle at least that many seconds. It is capped by the displayed max cycle time."), 4, 0);
             _sequenceDefaultOffsetEnabledBox.Text = "Enable Default Offset";
             _sequenceDefaultOffsetEnabledBox.AutoSize = true;
             _sequenceDefaultOffsetEnabledBox.Dock = DockStyle.Fill;
@@ -523,6 +545,8 @@ namespace Lazy_App_Codex_Core
             namePanel.Controls.Add(_sequenceDefaultOffsetBox, 1, 3);
             namePanel.Controls.Add(Label("Tag"), 2, 2);
             namePanel.Controls.Add(_sequenceTagBox, 2, 3);
+            namePanel.Controls.Add(Label("Enforce Min"), 3, 2);
+            namePanel.Controls.Add(_sequenceEnforceMinBox, 3, 3);
             var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_addScriptItemButton, "Add Script", (_, _) => AddSequenceItem("script"), 100);
             ConfigureButton(_addActionItemButton, "Add Action", (_, _) => AddSequenceItem("action"), 102);
@@ -746,6 +770,8 @@ namespace Lazy_App_Codex_Core
                 {
                     _hotkeyStartBox.Text = _workingSettings.HotkeyStart;
                     _hotkeyStopBox.Text = _workingSettings.HotkeyStop;
+                    _hotkeyBackupStartBox.Text = _workingSettings.HotkeyBackupStart;
+                    _hotkeyBackupStopBox.Text = _workingSettings.HotkeyBackupStop;
                 }
 
                 ShowSettingsPanel();
@@ -773,6 +799,7 @@ namespace Lazy_App_Codex_Core
                 _loopBox.Value = ClampNumeric(_selectedScript.Duration);
                 _intervalMinBox.Value = ClampNumeric(_selectedScript.Interval_Min);
                 _intervalMaxBox.Value = ClampNumeric(_selectedScript.Interval_Max);
+                _enforceMinBox.Value = ClampNumeric(_selectedScript.Enforce_Min);
                 _defaultOffsetEnabledBox.Checked = _selectedScript.DefaultOffsetEnabled;
                 _defaultOffsetBox.Enabled = _defaultOffsetEnabledBox.Checked;
                 SelectOffsetValue(_defaultOffsetBox, _selectedScript.DefaultOffset);
@@ -787,6 +814,7 @@ namespace Lazy_App_Codex_Core
                 _sequenceLoopBox.Value = ClampNumeric(_selectedSequence.Duration);
                 _sequenceIntervalMinBox.Value = ClampNumeric(_selectedSequence.Interval_Min);
                 _sequenceIntervalMaxBox.Value = ClampNumeric(_selectedSequence.Interval_Max);
+                _sequenceEnforceMinBox.Value = ClampNumeric(_selectedSequence.Enforce_Min);
                 _sequenceDefaultOffsetEnabledBox.Checked = _selectedSequence.DefaultOffsetEnabled;
                 _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 SelectOffsetValue(_sequenceDefaultOffsetBox, _selectedSequence.DefaultOffset);
@@ -834,6 +862,8 @@ namespace Lazy_App_Codex_Core
             _offsetNameBox.Clear();
             _hotkeyStartBox.Clear();
             _hotkeyStopBox.Clear();
+            _hotkeyBackupStartBox.Clear();
+            _hotkeyBackupStopBox.Clear();
             _tagNameBox.Clear();
             _tagList.Items.Clear();
             _deviceKeyBox.Clear();
@@ -847,9 +877,11 @@ namespace Lazy_App_Codex_Core
             _loopBox.Value = 0;
             _intervalMinBox.Value = 0;
             _intervalMaxBox.Value = 1;
+            _enforceMinBox.Value = 0;
             _sequenceLoopBox.Value = 0;
             _sequenceIntervalMinBox.Value = 0;
             _sequenceIntervalMaxBox.Value = 0;
+            _sequenceEnforceMinBox.Value = 0;
             _defaultOffsetEnabledBox.Checked = false;
             _defaultOffsetBox.Enabled = false;
             SelectOffsetValue(_defaultOffsetBox, "0");
@@ -1081,6 +1113,8 @@ namespace Lazy_App_Codex_Core
                 {
                     _workingSettings.HotkeyStart = _hotkeyStartBox.Text.Trim();
                     _workingSettings.HotkeyStop = _hotkeyStopBox.Text.Trim();
+                    _workingSettings.HotkeyBackupStart = _hotkeyBackupStartBox.Text.Trim();
+                    _workingSettings.HotkeyBackupStop = _hotkeyBackupStopBox.Text.Trim();
                 }
 
                 return true;
@@ -1152,6 +1186,13 @@ namespace Lazy_App_Codex_Core
                 _selectedScript.Duration = (int)_loopBox.Value;
                 _selectedScript.Interval_Min = (int)_intervalMinBox.Value;
                 _selectedScript.Interval_Max = (int)_intervalMaxBox.Value;
+                int scriptMaxCycle = GetScriptCycleTotals(_selectedScript).max;
+                if (!ValidateEnforceMin((int)_enforceMinBox.Value, scriptMaxCycle, "Script"))
+                {
+                    return false;
+                }
+
+                _selectedScript.Enforce_Min = (int)_enforceMinBox.Value;
                 _selectedScript.DefaultOffsetEnabled = _defaultOffsetEnabledBox.Checked;
                 _selectedScript.DefaultOffset = OffsetDisplayOption.ReadValue(_defaultOffsetBox.SelectedItem);
                 _selectedScript.Tag = RequireSelectedTag(_scriptTagBox);
@@ -1178,6 +1219,13 @@ namespace Lazy_App_Codex_Core
                 _selectedSequence.Duration = (int)_sequenceLoopBox.Value;
                 _selectedSequence.Interval_Min = (int)_sequenceIntervalMinBox.Value;
                 _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
+                int sequenceMaxCycle = GetSequenceCycleTotals().max;
+                if (!ValidateEnforceMin((int)_sequenceEnforceMinBox.Value, sequenceMaxCycle, "Sequence"))
+                {
+                    return false;
+                }
+
+                _selectedSequence.Enforce_Min = (int)_sequenceEnforceMinBox.Value;
                 _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
                 _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
@@ -1219,6 +1267,8 @@ namespace Lazy_App_Codex_Core
             {
                 ["hotkeyStart"] = _workingSettings.HotkeyStart,
                 ["hotkeyStop"] = _workingSettings.HotkeyStop,
+                ["hotkeyBackupStart"] = _workingSettings.HotkeyBackupStart,
+                ["hotkeyBackupStop"] = _workingSettings.HotkeyBackupStop,
                 ["tag"] = new JArray(NormalizeTags(_workingSettings.Tags)),
                 ["devices"] = JObject.FromObject(_workingDevices)
             };
@@ -1575,12 +1625,18 @@ namespace Lazy_App_Codex_Core
             foreach (DataGridViewRow row in _stepGrid.Rows)
             {
                 if (row.IsNewRow || IsEmptyRow(row)) continue;
-                min += ParseInt(row, "sleepMin", 0);
-                max += ParseInt(row, "sleepMax", 0);
+                var sleepRange = NormalizeRange(ParseInt(row, "sleepMin", 0), ParseInt(row, "sleepMax", 0));
+                min += sleepRange.min;
+                max += sleepRange.max;
             }
 
             int repeat = ReadRepeatBoxValue();
-            _stepTotalLabel.Text = $"Group total time: Min {min * repeat}s | Max {max * repeat}s";
+            int groupMin = min * repeat;
+            int groupMax = max * repeat;
+            string cycleText = _selectedScript == null
+                ? ""
+                : $" | Cycle Max {GetScriptCycleTotals(_selectedScript).max}s";
+            _stepTotalLabel.Text = $"Group total time: Min {groupMin}s | Max {groupMax}s{cycleText}";
         }
 
         private int ReadRepeatBoxValue()
@@ -1589,6 +1645,12 @@ namespace Lazy_App_Codex_Core
         }
 
         private void UpdateSequenceTotals()
+        {
+            var (min, max) = GetSequenceCycleTotals();
+            _sequenceTotalLabel.Text = $"Sequence total time: Min {min}s | Max {max}s";
+        }
+
+        private (int min, int max) GetSequenceCycleTotals()
         {
             int min = 0;
             int max = 0;
@@ -1610,19 +1672,42 @@ namespace Lazy_App_Codex_Core
 
                     int repeat = Math.Max(1, ParseInt(row, "repeat", 1));
                     var stepTotals = GetScriptStepTotals(script);
-                    min += (stepTotals.min * repeat) + ParseInt(row, "imin", 0);
-                    max += (stepTotals.max * repeat) + ParseInt(row, "imax", 0);
+                    var delayRange = NormalizeRange(ParseInt(row, "imin", 0), ParseInt(row, "imax", 0));
+                    min += (stepTotals.min * repeat) + delayRange.min;
+                    max += (stepTotals.max * repeat) + delayRange.max;
                 }
                 else
                 {
-                    min += ParseInt(row, "sleepMin", 0);
-                    max += ParseInt(row, "sleepMax", 0);
+                    var sleepRange = NormalizeRange(ParseInt(row, "sleepMin", 0), ParseInt(row, "sleepMax", 0));
+                    min += sleepRange.min;
+                    max += sleepRange.max;
                 }
             }
 
-            min += Math.Max(0, (int)_sequenceIntervalMinBox.Value);
-            max += Math.Max(0, (int)_sequenceIntervalMaxBox.Value);
-            _sequenceTotalLabel.Text = $"Sequence total time: Min {min}s | Max {max}s";
+            var intervalRange = NormalizeRange((int)_sequenceIntervalMinBox.Value, (int)_sequenceIntervalMaxBox.Value);
+            min += intervalRange.min;
+            max += intervalRange.max;
+            return (min, max);
+        }
+
+        private (int min, int max) GetScriptCycleTotals(ScriptModel script)
+        {
+            var stepTotals = GetScriptStepTotals(script);
+            var intervalRange = NormalizeRange((int)_intervalMinBox.Value, (int)_intervalMaxBox.Value);
+            return (
+                stepTotals.min + intervalRange.min,
+                stepTotals.max + intervalRange.max);
+        }
+
+        private bool ValidateEnforceMin(int requested, int max, string label)
+        {
+            if (requested <= Math.Max(0, max))
+            {
+                return true;
+            }
+
+            ShowValidation($"{label} Enforce Min cannot be larger than max cycle time ({Math.Max(0, max)}s).");
+            return false;
         }
 
         private static (int min, int max) GetScriptStepTotals(ScriptModel script)
@@ -1632,11 +1717,18 @@ namespace Lazy_App_Codex_Core
             foreach (var group in script.Groups)
             {
                 int repeat = Math.Max(1, group.Repeat);
-                min += group.Steps.Sum(step => step.Sleep_Min) * repeat;
-                max += group.Steps.Sum(step => step.Sleep_Max) * repeat;
+                min += group.Steps.Sum(step => NormalizeRange(step.Sleep_Min, step.Sleep_Max).min) * repeat;
+                max += group.Steps.Sum(step => NormalizeRange(step.Sleep_Min, step.Sleep_Max).max) * repeat;
             }
 
             return (min, max);
+        }
+
+        private static (int min, int max) NormalizeRange(int min, int max)
+        {
+            min = Math.Max(0, min);
+            max = Math.Max(0, max);
+            return max < min ? (max, min) : (min, max);
         }
 
         private void RefreshTagList()
@@ -1987,6 +2079,8 @@ namespace Lazy_App_Codex_Core
             {
                 HotkeyStart = _repository.Settings.HotkeyStart,
                 HotkeyStop = _repository.Settings.HotkeyStop,
+                HotkeyBackupStart = _repository.Settings.HotkeyBackupStart,
+                HotkeyBackupStop = _repository.Settings.HotkeyBackupStop,
                 Tags = NormalizeTags(_repository.Settings.Tags),
                 Devices = CloneDevices(_repository.Settings.Devices)
             };
@@ -2387,10 +2481,13 @@ namespace Lazy_App_Codex_Core
             };
             _groupRepeatBox.TextChanged += (_, _) => UpdateStepTotals();
             _scriptNameBox.TextChanged += (_, _) => UpdateSelectedListName(_scriptNameBox.Text.Trim());
+            _intervalMinBox.ValueChanged += (_, _) => UpdateStepTotals();
+            _intervalMaxBox.ValueChanged += (_, _) => UpdateStepTotals();
             _sequenceNameBox.TextChanged += (_, _) => UpdateSelectedListName(_sequenceNameBox.Text.Trim());
             _sequenceLoopBox.ValueChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceIntervalMinBox.ValueChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceIntervalMaxBox.ValueChanged += (_, _) => UpdateSelectedSequenceSettings();
+            _sequenceEnforceMinBox.ValueChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceDefaultOffsetEnabledBox.CheckedChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceDefaultOffsetBox.SelectedIndexChanged += (_, _) => UpdateSelectedSequenceSettings();
         }
@@ -2405,6 +2502,7 @@ namespace Lazy_App_Codex_Core
             _selectedSequence.Duration = (int)_sequenceLoopBox.Value;
             _selectedSequence.Interval_Min = (int)_sequenceIntervalMinBox.Value;
             _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
+            _selectedSequence.Enforce_Min = Math.Min((int)_sequenceEnforceMinBox.Value, GetSequenceCycleTotals().max);
             _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
             _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
             _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
@@ -2530,6 +2628,7 @@ namespace Lazy_App_Codex_Core
                 Duration = source.Duration,
                 Interval_Min = source.Interval_Min,
                 Interval_Max = source.Interval_Max,
+                Enforce_Min = source.Enforce_Min,
                 DefaultOffsetEnabled = source.DefaultOffsetEnabled,
                 DefaultOffset = source.DefaultOffset,
                 Groups = source.Groups.Select(CloneGroupModel).ToList()
@@ -2552,6 +2651,7 @@ namespace Lazy_App_Codex_Core
                 Duration = source.Duration,
                 Interval_Min = source.Interval_Min,
                 Interval_Max = source.Interval_Max,
+                Enforce_Min = source.Enforce_Min,
                 DefaultOffsetEnabled = source.DefaultOffsetEnabled,
                 DefaultOffset = source.DefaultOffset,
                 Items = source.Items.Select(item => new SequenceItem

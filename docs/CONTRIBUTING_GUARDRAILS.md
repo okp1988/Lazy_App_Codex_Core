@@ -13,7 +13,10 @@
 - Hidden Scripts remaining valid in Sequences.
 - Tag filter behavior with `All` at index 0.
 - Separate hotkey and ADB status dots.
+- Hotkey dot color meanings: green for primary hotkeys, yellow for backup hotkeys, red for no registered hotkey.
 - ADB monitor color meanings.
+- Optional backup hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
+- Script and Sequence `emin` minimum cycle enforcement.
 - Wireless ADB Pair / Connect and Restart Server as manual helpers, not a background reconnect loop.
 - Saved Wi-Fi device keys without ports, with current `IP:Port` stored in `lastSerial`.
 - Cancellation-based Run/Stop behavior.
@@ -36,6 +39,7 @@
 
 - Do not reintroduce `hotkeyStartStopToggle` as canonical.
 - Do not make positive duration mean seconds.
+- Do not allow Script or Sequence `emin` to exceed the displayed max cycle time.
 - Do not apply UI offsets to drag or back actions.
 - Do not let Sequences reference other Sequences.
 - Do not remove alias compatibility accidentally.
@@ -82,6 +86,7 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 
 - App opens.
 - Global hotkey dot reflects registration.
+- Primary hotkeys show a green dot, backup hotkeys show a yellow dot, and no registered hotkey shows a red dot.
 - ADB dot shows dark gray/yellow/green/red correctly.
 - Run blocks with no ready device.
 - Run blocks with multiple ready devices until a device is selected.
@@ -96,4 +101,5 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Script picker highlights the current selected item when opened.
 - Tag filtering shows selected tag plus blank-tag entries.
 - Hidden Scripts are absent from main picker and present for Sequence references.
+- Script and Sequence Enforce Min rejects values above max cycle time and stretches randomized cycles up to the configured minimum.
 - Track Touch starts only when the selected ADB device is ready and stops when that device is lost.

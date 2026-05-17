@@ -5,7 +5,7 @@
 - This is a single-project Windows Forms app targeting `net8.0-windows` with `UseWindowsForms=true`; the solution contains no separate test project.
 - The app is an ADB-backed Android automation runner. `config.json` is the editable runtime script source and is intentionally not copied to build/publish output by the `.csproj`.
 - `Form1.cs` owns the main window, global hotkey routing, run/stop state, offset selection, taskbar overlay icons, and opening the config editor.
-- Main-window status dots are separate: `statusDot` is global hotkey registration, and `adbStatusDot` is ADB server/device status from the background `adb track-devices` monitor. ADB status colors are dark gray for no server, red for server with no ready device, green for one ready device, and yellow for multiple ready devices.
+- Main-window status dots are separate: `statusDot` is global hotkey registration, and `adbStatusDot` is ADB server/device status from the background `adb track-devices` monitor. Hotkey status colors are green for primary hotkeys registered, yellow for backup hotkeys registered, and red for no registered hotkey. ADB status colors are dark gray for no server, red for server with no ready device, green for one ready device, and yellow for multiple ready devices.
 - The main Device dropdown is populated only from currently ready `adb track-devices` rows. One ready device is auto-selected; multiple ready devices require a user selection. Wi-Fi devices are displayed without the port, but ADB commands use the full selected serial internally.
 - `SearchableDropdown.cs` is the custom main Script/Sequence picker. Its popup owns search text and clears it on close; the main field should only show the selected item. When the popup opens, highlight the current selected item if it is still present in the filtered list.
 - `ConfigEditorForm.cs` is a hand-built WinForms editor for the four config categories: `settings`, `offset`, `scripts`, and `sequences`.
@@ -21,12 +21,12 @@
 ## Config Rules
 
 - `config.json` supports both top-level legacy scripts and the current `{ settings, offset, scripts, sequences }` shape; repository loading skips those category keys when scanning legacy scripts.
-- Settings are migrated from `hotkeyStartStopToggle` to `hotkeyStart`; do not reintroduce the old setting as the canonical key.
+- Settings are migrated from `hotkeyStartStopToggle` to `hotkeyStart`; do not reintroduce the old setting as the canonical key. Backup hotkeys use `hotkeyBackupStart` and `hotkeyBackupStop`, may be blank, and are tried only if the primary pair cannot register.
 - Offset profiles are named `s<number>` and selected by matching digits in the script name; fallback keys include `offsetX`/`offsetY`, `ox`/`oy`, `x`/`y`, and `s`.
 - Script aliases are meaningful API: `d`, `imin`, `imax`, `i`, `config`, `steps`, nested `steps` with `repeat`/`rep`, `a`, `s`, `s2`, `p`, `p2`, `r`, `t`, and `o` must remain compatible unless intentionally migrated.
 - Runtime action normalization maps `left` to `leftclick`, `right` to `rightclick`, and leaves directional drag names usable; unknown actions are logged and skipped.
 - Only left-click steps consume the selected UI offset. A per-step `offset`/`o` value of `x` or `y` overrides the axis selected in the main window.
-- The config editor currently writes compact script output (`d`, `imin`, `imax`, `config`, `a`, `s`, `s2`, `r`, `t`) and only exposes `left`, `right`, and `drag` in its action grids.
+- The config editor currently writes compact script output (`d`, `imin`, `imax`, `emin`, `config`, `a`, `s`, `s2`, `r`, `t`) and only exposes `left`, `right`, and `drag` in its action grids.
 - Sequences are first-class config entries. Sequence items may reference scripts by `scriptId` or contain direct actions; sequences must not reference other sequences.
 - `settings.tag` is the canonical tag list and may be empty. Scripts and sequences may store one configured `tag` or a blank tag; selecting a tag in the main filter shows that tag plus blank-tag entries. The main window tag filter always includes `All` at index 0 before configured tags.
 - `settings.devices` is the canonical device history/name map. It stores `name`, `manufacturer`, `model`, `lastSerial`, and `lastSeen`; automatic sync may fill missing data for new devices but must not overwrite existing manufacturer/model conflicts silently.
@@ -38,9 +38,10 @@
 - Start/stop is cancellation-token based. `StopRunAsync` cancels `_runCts` and waits for `_runTask`; avoid fire-and-forget script execution paths.
 - `Duration <= 0` means run indefinitely. Positive duration is a loop count, not seconds.
 - Step sleeps and loop interval sleeps are randomized inclusively; inverted min/max values are swapped in `ScriptRunner.RandomBetween`.
+- Script and Sequence `emin` is an optional minimum cycle time in seconds. It cannot exceed the displayed max cycle time; runtime computes a cycle plan before execution and re-randomizes the lowest flexible waits upward until the plan reaches `emin`. If `emin` equals max cycle time, all flexible waits use their maximum values.
 - Drag steps use `s2`/`scrX2`/`scrY2` when supplied. Without an explicit end point, directional drag aliases derive the end point from `RandX`/`RandY`.
 - Global hotkeys are unregistered when the window is minimized and re-registered when restored/activated; this behavior is logged in the UI log and warning log.
-- If start and stop hotkeys are the same, only the primary hotkey is registered and it toggles start/stop.
+- If active start and stop hotkeys are the same, only one hotkey is registered and it toggles start/stop.
 
 ## Build and Run
 

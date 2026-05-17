@@ -1,14 +1,20 @@
 # Code Review
 
-Review date: 2026-05-16
+Review date: 2026-05-18
 
 Scope: current working tree for the Windows Forms ADB automation runner.
 
 ## Summary
 
-The project builds successfully with `dotnet build Lazy_App_Codex_Core.sln` after allowing the build to read local Windows SDK metadata. The current code is coherent overall: config migration, the editor model, sequence support, hotkey routing, ADB status dots, and cancellation-based run/stop behavior are all in place.
+The project builds successfully when using a separate output path while a local app instance is running. The current code is coherent overall: config migration, the editor model, sequence support, primary/backup hotkey routing, ADB status dots, cycle enforcement, and cancellation-based run/stop behavior are all in place.
 
-The main remaining risks are behavioral edge cases in action normalization and legacy directional drags. ADB tracking now exposes ready device serials to the main Device dropdown so runs can target the selected device, and `settings.devices` stores friendly device names plus synced manufacturer/model metadata.
+The main remaining risks are behavioral edge cases in action normalization and legacy directional drags. ADB tracking exposes ready device serials to the main Device dropdown so runs can target the selected device, and `settings.devices` stores friendly device names plus synced manufacturer/model metadata.
+
+Recent changes:
+
+- Scripts and Sequences now support `emin`, an enforced minimum cycle time capped by max cycle time.
+- Settings now support optional backup hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
+- The hotkey dot is green for primary registration, yellow for backup registration, and red when no hotkey is registered.
 
 ## Findings
 
@@ -40,7 +46,7 @@ Recommended fix: either preserve the directional alias until planning, or store 
 
 ### Low: Invalid hotkey text silently falls back to defaults
 
-File: `HotKeyManager.cs:149`
+File: `HotKeyManager.cs`
 
 If a hotkey string has no parseable key, `TryParseHotkey` still returns `true`, leaving default key/modifier values in place. Empty text disables a hotkey, but invalid non-empty text enables the default.
 
@@ -50,10 +56,11 @@ Recommended fix: return `false` when non-empty input contains no valid key, or m
 
 ## Verification
 
-Command run:
+Commands run:
 
 ```text
 dotnet build Lazy_App_Codex_Core.sln --configuration Release
+dotnet build Lazy_App_Codex_Core.sln -p:OutputPath=D:\Misc_Project\Lazy_App_Codex_Core\build_check\
 ```
 
-Result: build succeeded with 0 warnings and 0 errors after sandbox escalation for local Windows SDK access.
+Result: separate-output build succeeded with 0 warnings and 0 errors after sandbox escalation for local Windows SDK access. Normal output may be blocked when `Lazy App.exe` is already running and locking `bin`.

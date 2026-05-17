@@ -13,6 +13,13 @@ namespace Lazy_App_Codex_Core
         StartOrStop = 3
     }
 
+    public enum HotkeyRegistrationProfile
+    {
+        None = 0,
+        Primary = 1,
+        Backup = 2
+    }
+
     public class HotkeyManager
     {
         [DllImport("user32.dll", SetLastError = true)]
@@ -36,15 +43,27 @@ namespace Lazy_App_Codex_Core
         private bool _secondaryRegistered;
         private bool _startHotkeyEnabled = true;
         private bool _stopHotkeyEnabled = true;
+        private bool _backupStartHotkeyEnabled;
+        private bool _backupStopHotkeyEnabled;
         private int _startHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _startHotkeyKey = DEFAULT_HOTKEY_START;
         private int _stopHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
         private int _stopHotkeyKey = DEFAULT_HOTKEY_STOP;
+        private int _backupStartHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
+        private int _backupStartHotkeyKey = DEFAULT_HOTKEY_START;
+        private int _backupStopHotkeyModifiers = DEFAULT_HOTKEY_MODIFIERS;
+        private int _backupStopHotkeyKey = DEFAULT_HOTKEY_STOP;
+        private HotkeyRegistrationProfile _activeProfile = HotkeyRegistrationProfile.None;
 
         public string StartHotkeyText => _startHotkeyEnabled ? ToDisplayText(_startHotkeyModifiers, _startHotkeyKey) : "Disabled";
         public string StopHotkeyText => _stopHotkeyEnabled ? ToDisplayText(_stopHotkeyModifiers, _stopHotkeyKey) : "Disabled";
+        public string BackupStartHotkeyText => _backupStartHotkeyEnabled ? ToDisplayText(_backupStartHotkeyModifiers, _backupStartHotkeyKey) : "Disabled";
+        public string BackupStopHotkeyText => _backupStopHotkeyEnabled ? ToDisplayText(_backupStopHotkeyModifiers, _backupStopHotkeyKey) : "Disabled";
+        public string ActiveStartHotkeyText => _activeProfile == HotkeyRegistrationProfile.Backup ? BackupStartHotkeyText : StartHotkeyText;
+        public string ActiveStopHotkeyText => _activeProfile == HotkeyRegistrationProfile.Backup ? BackupStopHotkeyText : StopHotkeyText;
+        public HotkeyRegistrationProfile ActiveProfile => _activeProfile;
 
-        public void Configure(string? startHotkey, string? stopHotkey)
+        public void Configure(string? startHotkey, string? stopHotkey, string? backupStartHotkey, string? backupStopHotkey)
         {
             _startHotkeyEnabled = TryParseHotkey(
                 startHotkey,
@@ -59,50 +78,88 @@ namespace Lazy_App_Codex_Core
                 DEFAULT_HOTKEY_STOP,
                 out _stopHotkeyModifiers,
                 out _stopHotkeyKey);
+
+            _backupStartHotkeyEnabled = TryParseHotkey(
+                backupStartHotkey,
+                DEFAULT_HOTKEY_MODIFIERS,
+                DEFAULT_HOTKEY_START,
+                out _backupStartHotkeyModifiers,
+                out _backupStartHotkeyKey);
+
+            _backupStopHotkeyEnabled = TryParseHotkey(
+                backupStopHotkey,
+                DEFAULT_HOTKEY_MODIFIERS,
+                DEFAULT_HOTKEY_STOP,
+                out _backupStopHotkeyModifiers,
+                out _backupStopHotkeyKey);
         }
 
         /// <summary>Registers global hotkeys for the current window handle.</summary>
-        public bool Register(IntPtr handle)
+        public HotkeyRegistrationProfile Register(IntPtr handle)
         {
             if (handle == IntPtr.Zero)
             {
                 _registered = false;
                 _secondaryRegistered = false;
-                return false;
+                _activeProfile = HotkeyRegistrationProfile.None;
+                return _activeProfile;
             }
 
             UnregisterAll(handle);
+            if (TryRegisterProfile(handle, HotkeyRegistrationProfile.Primary))
+            {
+                return _activeProfile;
+            }
+
+            UnregisterAll(handle);
+            TryRegisterProfile(handle, HotkeyRegistrationProfile.Backup);
+            return _activeProfile;
+        }
+
+        private bool TryRegisterProfile(IntPtr handle, HotkeyRegistrationProfile profile)
+        {
+            bool startEnabled = profile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyEnabled : _startHotkeyEnabled;
+            bool stopEnabled = profile == HotkeyRegistrationProfile.Backup ? _backupStopHotkeyEnabled : _stopHotkeyEnabled;
+            int startModifiers = profile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyModifiers : _startHotkeyModifiers;
+            int startKey = profile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyKey : _startHotkeyKey;
+            int stopModifiers = profile == HotkeyRegistrationProfile.Backup ? _backupStopHotkeyModifiers : _stopHotkeyModifiers;
+            int stopKey = profile == HotkeyRegistrationProfile.Backup ? _backupStopHotkeyKey : _stopHotkeyKey;
+            if (!startEnabled && !stopEnabled)
+            {
+                _registered = false;
+                _secondaryRegistered = false;
+                _activeProfile = HotkeyRegistrationProfile.None;
+                return false;
+            }
 
             bool primaryOk = true;
-            if (_startHotkeyEnabled)
+            if (startEnabled)
             {
-                primaryOk = RegisterHotKey(handle, HOTKEY_ID_PRIMARY, _startHotkeyModifiers, _startHotkeyKey);
+                primaryOk = RegisterHotKey(handle, HOTKEY_ID_PRIMARY, startModifiers, startKey);
                 if (!primaryOk)
                 {
                     _registered = false;
+                    _activeProfile = HotkeyRegistrationProfile.None;
                     return false;
                 }
             }
 
-            _secondaryRegistered = _stopHotkeyEnabled && (!_startHotkeyEnabled || !IsSameStartStop());
+            _secondaryRegistered = stopEnabled && (!startEnabled || !IsSameStartStop(startModifiers, startKey, stopModifiers, stopKey));
             bool secondaryOk = true;
             if (_secondaryRegistered)
             {
-                secondaryOk = RegisterHotKey(handle, HOTKEY_ID_SECONDARY, _stopHotkeyModifiers, _stopHotkeyKey);
+                secondaryOk = RegisterHotKey(handle, HOTKEY_ID_SECONDARY, stopModifiers, stopKey);
             }
 
             _registered = primaryOk && secondaryOk;
-            if (!_startHotkeyEnabled && !_secondaryRegistered)
-            {
-                _registered = true;
-            }
-
             if (!_registered)
             {
                 UnregisterAll(handle);
+                return false;
             }
 
-            return _registered;
+            _activeProfile = profile;
+            return true;
         }
 
         /// <summary>Unregisters all hotkeys owned by this window handle.</summary>
@@ -112,6 +169,7 @@ namespace Lazy_App_Codex_Core
             UnregisterHotKey(handle, HOTKEY_ID_SECONDARY);
             _registered = false;
             _secondaryRegistered = false;
+            _activeProfile = HotkeyRegistrationProfile.None;
         }
 
         /// <summary>Handles WM_HOTKEY window messages and maps to app actions.</summary>
@@ -125,12 +183,12 @@ namespace Lazy_App_Codex_Core
             int id = m.WParam.ToInt32();
             if (id == HOTKEY_ID_PRIMARY)
             {
-                if (_startHotkeyEnabled && _stopHotkeyEnabled && IsSameStartStop())
+                if (IsActiveStartStopSame())
                 {
                     return HotkeyAction.StartOrStop;
                 }
 
-                return HotkeyAction.Start;
+                return IsActiveStartEnabled() ? HotkeyAction.Start : HotkeyAction.Stop;
             }
 
             if (id == HOTKEY_ID_SECONDARY)
@@ -141,9 +199,26 @@ namespace Lazy_App_Codex_Core
             return HotkeyAction.None;
         }
 
-        private bool IsSameStartStop()
+        private bool IsActiveStartStopSame()
         {
-            return _startHotkeyModifiers == _stopHotkeyModifiers && _startHotkeyKey == _stopHotkeyKey;
+            if (_activeProfile == HotkeyRegistrationProfile.Backup)
+            {
+                return _backupStartHotkeyEnabled && _backupStopHotkeyEnabled &&
+                    IsSameStartStop(_backupStartHotkeyModifiers, _backupStartHotkeyKey, _backupStopHotkeyModifiers, _backupStopHotkeyKey);
+            }
+
+            return _startHotkeyEnabled && _stopHotkeyEnabled &&
+                IsSameStartStop(_startHotkeyModifiers, _startHotkeyKey, _stopHotkeyModifiers, _stopHotkeyKey);
+        }
+
+        private bool IsActiveStartEnabled()
+        {
+            return _activeProfile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyEnabled : _startHotkeyEnabled;
+        }
+
+        private static bool IsSameStartStop(int startModifiers, int startKey, int stopModifiers, int stopKey)
+        {
+            return startModifiers == stopModifiers && startKey == stopKey;
         }
 
         private static bool TryParseHotkey(string? hotkeySetting, int defaultModifiers, int defaultKey, out int modifiers, out int key)

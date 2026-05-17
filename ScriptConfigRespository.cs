@@ -12,6 +12,12 @@ namespace Lazy_App_Codex_Core
         [JsonProperty("hotkeyStop")]
         public string HotkeyStop { get; set; } = "CTRL+ALT+D";
 
+        [JsonProperty("hotkeyBackupStart")]
+        public string HotkeyBackupStart { get; set; } = "";
+
+        [JsonProperty("hotkeyBackupStop")]
+        public string HotkeyBackupStop { get; set; } = "";
+
         [JsonProperty("tag")]
         public List<string> Tags { get; set; } = new();
 
@@ -183,8 +189,12 @@ namespace Lazy_App_Codex_Core
             MigrateSetting(root, "hotkeyStartStopToggle", "hotkeyStart");
             NormalizeSettingKey(root, "HotkeyStart", "hotkeyStart");
             NormalizeSettingKey(root, "HotkeyStop", "hotkeyStop");
+            NormalizeSettingKey(root, "HotkeyBackupStart", "hotkeyBackupStart");
+            NormalizeSettingKey(root, "HotkeyBackupStop", "hotkeyBackupStop");
             EnsureSetting(root, "hotkeyStart", "CTRL+ALT+S");
             EnsureSetting(root, "hotkeyStop", "CTRL+ALT+D");
+            EnsureSetting(root, "hotkeyBackupStart", "");
+            EnsureSetting(root, "hotkeyBackupStop", "");
             EnsureTagSettings(root);
             EnsureDeviceSettings(root);
         }
@@ -255,6 +265,7 @@ namespace Lazy_App_Codex_Core
                     script["tag"] = "";
                 }
                 script["hide"] ??= false;
+                script["emin"] ??= 0;
                 script["defaultOffsetEnabled"] ??= false;
                 script["defaultOffset"] ??= "0";
                 if (script["config"] is not JArray)
@@ -284,6 +295,7 @@ namespace Lazy_App_Codex_Core
                 sequence["d"] ??= 1;
                 sequence["imin"] ??= 0;
                 sequence["imax"] ??= 0;
+                sequence["emin"] ??= 0;
                 sequence["defaultOffsetEnabled"] ??= false;
                 sequence["defaultOffset"] ??= "0";
                 sequence["items"] ??= new JArray();
@@ -377,6 +389,7 @@ namespace Lazy_App_Codex_Core
                 Duration = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, -1, "duration", "d"),
                 Interval_Min = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, 0, "interval_min", "imin", "interval", "i"),
                 Interval_Max = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 1, 1, "interval_max", "imax", "interval", "i"),
+                Enforce_Min = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, -1, "enforce_min", "enforceMin", "minimumCycleSeconds", "minCycle", "emin"),
                 DefaultOffsetEnabled = ReadBool(scriptObj, false, "defaultOffsetEnabled", "enableDefaultOffset"),
                 DefaultOffset = ReadString(scriptObj, null, "0", "defaultOffset")
             };
@@ -430,6 +443,7 @@ namespace Lazy_App_Codex_Core
                 Duration = ReadInt(sequenceObj, null, 1, -1, "duration", "d"),
                 Interval_Min = ReadInt(sequenceObj, null, 0, 0, "interval_min", "imin", "interval", "i"),
                 Interval_Max = ReadInt(sequenceObj, null, 0, 1, "interval_max", "imax", "interval", "i"),
+                Enforce_Min = ReadInt(sequenceObj, null, 0, -1, "enforce_min", "enforceMin", "minimumCycleSeconds", "minCycle", "emin"),
                 DefaultOffsetEnabled = ReadBool(sequenceObj, false, "defaultOffsetEnabled", "enableDefaultOffset"),
                 DefaultOffset = ReadString(sequenceObj, null, "0", "defaultOffset")
             };
@@ -478,6 +492,7 @@ namespace Lazy_App_Codex_Core
                 ["d"] = script.Duration,
                 ["imin"] = script.Interval_Min,
                 ["imax"] = script.Interval_Max,
+                ["emin"] = Math.Max(0, script.Enforce_Min),
                 ["defaultOffsetEnabled"] = script.DefaultOffsetEnabled,
                 ["defaultOffset"] = string.IsNullOrWhiteSpace(script.DefaultOffset) ? "0" : script.DefaultOffset,
                 ["config"] = config
@@ -495,6 +510,7 @@ namespace Lazy_App_Codex_Core
                 ["d"] = sequence.Duration,
                 ["imin"] = sequence.Interval_Min,
                 ["imax"] = sequence.Interval_Max,
+                ["emin"] = Math.Max(0, sequence.Enforce_Min),
                 ["defaultOffsetEnabled"] = sequence.DefaultOffsetEnabled,
                 ["defaultOffset"] = string.IsNullOrWhiteSpace(sequence.DefaultOffset) ? "0" : sequence.DefaultOffset,
                 ["items"] = new JArray(sequence.Items.Select(BuildSequenceItemJson))

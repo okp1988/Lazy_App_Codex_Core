@@ -16,7 +16,7 @@ Responsibilities:
 - Build the Script/Sequence run target list.
 - Apply tag filtering.
 - Apply default offsets.
-- Register and unregister global hotkeys.
+- Register and unregister primary or backup global hotkeys.
 - Route Run, Stop, Escape, and hotkey actions.
 - Own run cancellation state.
 - Own live run status labels.
@@ -71,7 +71,7 @@ In-memory config models:
 
 ### `ScriptRunner.cs`
 
-Runtime planner and executor. It expands Scripts and Sequences into planned ADB commands, applies random sleeps, applies offsets, updates live status, and respects cancellation.
+Runtime planner and executor. It expands Scripts and Sequences into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, updates live status, and respects cancellation.
 
 ### `AdbShellController.cs`
 
@@ -81,7 +81,7 @@ It exposes captured Pair, Connect, Kill Server, and Start Server helpers for Wir
 
 ### `HotKeyManager.cs`
 
-Global hotkey parser, registration, unregistration, and `WM_HOTKEY` routing.
+Global hotkey parser, primary/backup registration, unregistration, and `WM_HOTKEY` routing. It reports whether the active registration profile is primary, backup, or none so the main hotkey dot can show green, yellow, or red.
 
 ### `OffsetDisplayOption.cs`
 
@@ -105,8 +105,9 @@ flowchart TD
     D --> E["User selects Script or Sequence"]
     E --> F["Form1 validates ADB status"]
     F --> G["ScriptRunner expands plan"]
-    G --> H["AdbShellController executes adb commands"]
-    G --> I["Form1 live status labels"]
+    G --> H["ScriptRunner enforces min cycle time"]
+    H --> I["AdbShellController executes adb commands"]
+    H --> J["Form1 live status labels"]
 ```
 
 ## ADB Status Flow

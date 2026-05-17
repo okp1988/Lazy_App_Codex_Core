@@ -93,7 +93,11 @@ namespace Lazy_App_Codex_Core
             ResetOffsetSelection();
 
             LoadConfig();
-            _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
+            _hotkeys.Configure(
+                _configRepository.Settings.HotkeyStart,
+                _configRepository.Settings.HotkeyStop,
+                _configRepository.Settings.HotkeyBackupStart,
+                _configRepository.Settings.HotkeyBackupStop);
             _clockTimer.Interval = 1000;
             _clockTimer.Tick += (_, _) => UpdateLiveStatusLabels();
             _clockTimer.Start();
@@ -154,7 +158,7 @@ namespace Lazy_App_Codex_Core
                 }
 
                 _hotkeys.UnregisterAll(Handle);
-                UpdateHotkeyStatus(false);
+                UpdateHotkeyStatus(HotkeyRegistrationProfile.None);
                 _lastHotkeyRegistrationSucceeded = null;
                 WriteLog("GLOBAL HOTKEY DROPPED WHILE MINIMIZED.");
                 return;
@@ -168,18 +172,20 @@ namespace Lazy_App_Codex_Core
 
         private void RegisterHotkeysForWindowState()
         {
-            bool success = _hotkeys.Register(Handle);
-            UpdateHotkeyStatus(success);
+            HotkeyRegistrationProfile profile = _hotkeys.Register(Handle);
+            bool success = profile != HotkeyRegistrationProfile.None;
+            UpdateHotkeyStatus(profile);
 
             if (success && _lastHotkeyRegistrationSucceeded != true)
             {
-                WriteLog($"GLOBAL HOTKEY REGISTERED (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
+                string profileName = profile == HotkeyRegistrationProfile.Backup ? "backup" : "primary";
+                WriteLog($"GLOBAL HOTKEY REGISTERED ({profileName}; Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}).");
             }
 
             if (!success && _lastHotkeyRegistrationSucceeded != false)
             {
-                WriteLog($"GLOBAL HOTKEY NOT REGISTERED (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
-                AppLogger.LogWarning($"Global hotkey was not registered (Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}).");
+                WriteLog($"GLOBAL HOTKEY NOT REGISTERED (Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}).");
+                AppLogger.LogWarning($"Global hotkey was not registered (Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}).");
             }
 
             _lastHotkeyRegistrationSucceeded = success;
@@ -687,14 +693,23 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private void UpdateHotkeyStatus(bool success)
+        private void UpdateHotkeyStatus(HotkeyRegistrationProfile profile)
         {
-            _statusDotColor = success ? Color.Green : Color.Red;
+            bool success = profile != HotkeyRegistrationProfile.None;
+            _statusDotColor = profile switch
+            {
+                HotkeyRegistrationProfile.Primary => Color.Green,
+                HotkeyRegistrationProfile.Backup => Color.Gold,
+                _ => Color.Red
+            };
             _statusToolTip.SetToolTip(
                 statusDot,
-                success
-                    ? $"Global hotkeys are registered. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}."
-                    : $"Global hotkeys are not registered. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}.");
+                profile switch
+                {
+                    HotkeyRegistrationProfile.Primary => $"Primary global hotkeys are registered. Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}.",
+                    HotkeyRegistrationProfile.Backup => $"Backup global hotkeys are registered. Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}.",
+                    _ => $"Global hotkeys are not registered. Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}."
+                });
             statusDot.Invalidate();
         }
 
@@ -709,7 +724,11 @@ namespace Lazy_App_Codex_Core
 
             LoadConfig();
             _hotkeys.UnregisterAll(Handle);
-            _hotkeys.Configure(_configRepository.Settings.HotkeyStart, _configRepository.Settings.HotkeyStop);
+            _hotkeys.Configure(
+                _configRepository.Settings.HotkeyStart,
+                _configRepository.Settings.HotkeyStop,
+                _configRepository.Settings.HotkeyBackupStart,
+                _configRepository.Settings.HotkeyBackupStop);
             _lastHotkeyRegistrationSucceeded = null;
             RegisterHotkeysForWindowState();
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);

@@ -9,6 +9,7 @@
 - Positive `Duration` means loop count, not seconds.
 - Step sleeps and loop interval sleeps are randomized inclusively.
 - Inverted min/max values are swapped by `ScriptRunner.RandomBetween`.
+- Optional Script and Sequence `emin` enforces a minimum cycle time and must not exceed the displayed max cycle time.
 - ADB OFF mode skips ADB commands but still updates status and waits through configured sleeps.
 
 ## Script Execution
@@ -20,6 +21,7 @@ For a Script:
 3. Execute each planned step.
 4. Sleep for each step's randomized sleep.
 5. Sleep for the Script interval after each loop when interval max is positive.
+6. If Script `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
 
 ## Sequence Execution
 
@@ -32,8 +34,15 @@ For a Sequence:
 5. Add the Sequence item's delay to the last expanded step for that item.
 6. For direct action items, use the selected Sequence/main offset context.
 7. Sleep for the Sequence interval after each Sequence cycle when interval max is positive.
+8. If Sequence `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
 
 The Sequence total shown in the editor is one Sequence cycle and does not multiply by Sequence loop count.
+
+## Cycle Enforcement
+
+When `emin` is greater than zero, the runner computes the whole cycle plan before execution. If the randomized plan is shorter than `emin`, it re-randomizes the lowest flexible wait upward, including step sleeps, Sequence item delays folded into their item, and the cycle interval. This repeats until the plan reaches `emin` or max cycle time.
+
+If `emin` equals max cycle time, the runner skips extra random attempts and uses every flexible wait at its maximum value.
 
 ## Offset Application
 

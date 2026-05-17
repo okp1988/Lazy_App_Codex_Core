@@ -43,7 +43,7 @@ adb kill-server
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
-- The first small status dot reports global hotkey registration. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
+- The first small status dot reports global hotkey registration: green means the primary hotkeys registered, yellow means the backup hotkeys registered, and red means no hotkey is registered. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
 - The Device dropdown lists only currently ready devices from `adb track-devices`. One ready device is auto-selected; when multiple devices are ready, select the device before running. Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
 - The Pair / Connect button opens the Wireless ADB window for manual `adb pair`, `adb connect`, or ADB server restart. Its Action dropdown contains Pair and Connect, its Device dropdown starts with Manual Input, selecting a saved Wi-Fi device fills the IP address, choosing Manual Input clears IP and Port, and the Port and Pair Code fields accept numbers only. The IP control uses fixed dot separators and validates each IPv4 segment from 0 through 255. The Try button runs the selected Pair or Connect action, and Restart restarts the ADB server.
 - Offset options are:
@@ -63,7 +63,7 @@ The config editor uses in-memory changes while open. Switching tabs or selecting
 
 Available tabs:
 
-- Settings: start/stop hotkeys and the tag list used by Scripts and Sequences.
+- Settings: primary start/stop hotkeys, optional backup start/stop hotkeys, and the tag list used by Scripts and Sequences.
 - Devices: saved ADB device names and detected manufacturer/model data.
 - Offset: offset profiles such as `s26` or `s13`.
 - Scripts: script info, tag, hide-from-main toggle, default offset, action groups, and step rows.
@@ -85,8 +85,11 @@ A Script has:
 - Loop Count (`d`)
 - Interval Min (`imin`)
 - Interval Max (`imax`)
+- Enforce Min (`emin`)
 - Optional default offset
 - Action groups saved under `config`
+
+Enforce Min is a per-cycle minimum time in seconds. It must be less than or equal to the displayed max cycle time. When a cycle plan randomizes below Enforce Min, the runner re-randomizes the lowest flexible waits upward until the planned cycle reaches the enforced time. If Enforce Min equals the max cycle time, all flexible waits use their maximum values.
 
 Script names must be unique. Cloned scripts are named with `_copy`, `_copy2`, `_copy3`, and so on. Scripts can also be manually ordered; the main window follows the saved order.
 
@@ -113,6 +116,7 @@ When running a Sequence directly:
 
 - The Sequence loop count controls sequence cycles.
 - The Sequence interval min/max waits after each sequence cycle.
+- The Sequence Enforce Min (`emin`) applies to each sequence cycle and follows the same max-time limit as Scripts.
 - The Sequence total shown in the config editor is one sequence cycle and does not multiply by Sequence loop count.
 - The main window expands the whole sequence into planned actions, so current step, next action, and estimated end include repeated Script items.
 
@@ -144,6 +148,7 @@ The config remains backward compatible with compact aliases:
 
 - `d` = loop count
 - `imin` / `imax` = interval min/max
+- `emin` = minimum enforced cycle time
 - `s` / `s2` = `[x,y]` / `[x2,y2]`
 - `r` = `[randX,randY]`
 - `t` = `[sleepMin,sleepMax]`

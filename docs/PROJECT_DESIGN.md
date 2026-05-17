@@ -20,7 +20,7 @@ The app is designed for manual Android workflows where the user wants repeatable
 
 1. Start the app.
 2. App loads `config.json` from the current working directory.
-3. App registers global hotkeys when the main window is active/restored.
+3. App registers global hotkeys when the main window is active/restored, using backup hotkeys if the primary hotkeys are already taken.
 4. App checks whether an ADB server is already listening on port `5037`.
 5. If ADB server is present, app starts a background `adb track-devices` monitor.
 6. Current ready devices appear in the Device dropdown.
@@ -38,6 +38,8 @@ The app is designed for manual Android workflows where the user wants repeatable
 A Script is a reusable automation unit. It contains metadata, loop settings, interval settings, action groups, and steps.
 
 Scripts can be hidden from the main picker while remaining valid inside Sequences.
+
+Scripts can also define an enforced minimum cycle time, which raises randomized waits within the cycle until the planned cycle meets the configured minimum.
 
 ### Action Group
 
@@ -68,6 +70,14 @@ Supported runtime aliases must remain backward compatible:
 A Sequence is a first-class runnable entry. It may contain Script items and direct action items.
 
 Sequences must not contain other Sequences.
+
+Sequences can define the same enforced minimum cycle time as Scripts. The limit applies to one sequence cycle and does not multiply by loop count.
+
+### Hotkey
+
+Primary start and stop hotkeys are configured in Settings. Optional backup start and stop hotkeys may also be configured for running a second app instance or avoiding a hotkey already owned by another process.
+
+The main hotkey status dot is green when primary hotkeys register, yellow when backup hotkeys register, and red when no hotkey registers.
 
 ### Offset
 
