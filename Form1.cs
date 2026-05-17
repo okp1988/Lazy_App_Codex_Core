@@ -1140,7 +1140,7 @@ namespace Lazy_App_Codex_Core
             }
 
             string? desiredSelection = _selectedDeviceSerial;
-            if (desiredSelection == null && readyDevices.Count == 1 && !selectedDeviceRemoved)
+            if (desiredSelection == null && readyDevices.Count > 0)
             {
                 desiredSelection = readyDevices[0].Serial;
             }

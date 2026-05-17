@@ -316,8 +316,29 @@ namespace Lazy_App_Codex_Core
                 _listBox.Items.AddRange(matches);
             }
 
-            _listBox.SelectedIndex = _listBox.Items.Count > 0 ? 0 : -1;
+            _listBox.SelectedIndex = GetCurrentSelectionIndex();
             _listBox.EndUpdate();
+        }
+
+        private int GetCurrentSelectionIndex()
+        {
+            if (_listBox.Items.Count == 0)
+            {
+                return -1;
+            }
+
+            if (_selectedItem != null && !_showingNoMatches)
+            {
+                for (int index = 0; index < _listBox.Items.Count; index++)
+                {
+                    if (Equals(_listBox.Items[index], _selectedItem))
+                    {
+                        return index;
+                    }
+                }
+            }
+
+            return 0;
         }
 
         private void SearchTextBox_KeyDown(object? sender, KeyEventArgs e)

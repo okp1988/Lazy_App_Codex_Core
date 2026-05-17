@@ -50,7 +50,7 @@
 - CI uses `.github/workflows/build.yml` on `windows-latest` with `actions/setup-dotnet@v4` and `dotnet-version: 8.0.x`.
 - Pushes to `main` or `master` replace the single GitHub Release tagged `latest`; the release zip includes publish output plus the repository `config.json`.
 - No automated test command is detectable in this repository; verify changes with `dotnet build` and manual WinForms/ADB checks.
-- Do not update Markdown documentation during feature or bug-fix work unless the user explicitly asks for docs updates. If code changes make docs stale, mention it in the final response instead of editing docs proactively.
+- Never update Markdown files unless the user explicitly says to update Markdown/docs in that request. If code changes make docs stale, mention it in the final response instead of editing docs proactively.
 
 ## Local Runtime Assumptions
 
