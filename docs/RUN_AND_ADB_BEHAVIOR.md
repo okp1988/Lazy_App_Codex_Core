@@ -61,6 +61,8 @@ C:\adb\adb.exe
 
 ADB commands are executed in physical device-pixel coordinates.
 
+The controller also exposes captured Wireless ADB helpers for `adb pair`, `adb connect`, `adb kill-server`, and `adb start-server`, so UI callers can display command output and detect success.
+
 ## ADB Status Dot
 
 `adbStatusDot` reports background ADB/device status:
@@ -82,6 +84,7 @@ This is separate from `statusDot`, which reports global hotkey registration.
 - Start `adb track-devices` only when the server is already listening.
 - While no server is detected, retry every 30 seconds.
 - Refresh status on Run and Config actions.
+- Refresh status after closing the Wireless ADB Pair / Connect window, including after ADB server restart.
 - Run should trust cached no-device status and prompt immediately.
 - Only dark gray should attempt a fresh ADB monitor start/check before showing a message or running.
 - Run starts only when a selected ready device is available.
@@ -96,6 +99,23 @@ ADB status should be driven by:
 - stderr
 - process exit
 - no-server retry timer
+
+## Wireless ADB Pair / Connect
+
+Wireless Debugging pairing and connecting are separate. Pairing authorizes the computer, but connecting still requires the current connect port shown by Android. Because the wireless debugging connect port may change, saved Wi-Fi devices store only the IP address as the key and keep the most recent `IP:Port` in `lastSerial`.
+
+The main Pair / Connect button opens a Wireless ADB window with:
+
+- Action dropdown containing Pair and Connect.
+- Device dropdown with Manual Input at index 0.
+- Saved Wi-Fi device entries from `settings.devices`.
+- Fixed-separator IPv4 input where each segment validates from 0 through 255.
+- Numeric-only Port field.
+- Numeric-only Pair Code field when Pair is selected.
+- Try button that runs the selected Pair or Connect action.
+- Restart button that runs `adb kill-server` followed by `adb start-server`.
+
+Selecting a saved Wi-Fi device fills the IP field. Selecting Manual Input clears IP and Port. A successful Connect updates `settings.devices[ip].lastSerial` and `lastSeen`, then the main ADB monitor refreshes. Pair success is displayed but does not mark the device connected. Restart Server success is displayed and also refreshes the main ADB monitor.
 
 ## Required ADB Logging
 

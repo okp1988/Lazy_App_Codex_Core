@@ -74,6 +74,9 @@ Rules:
 - Users may edit only the friendly name in the Devices tab.
 - Sync refreshes manufacturer/model only when the device key is currently connected and ready.
 - Automatic sync may create missing entries or fill blank fields, but existing conflicting manufacturer/model data is not silently overwritten.
+- Wireless ADB Connect may create or update a Wi-Fi device entry by IP address.
+- Successful Wireless ADB Connect updates `lastSerial` to the current `IP:Port` and refreshes `lastSeen`.
+- Wireless ADB Pair does not imply the device is connected and should not update `lastSerial` as a ready device.
 
 ## Hotkey Behavior
 

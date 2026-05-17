@@ -34,6 +34,7 @@ namespace Lazy_App_Codex_Core
             ddlTagFilter = new ComboBox();
             ddlDevice = new ComboBox();
             btnConfig = new Button();
+            btnWirelessAdb = new Button();
             mainLayout.SuspendLayout();
             contentLayout.SuspendLayout();
             selectorLayout.SuspendLayout();
@@ -159,18 +160,20 @@ namespace Lazy_App_Codex_Core
             actionPanel.Controls.Add(ddlTagFilter, 0, 2);
             actionPanel.Controls.Add(ddlDevice, 0, 3);
             actionPanel.Controls.Add(btnConfig, 0, 4);
+            actionPanel.Controls.Add(btnWirelessAdb, 0, 5);
             actionPanel.Dock = DockStyle.Top;
             actionPanel.Location = new Point(480, 10);
             actionPanel.Margin = new Padding(0);
             actionPanel.Name = "actionPanel";
-            actionPanel.RowCount = 6;
+            actionPanel.RowCount = 7;
+            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            actionPanel.Size = new Size(150, 212);
+            actionPanel.Size = new Size(150, 252);
             actionPanel.TabIndex = 1;
             // 
             // btnRun
@@ -238,6 +241,19 @@ namespace Lazy_App_Codex_Core
             btnConfig.UseVisualStyleBackColor = true;
             btnConfig.Click += btnConfig_Click;
             // 
+            // btnWirelessAdb
+            // 
+            btnWirelessAdb.Dock = DockStyle.Fill;
+            btnWirelessAdb.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnWirelessAdb.Location = new Point(0, 200);
+            btnWirelessAdb.Margin = new Padding(0, 2, 0, 6);
+            btnWirelessAdb.Name = "btnWirelessAdb";
+            btnWirelessAdb.Size = new Size(150, 32);
+            btnWirelessAdb.TabIndex = 5;
+            btnWirelessAdb.Text = "Pair / Connect";
+            btnWirelessAdb.UseVisualStyleBackColor = true;
+            btnWirelessAdb.Click += btnWirelessAdb_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
@@ -302,5 +318,6 @@ namespace Lazy_App_Codex_Core
         private System.Windows.Forms.ComboBox ddlTagFilter;
         private System.Windows.Forms.ComboBox ddlDevice;
         private System.Windows.Forms.Button btnConfig;
+        private System.Windows.Forms.Button btnWirelessAdb;
     }
 }

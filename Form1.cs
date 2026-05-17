@@ -498,6 +498,7 @@ namespace Lazy_App_Codex_Core
             ddlTagFilter.Enabled = !isRunning;
             ddlDevice.Enabled = !isRunning && ddlDevice.Items.Count > 0;
             btnConfig.Enabled = !isRunning;
+            btnWirelessAdb.Enabled = !isRunning;
             btnRun.Text = isRunning ? "Stop" : "Run";
             SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
 
@@ -713,6 +714,19 @@ namespace Lazy_App_Codex_Core
             RegisterHotkeysForWindowState();
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
             WriteLog("CONFIG UPDATED.");
+        }
+
+        private async void btnWirelessAdb_Click(object sender, EventArgs e)
+        {
+            using var dialog = new WirelessAdbConnectForm(_configRepository, _adbController);
+            dialog.ShowDialog(this);
+            if (dialog.ConfigChanged)
+            {
+                LoadConfig();
+                WriteLog("WIRELESS ADB DEVICE UPDATED.");
+            }
+
+            await EnsureAdbTrackMonitorAsync(dialog.ServerRestarted ? "wireless adb server restart" : "wireless adb");
         }
 
         private void ddlTagFilter_SelectedIndexChanged(object sender, EventArgs e)

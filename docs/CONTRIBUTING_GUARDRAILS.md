@@ -14,6 +14,8 @@
 - Tag filter behavior with `All` at index 0.
 - Separate hotkey and ADB status dots.
 - ADB monitor color meanings.
+- Wireless ADB Pair / Connect and Restart Server as manual helpers, not a background reconnect loop.
+- Saved Wi-Fi device keys without ports, with current `IP:Port` stored in `lastSerial`.
 - Cancellation-based Run/Stop behavior.
 - ADB OFF path where commands are skipped but status/timing still update.
 - Daily logs under `AppContext.BaseDirectory\logs`.
@@ -86,10 +88,12 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Run starts with a selected ready device.
 - Run stops and notifies when the selected device disappears.
 - Device dropdown uses saved friendly names and refreshes after Config saves.
+- Pair / Connect opens Wireless ADB helper, Manual Input clears IP/Port, saved Wi-Fi devices prefill IP, successful Connect refreshes ADB status, and Restart Server refreshes ADB status.
 - Devices tab allows rename/delete for saved devices and Sync only for currently connected ready devices.
 - Stop cancels promptly.
 - Config Editor saves only when requested or confirmed.
 - Script picker search clears on close.
+- Script picker highlights the current selected item when opened.
 - Tag filtering shows selected tag plus blank-tag entries.
 - Hidden Scripts are absent from main picker and present for Sequence references.
 - Track Touch starts only when the selected ADB device is ready and stops when that device is lost.

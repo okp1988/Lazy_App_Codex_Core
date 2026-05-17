@@ -24,11 +24,12 @@ The app is designed for manual Android workflows where the user wants repeatable
 4. App checks whether an ADB server is already listening on port `5037`.
 5. If ADB server is present, app starts a background `adb track-devices` monitor.
 6. Current ready devices appear in the Device dropdown.
-7. User selects a Script or Sequence.
-8. Optional default offset from the selected entry auto-selects the main offset dropdown.
-9. User clicks Run or presses the configured start hotkey.
-10. App refreshes ADB readiness, then runs only when a ready device is selected.
-11. User clicks Stop, presses Escape, or presses the configured stop/toggle hotkey to cancel.
+7. If Wireless ADB is paired but not connected, the user may open Pair / Connect and manually pair or connect with the current phone IP and port.
+8. User selects a Script or Sequence.
+9. Optional default offset from the selected entry auto-selects the main offset dropdown.
+10. User clicks Run or presses the configured start hotkey.
+11. App refreshes ADB readiness, then runs only when a ready device is selected.
+12. User clicks Stop, presses Escape, or presses the configured stop/toggle hotkey to cancel.
 
 ## Main Concepts
 
@@ -85,6 +86,8 @@ The main filter always includes `All`. Selecting a configured tag shows matching
 Devices are discovered from `adb track-devices` ready rows. The main Device dropdown lists only currently ready devices and uses friendly names stored under `settings.devices`.
 
 Wi-Fi device keys use the IP address without the port for friendlier naming, while ADB commands still use the full current serial. New device metadata can be synced from Android properties, and users can rename saved devices in the Config Editor Devices tab.
+
+The main window also provides a Pair / Connect Wireless ADB helper. It supports Pair and Connect actions, ADB server restart, Manual Input, saved device IP prefill, fixed-separator IPv4 entry, numeric-only ports and pairing codes, and updates a Wi-Fi device's last serial after a successful Connect.
 
 ## Non-Goals
 

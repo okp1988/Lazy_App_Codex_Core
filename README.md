@@ -19,7 +19,7 @@ Lazy App runs ADB-based tap, back, and drag workflows for Android devices. No ap
 4. Enable USB Debugging or Wireless Debugging on the phone.
 5. Connect the device before running a Script or Sequence.
 
-Open `Lazy_App_Codex_Core.sln` in Visual Studio. The project is an SDK-style Windows Forms app targeting `net8.0-windows`, so no legacy project migration is required. The WinForms designer metadata for `Form1`, `ConfigEditorForm`, and `SearchableDropdown` is stored in the shared project file instead of user-local `.csproj.user` settings.
+Open `Lazy_App_Codex_Core.sln` in Visual Studio. The project is an SDK-style Windows Forms app targeting `net8.0-windows`, so no legacy project migration is required. The WinForms designer metadata for `Form1`, `ConfigEditorForm`, `SearchableDropdown`, and `WirelessAdbConnectForm` is stored in the shared project file instead of user-local `.csproj.user` settings.
 
 Useful ADB commands:
 
@@ -39,11 +39,13 @@ adb kill-server
 - Use the Script/Sequence dropdown to select what to run.
 - Click the Script/Sequence dropdown to open a custom picker.
 - The first dropdown row is a search box; matching Scripts and Sequences are shown below.
+- Opening the Script/Sequence dropdown highlights the current selected item when it is still in the filtered list.
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
 - The first small status dot reports global hotkey registration. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
 - The Device dropdown lists only currently ready devices from `adb track-devices`. One ready device is auto-selected; when multiple devices are ready, select the device before running. Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
+- The Pair / Connect button opens the Wireless ADB window for manual `adb pair`, `adb connect`, or ADB server restart. Its Action dropdown contains Pair and Connect, its Device dropdown starts with Manual Input, selecting a saved Wi-Fi device fills the IP address, choosing Manual Input clears IP and Port, and the Port and Pair Code fields accept numbers only. The IP control uses fixed dot separators and validates each IPv4 segment from 0 through 255. The Try button runs the selected Pair or Connect action, and Restart restarts the ADB server.
 - Offset options are:
 
 ```text
@@ -68,6 +70,8 @@ Available tabs:
 - Sequences: sequence info, tag, default offset, and mixed script/action items.
 
 The Devices tab stores friendly names under `settings.devices`. New connected devices are synced from ADB properties and default to `manufacturer : model`; names can be edited manually. Wi-Fi device keys are stored without the port. Connected devices can be synced, while disconnected saved devices can still be renamed or deleted.
+
+Successful Wireless ADB Connect updates the saved Wi-Fi device `lastSerial` with the current `IP:Port` and refreshes `lastSeen`, then the main ADB monitor refreshes. Pairing only authorizes the computer; connecting still requires the current wireless debugging connect port.
 
 The Scripts and Sequences tabs share a `Track Touch` toggle. It is enabled only when the selected ADB device is ready. While enabled, the editor reads touch ranges per `/dev/input/event*` device, runs `adb shell getevent -l` in the background for the selected device, scales raw touch events from the matching event device into screen coordinates, and shows the latest screen coordinate in the status line. The button turns bright green while active. If the app cannot match a touch range, it warns instead of showing raw values as screen coordinates. The process stops when toggled off, when the selected device is no longer ready, or when the config editor closes.
 

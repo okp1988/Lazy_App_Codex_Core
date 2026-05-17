@@ -85,6 +85,18 @@ namespace Lazy_App_Codex_Core
         public Task<int> ConnectAsync(string ipPort, CancellationToken ct, int timeoutMs = 6000) =>
             RunAsync($"connect {ipPort}", ct, timeoutMs);
 
+        public Task<(int exitCode, string stdout, string stderr)> ConnectCaptureAsync(string ipPort, CancellationToken ct, int timeoutMs = 8000) =>
+            RunCaptureAsync($"connect {ipPort}", ct, timeoutMs);
+
+        public Task<(int exitCode, string stdout, string stderr)> PairAsync(string ipPort, string pairingCode, CancellationToken ct, int timeoutMs = 12000) =>
+            RunCaptureAsync($"pair {ipPort} {pairingCode}", ct, timeoutMs);
+
+        public Task<(int exitCode, string stdout, string stderr)> KillServerAsync(CancellationToken ct, int timeoutMs = 6000) =>
+            RunCaptureAsync("kill-server", ct, timeoutMs);
+
+        public Task<(int exitCode, string stdout, string stderr)> StartServerAsync(CancellationToken ct, int timeoutMs = 8000) =>
+            RunCaptureAsync("start-server", ct, timeoutMs);
+
         /// <summary>Send raw ADB args, returns exit code.</summary>
         public Task<int> RunAsync(string args, CancellationToken ct, int timeoutMs = 10000) =>
             RunCoreAsync(args, ct, timeoutMs, capture: false).ContinueWith(t => t.Result.exitCode, TaskScheduler.Default);

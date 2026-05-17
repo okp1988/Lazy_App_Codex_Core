@@ -28,6 +28,9 @@
     <Compile Update="SearchableDropdown.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="WirelessAdbConnectForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>

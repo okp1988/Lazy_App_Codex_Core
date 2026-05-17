@@ -24,6 +24,7 @@ Responsibilities:
 - Own ADB status monitor state.
 - Own current ADB device dropdown state.
 - Open `ConfigEditorForm`.
+- Open `WirelessAdbConnectForm`.
 
 ### `Form1.Designer.cs`
 
@@ -43,9 +44,13 @@ The editor works in memory while open. It writes `config.json` only on explicit 
 
 It also owns the shared Script/Sequence `Track Touch` toggle.
 
+### `WirelessAdbConnectForm.cs`
+
+Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server restart flows. It uses saved `settings.devices` entries for friendly device choices, supports Manual Input, validates IPv4 address segments and numeric ports/pairing codes, runs `adb pair` or `adb connect`, can restart the ADB server with `adb kill-server` plus `adb start-server`, and updates saved Wi-Fi device `lastSerial`/`lastSeen` after a successful Connect.
+
 ### `SearchableDropdown.cs`
 
-Custom main Script/Sequence picker. The popup owns search text and clears it on close. The main field displays only the selected item.
+Custom main Script/Sequence picker. The popup owns search text and clears it on close. The main field displays only the selected item. When opened, the popup highlights the current selected item if it is present in the current filtered list.
 
 ### `ScriptConfigRespository.cs`
 
@@ -71,6 +76,8 @@ Runtime planner and executor. It expands Scripts and Sequences into planned ADB 
 ### `AdbShellController.cs`
 
 ADB command wrapper. It shells out to `C:\adb\adb.exe` by default and works in physical device pixels.
+
+It exposes captured Pair, Connect, Kill Server, and Start Server helpers for Wireless ADB UI flows so success/failure output can be shown in the dialog.
 
 ### `HotKeyManager.cs`
 
@@ -106,7 +113,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Trigger: load, retry, Run, Config"] --> B["Check localhost:5037"]
+    A["Trigger: load, retry, Run, Config, Wireless ADB"] --> B["Check localhost:5037"]
     B -->|not listening| C["NoServer: dark gray"]
     B -->|listening| D["Start adb track-devices"]
     D --> E["Parse device blocks"]
@@ -115,6 +122,22 @@ flowchart TD
     E -->|2+ ready devices| H["MultipleDevices: yellow"]
     E --> I["Refresh Device dropdown"]
     D -->|stdout close, stderr, exit| C
+```
+
+## Wireless ADB Flow
+
+```mermaid
+flowchart TD
+    A["User Clicks Pair / Connect"] --> B["WirelessAdbConnectForm Opens"]
+    B --> C["User Chooses Pair, Connect, Manual Input, Or Restart Server"]
+    C --> D["Validate IP, Port, And Optional Pair Code"]
+    D --> E["Run adb pair Or adb connect"]
+    E -->|Connect Succeeds| F["Save lastSerial And lastSeen"]
+    E -->|Pair Succeeds| G["Show Pair Status"]
+    E -->|Restart Server Succeeds| I["Show Restart Status"]
+    F --> H["Refresh Main ADB Monitor"]
+    G --> H
+    I --> H
 ```
 
 ## Run Flow
