@@ -16,13 +16,13 @@ Responsibilities:
 - Build the Script/Sequence run target list.
 - Apply tag filtering.
 - Apply default offsets.
-- Register and unregister primary or backup global hotkeys.
+- Register and unregister primary Set 1 and secondary Set 2 global hotkeys.
 - Route Run, Stop, Escape, and hotkey actions.
-- Own run cancellation state.
-- Own live run status labels.
-- Own taskbar overlay icons.
+- Own independent run-slot cancellation state for Set 1 and Set 2.
+- Own live run status labels for each visible run set.
+- Own taskbar overlay icons for both stopped, Set 1 running, Set 2 running, and both running.
 - Own ADB status monitor state.
-- Own current ADB device dropdown state.
+- Own current ADB device dropdown state for each run set and prevent both visible/running sets from selecting the same device.
 - Open `ConfigEditorForm`.
 - Open `WirelessAdbConnectForm`.
 
@@ -40,13 +40,13 @@ Hand-built config editor for:
 - Scripts
 - Sequences
 
-The editor works in memory while open. It writes `config.json` only on explicit save, confirmed close-save, or restore.
+The editor works in memory while open. It writes `config.json` only on explicit save, confirmed close-save, or restore. Pressing `Esc` calls the same close flow as the Close button.
 
 It also owns the shared Script/Sequence `Track Touch` toggle.
 
 ### `WirelessAdbConnectForm.cs`
 
-Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server restart flows. It uses saved `settings.devices` entries for friendly device choices, supports Manual Input, validates IPv4 address segments and numeric ports/pairing codes, runs `adb pair` or `adb connect`, can restart the ADB server with `adb kill-server` plus `adb start-server`, and updates saved Wi-Fi device `lastSerial`/`lastSeen` after a successful Connect.
+Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server restart flows. It uses saved `settings.devices` entries for friendly device choices, supports Manual Input, validates IPv4 address segments and numeric ports/pairing codes, runs `adb pair` or `adb connect`, can restart the ADB server with `adb kill-server` plus `adb start-server`, updates saved Wi-Fi device `lastSerial`/`lastSeen` after a successful Connect, and closes on `Esc`.
 
 ### `SearchableDropdown.cs`
 
@@ -81,7 +81,7 @@ It exposes captured Pair, Connect, Kill Server, and Start Server helpers for Wir
 
 ### `HotKeyManager.cs`
 
-Global hotkey parser, primary/backup registration, unregistration, and `WM_HOTKEY` routing. It reports whether the active registration profile is primary, backup, or none so the main hotkey dot can show green, yellow, or red.
+Global hotkey parser, primary/secondary registration, unregistration, and `WM_HOTKEY` routing. Primary hotkeys control Set 1. Secondary/backup hotkeys control Set 2 and are registered only while Set 2 is open. It reports whether primary and secondary registrations succeeded so the main hotkey dot can show gold, green, blue, or red.
 
 ### `OffsetDisplayOption.cs`
 

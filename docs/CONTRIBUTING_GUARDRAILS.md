@@ -13,9 +13,11 @@
 - Hidden Scripts remaining valid in Sequences.
 - Tag filter behavior with `All` at index 0.
 - Separate hotkey and ADB status dots.
-- Hotkey dot color meanings: green for primary hotkeys, yellow for backup hotkeys, red for no registered hotkey.
+- Hotkey dot color meanings: gold for both primary and secondary hotkeys, green for primary only, blue for secondary only, red for no registered hotkey.
 - ADB monitor color meanings.
-- Optional backup hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
+- Optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`; register them only while Set 2 is open.
+- Two independent run sets, with Set 2 opened by `Alt+1` and no duplicate Config or Pair / Connect buttons.
+- Device dropdown exclusion between visible/running run sets so both sets cannot target the same ADB serial.
 - Script and Sequence `emin` minimum cycle enforcement.
 - Wireless ADB Pair / Connect and Restart Server as manual helpers, not a background reconnect loop.
 - Saved Wi-Fi device keys without ports, with current `IP:Port` stored in `lastSerial`.
@@ -31,6 +33,7 @@
 - Keep `ConfigEditorForm` button rows from clipping by using explicit `TableLayoutPanel` row heights and docked buttons.
 - Leave bottom padding in scrollable/editor panels.
 - Validate Run against ADB status before executing commands.
+- Keep Set 1 and Set 2 cancellation state, selected device, and live status independent.
 - Log ADB decision points when changing monitor or run gating behavior.
 - Stop long-running ADB child processes on close or state loss.
 - Preserve user changes in the working tree.
@@ -86,13 +89,17 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 
 - App opens.
 - Global hotkey dot reflects registration.
-- Primary hotkeys show a green dot, backup hotkeys show a yellow dot, and no registered hotkey shows a red dot.
+- Primary-only hotkeys show a green dot, secondary-only hotkeys show a blue dot, both registered shows a gold dot, and no registered hotkey shows a red dot.
+- `Alt+1` opens and closes Set 2; Set 2 secondary hotkeys register only while Set 2 is open and unregister when it closes.
+- `Alt+2` opens Config, `Alt+3` opens Pair / Connect, `Esc` closes Config through its close flow, and `Esc` closes Pair / Connect.
 - ADB dot shows dark gray/yellow/green/red correctly.
 - Run blocks with no ready device.
 - Run blocks with multiple ready devices until a device is selected.
 - Run starts with a selected ready device.
-- Run stops and notifies when the selected device disappears.
+- Each run set starts with its selected ready device.
+- Each run set stops and notifies independently when its selected device disappears.
 - Device dropdown uses saved friendly names and refreshes after Config saves.
+- Device dropdowns prevent Set 1 and visible/running Set 2 from selecting the same device.
 - Pair / Connect opens Wireless ADB helper, Manual Input clears IP/Port, saved Wi-Fi devices prefill IP, successful Connect refreshes ADB status, and Restart Server refreshes ADB status.
 - Devices tab allows rename/delete for saved devices and Sync only for currently connected ready devices.
 - Stop cancels promptly.

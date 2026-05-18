@@ -43,8 +43,9 @@ adb kill-server
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
-- The first small status dot reports global hotkey registration: green means the primary hotkeys registered, yellow means the backup hotkeys registered, and red means no hotkey is registered. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
-- The Device dropdown lists only currently ready devices from `adb track-devices`. One ready device is auto-selected; when multiple devices are ready, select the device before running. Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
+- The first small status dot reports global hotkey registration: gold means both primary and secondary hotkeys registered, green means primary only, blue means secondary only, and red means no hotkey is registered. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
+- `Alt+1` opens or closes Set 2, a second independent run control set. Set 1 uses primary hotkeys. Set 2 uses secondary/backup hotkeys only while Set 2 is open and omits Config and Pair / Connect because those actions are shared. `Alt+2` opens Config, and `Alt+3` opens Pair / Connect.
+- Each run set has its own Device dropdown listing currently ready devices from `adb track-devices`. A device selected in one visible or running set is not selectable in the other set. One ready device is auto-selected when available; Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
 - The Pair / Connect button opens the Wireless ADB window for manual `adb pair`, `adb connect`, or ADB server restart. Its Action dropdown contains Pair and Connect, its Device dropdown starts with Manual Input, selecting a saved Wi-Fi device fills the IP address, choosing Manual Input clears IP and Port, and the Port and Pair Code fields accept numbers only. The IP control uses fixed dot separators and validates each IPv4 segment from 0 through 255. The Try button runs the selected Pair or Connect action, and Restart restarts the ADB server.
 - Offset options are:
 
@@ -55,11 +56,11 @@ X offset left 3 steps, X offset left 2 steps, X offset left 1 step,
 X offset right 1 step, X offset right 2 steps, X offset right 3 steps
 ```
 
-The live status panel shows current action, step, cycle, next action, next action time, and estimated end. If ADB or the device is not available, the panel shows an error state instead of relying on a visible log box.
+Each live status panel shows current action, step, cycle, next action, next action time, and estimated end for its own run set. If ADB or the device is not available, the affected panel shows an error state instead of relying on a visible log box.
 
 ## Config Editor
 
-The config editor uses in-memory changes while open. Switching tabs or selecting another Script/Sequence does not write `config.json`. The file is written only when using `Save All & Close`, confirming save on close, or restoring a backup.
+The config editor uses in-memory changes while open. Switching tabs or selecting another Script/Sequence does not write `config.json`. The file is written only when using `Save All & Close`, confirming save on close, or restoring a backup. Pressing `Esc` calls the same close flow, so unsaved changes still prompt.
 
 Available tabs:
 

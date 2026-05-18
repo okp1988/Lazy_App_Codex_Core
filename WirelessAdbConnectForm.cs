@@ -27,7 +27,7 @@ namespace Lazy_App_Codex_Core
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(340, 285);
+            ClientSize = new Size(340, 330);
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
 
             BuildLayout();
@@ -37,6 +37,17 @@ namespace Lazy_App_Codex_Core
 
         public bool ConfigChanged { get; private set; }
         public bool ServerRestarted { get; private set; }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                Close();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
 
         private void BuildLayout()
         {
@@ -56,7 +67,7 @@ namespace Lazy_App_Codex_Core
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60F));
 
             ConfigureCombo(_actionBox);
             _actionBox.Items.AddRange(new object[] { "Connect", "Pair" });
@@ -67,7 +78,7 @@ namespace Lazy_App_Codex_Core
             _deviceBox.SelectedIndexChanged += (_, _) => ApplySelectedDeviceIp();
 
             _ipBox.Anchor = AnchorStyles.Left | AnchorStyles.Top;
-            _ipBox.Size = new Size(188, 24);
+            _ipBox.Size = new Size(188, 28);
 
             ConfigureNumericTextBox(_portBox);
             ConfigureNumericTextBox(_pairCodeBox);
@@ -459,9 +470,9 @@ namespace Lazy_App_Codex_Core
 
             public IpAddressBox()
             {
-                Height = 24;
-                MinimumSize = new Size(150, 24);
-                MaximumSize = new Size(400, 24);
+                Height = 28;
+                MinimumSize = new Size(150, 28);
+                MaximumSize = new Size(400, 28);
                 BackColor = SystemColors.Window;
                 BorderStyle = BorderStyle.FixedSingle;
 
@@ -470,14 +481,14 @@ namespace Lazy_App_Codex_Core
                     Dock = DockStyle.Fill,
                     ColumnCount = 7,
                     Margin = Padding.Empty,
-                    Padding = new Padding(2, 2, 2, 1)
+                    Padding = new Padding(2, 1, 2, 1)
                 };
 
                 for (int index = 0; index < 7; index++)
                 {
                     layout.ColumnStyles.Add(index % 2 == 0
                         ? new ColumnStyle(SizeType.Percent, 25F)
-                        : new ColumnStyle(SizeType.Absolute, 8F));
+                        : new ColumnStyle(SizeType.Absolute, 12F));
                 }
 
                 for (int index = 0; index < _octets.Length; index++)

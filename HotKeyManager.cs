@@ -10,7 +10,10 @@ namespace Lazy_App_Codex_Core
         None = 0,
         Start = 1,
         Stop = 2,
-        StartOrStop = 3
+        StartOrStop = 3,
+        BackupStart = 4,
+        BackupStop = 5,
+        BackupStartOrStop = 6
     }
 
     public enum HotkeyRegistrationProfile
@@ -32,6 +35,8 @@ namespace Lazy_App_Codex_Core
         private const int HOTKEY_ID_CTRL = 0x0002;
         private const int HOTKEY_ID_PRIMARY = 1001;
         private const int HOTKEY_ID_SECONDARY = 1002;
+        private const int HOTKEY_ID_BACKUP_PRIMARY = 1003;
+        private const int HOTKEY_ID_BACKUP_SECONDARY = 1004;
         private const int HOTKEY_ID_SHIFT = 0x0004;
         private const int HOTKEY_ID_WIN = 0x0008;
         private const int DEFAULT_HOTKEY_MODIFIERS = HOTKEY_ID_CTRL | HOTKEY_ID_ALT;
@@ -41,6 +46,8 @@ namespace Lazy_App_Codex_Core
 
         private bool _registered;
         private bool _secondaryRegistered;
+        private bool _primaryProfileRegistered;
+        private bool _backupProfileRegistered;
         private bool _startHotkeyEnabled = true;
         private bool _stopHotkeyEnabled = true;
         private bool _backupStartHotkeyEnabled;
@@ -62,6 +69,8 @@ namespace Lazy_App_Codex_Core
         public string ActiveStartHotkeyText => _activeProfile == HotkeyRegistrationProfile.Backup ? BackupStartHotkeyText : StartHotkeyText;
         public string ActiveStopHotkeyText => _activeProfile == HotkeyRegistrationProfile.Backup ? BackupStopHotkeyText : StopHotkeyText;
         public HotkeyRegistrationProfile ActiveProfile => _activeProfile;
+        public bool PrimaryProfileRegistered => _primaryProfileRegistered;
+        public bool BackupProfileRegistered => _backupProfileRegistered;
 
         public void Configure(string? startHotkey, string? stopHotkey, string? backupStartHotkey, string? backupStopHotkey)
         {
@@ -95,24 +104,25 @@ namespace Lazy_App_Codex_Core
         }
 
         /// <summary>Registers global hotkeys for the current window handle.</summary>
-        public HotkeyRegistrationProfile Register(IntPtr handle)
+        public HotkeyRegistrationProfile Register(IntPtr handle, bool registerBackupProfile = true)
         {
             if (handle == IntPtr.Zero)
             {
                 _registered = false;
                 _secondaryRegistered = false;
+                _primaryProfileRegistered = false;
+                _backupProfileRegistered = false;
                 _activeProfile = HotkeyRegistrationProfile.None;
                 return _activeProfile;
             }
 
             UnregisterAll(handle);
-            if (TryRegisterProfile(handle, HotkeyRegistrationProfile.Primary))
-            {
-                return _activeProfile;
-            }
-
-            UnregisterAll(handle);
-            TryRegisterProfile(handle, HotkeyRegistrationProfile.Backup);
+            _primaryProfileRegistered = TryRegisterProfile(handle, HotkeyRegistrationProfile.Primary);
+            _backupProfileRegistered = registerBackupProfile && TryRegisterProfile(handle, HotkeyRegistrationProfile.Backup);
+            _registered = _primaryProfileRegistered || _backupProfileRegistered;
+            _activeProfile = _primaryProfileRegistered
+                ? HotkeyRegistrationProfile.Primary
+                : (_backupProfileRegistered ? HotkeyRegistrationProfile.Backup : HotkeyRegistrationProfile.None);
             return _activeProfile;
         }
 
@@ -124,41 +134,43 @@ namespace Lazy_App_Codex_Core
             int startKey = profile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyKey : _startHotkeyKey;
             int stopModifiers = profile == HotkeyRegistrationProfile.Backup ? _backupStopHotkeyModifiers : _stopHotkeyModifiers;
             int stopKey = profile == HotkeyRegistrationProfile.Backup ? _backupStopHotkeyKey : _stopHotkeyKey;
+            int startId = profile == HotkeyRegistrationProfile.Backup ? HOTKEY_ID_BACKUP_PRIMARY : HOTKEY_ID_PRIMARY;
+            int stopId = profile == HotkeyRegistrationProfile.Backup ? HOTKEY_ID_BACKUP_SECONDARY : HOTKEY_ID_SECONDARY;
             if (!startEnabled && !stopEnabled)
             {
-                _registered = false;
-                _secondaryRegistered = false;
-                _activeProfile = HotkeyRegistrationProfile.None;
                 return false;
             }
 
             bool primaryOk = true;
             if (startEnabled)
             {
-                primaryOk = RegisterHotKey(handle, HOTKEY_ID_PRIMARY, startModifiers, startKey);
+                primaryOk = RegisterHotKey(handle, startId, startModifiers, startKey);
                 if (!primaryOk)
                 {
-                    _registered = false;
-                    _activeProfile = HotkeyRegistrationProfile.None;
                     return false;
                 }
             }
 
-            _secondaryRegistered = stopEnabled && (!startEnabled || !IsSameStartStop(startModifiers, startKey, stopModifiers, stopKey));
+            bool secondaryRegistered = stopEnabled && (!startEnabled || !IsSameStartStop(startModifiers, startKey, stopModifiers, stopKey));
             bool secondaryOk = true;
-            if (_secondaryRegistered)
+            if (secondaryRegistered)
             {
-                secondaryOk = RegisterHotKey(handle, HOTKEY_ID_SECONDARY, stopModifiers, stopKey);
+                secondaryOk = RegisterHotKey(handle, stopId, stopModifiers, stopKey);
             }
 
-            _registered = primaryOk && secondaryOk;
-            if (!_registered)
+            bool registered = primaryOk && secondaryOk;
+            if (!registered)
             {
-                UnregisterAll(handle);
+                UnregisterHotKey(handle, startId);
+                UnregisterHotKey(handle, stopId);
                 return false;
             }
 
-            _activeProfile = profile;
+            if (profile == HotkeyRegistrationProfile.Primary)
+            {
+                _secondaryRegistered = secondaryRegistered;
+            }
+
             return true;
         }
 
@@ -167,8 +179,12 @@ namespace Lazy_App_Codex_Core
         {
             UnregisterHotKey(handle, HOTKEY_ID_PRIMARY);
             UnregisterHotKey(handle, HOTKEY_ID_SECONDARY);
+            UnregisterHotKey(handle, HOTKEY_ID_BACKUP_PRIMARY);
+            UnregisterHotKey(handle, HOTKEY_ID_BACKUP_SECONDARY);
             _registered = false;
             _secondaryRegistered = false;
+            _primaryProfileRegistered = false;
+            _backupProfileRegistered = false;
             _activeProfile = HotkeyRegistrationProfile.None;
         }
 
@@ -183,12 +199,12 @@ namespace Lazy_App_Codex_Core
             int id = m.WParam.ToInt32();
             if (id == HOTKEY_ID_PRIMARY)
             {
-                if (IsActiveStartStopSame())
+                if (IsStartStopSame(HotkeyRegistrationProfile.Primary))
                 {
                     return HotkeyAction.StartOrStop;
                 }
 
-                return IsActiveStartEnabled() ? HotkeyAction.Start : HotkeyAction.Stop;
+                return _startHotkeyEnabled ? HotkeyAction.Start : HotkeyAction.Stop;
             }
 
             if (id == HOTKEY_ID_SECONDARY)
@@ -196,12 +212,27 @@ namespace Lazy_App_Codex_Core
                 return HotkeyAction.Stop;
             }
 
+            if (id == HOTKEY_ID_BACKUP_PRIMARY)
+            {
+                if (IsStartStopSame(HotkeyRegistrationProfile.Backup))
+                {
+                    return HotkeyAction.BackupStartOrStop;
+                }
+
+                return _backupStartHotkeyEnabled ? HotkeyAction.BackupStart : HotkeyAction.BackupStop;
+            }
+
+            if (id == HOTKEY_ID_BACKUP_SECONDARY)
+            {
+                return HotkeyAction.BackupStop;
+            }
+
             return HotkeyAction.None;
         }
 
-        private bool IsActiveStartStopSame()
+        private bool IsStartStopSame(HotkeyRegistrationProfile profile)
         {
-            if (_activeProfile == HotkeyRegistrationProfile.Backup)
+            if (profile == HotkeyRegistrationProfile.Backup)
             {
                 return _backupStartHotkeyEnabled && _backupStopHotkeyEnabled &&
                     IsSameStartStop(_backupStartHotkeyModifiers, _backupStartHotkeyKey, _backupStopHotkeyModifiers, _backupStopHotkeyKey);
@@ -209,11 +240,6 @@ namespace Lazy_App_Codex_Core
 
             return _startHotkeyEnabled && _stopHotkeyEnabled &&
                 IsSameStartStop(_startHotkeyModifiers, _startHotkeyKey, _stopHotkeyModifiers, _stopHotkeyKey);
-        }
-
-        private bool IsActiveStartEnabled()
-        {
-            return _activeProfile == HotkeyRegistrationProfile.Backup ? _backupStartHotkeyEnabled : _startHotkeyEnabled;
         }
 
         private static bool IsSameStartStop(int startModifiers, int startKey, int stopModifiers, int stopKey)

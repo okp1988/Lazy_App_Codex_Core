@@ -40,7 +40,7 @@ Rules:
 
 - `hotkeyStartStopToggle` is legacy and migrates to `hotkeyStart`.
 - Do not reintroduce `hotkeyStartStopToggle` as canonical.
-- `hotkeyBackupStart` and `hotkeyBackupStop` are optional fallback hotkeys. Blank values disable that backup side.
+- `hotkeyBackupStart` and `hotkeyBackupStop` are optional secondary hotkeys for Set 2. Blank values disable that secondary side.
 - `settings.tag` is the canonical tag list.
 - `settings.tags` is legacy and migrates to `settings.tag`.
 - `All` is reserved for the main filter and must not be stored as a configured tag.
@@ -84,12 +84,13 @@ Rules:
 ## Hotkey Behavior
 
 - Empty hotkey text disables that hotkey.
-- Primary start/stop hotkeys are tried first.
-- Backup start/stop hotkeys are tried only when the primary set cannot register.
-- If the active start and stop hotkeys are the same, only one hotkey is registered and it toggles start and stop.
+- Primary start/stop hotkeys control Set 1.
+- Backup start/stop hotkeys control Set 2 and are registered only while Set 2 is open.
+- Primary and backup hotkeys are registered independently; a backup registration failure should not disable a successful primary registration.
+- If a set's active start and stop hotkeys are the same, only one hotkey is registered for that set and it toggles start and stop.
 - Hotkeys are unregistered when the main window is minimized.
 - Hotkeys are re-registered when the window is restored or activated.
-- Registration state is shown by `statusDot`: green for primary, yellow for backup, red for no registered hotkey.
+- Registration state is shown by `statusDot`: gold for both primary and secondary, green for primary only, blue for secondary only, and red for no registered hotkey.
 
 ## Offset Profiles
 

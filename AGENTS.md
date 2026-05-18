@@ -4,9 +4,11 @@
 
 - This is a single-project Windows Forms app targeting `net8.0-windows` with `UseWindowsForms=true`; the solution contains no separate test project.
 - The app is an ADB-backed Android automation runner. `config.json` is the editable runtime script source and is intentionally not copied to build/publish output by the `.csproj`.
-- `Form1.cs` owns the main window, global hotkey routing, run/stop state, offset selection, taskbar overlay icons, and opening the config editor.
-- Main-window status dots are separate: `statusDot` is global hotkey registration, and `adbStatusDot` is ADB server/device status from the background `adb track-devices` monitor. Hotkey status colors are green for primary hotkeys registered, yellow for backup hotkeys registered, and red for no registered hotkey. ADB status colors are dark gray for no server, red for server with no ready device, green for one ready device, and yellow for multiple ready devices.
-- The main Device dropdown is populated only from currently ready `adb track-devices` rows. One ready device is auto-selected; multiple ready devices require a user selection. Wi-Fi devices are displayed without the port, but ADB commands use the full selected serial internally.
+- `Form1.cs` owns the main window, global hotkey routing, two independent run-slot states, offset selection, taskbar overlay icons, and opening the config editor.
+- Main-window status dots are separate: `statusDot` is global hotkey registration, and `adbStatusDot` is ADB server/device status from the background `adb track-devices` monitor. Hotkey status colors are gold for both primary and secondary hotkeys registered, green for primary only, blue for secondary only, and red for no registered hotkey. ADB status colors are dark gray for no server, red for server with no ready device, green for one ready device, and yellow for multiple ready devices.
+- The main window supports two run control sets. Set 1 is always visible and uses primary hotkeys. Set 2 is toggled with `Alt+1`, uses secondary/backup hotkeys, and omits Config and Pair / Connect because those actions are shared.
+- Set 2 secondary hotkeys are registered only while Set 2 is open and are unregistered when Set 2 closes.
+- Each run set has its own Device dropdown populated only from currently ready `adb track-devices` rows. A device selected in one visible/running set must not be selectable in the other set. Hidden, stopped Set 2 must not reserve a device. Wi-Fi devices are displayed without the port, but ADB commands use the full selected serial internally.
 - `SearchableDropdown.cs` is the custom main Script/Sequence picker. Its popup owns search text and clears it on close; the main field should only show the selected item. When the popup opens, highlight the current selected item if it is still present in the filtered list.
 - `ConfigEditorForm.cs` is a hand-built WinForms editor for the four config categories: `settings`, `offset`, `scripts`, and `sequences`.
 - `WirelessAdbConnectForm.cs` is the manual Wireless ADB Pair / Connect helper opened from the main window below Config. It supports Pair and Connect actions, Restart Server, a Device dropdown with Manual Input at index 0, fixed-separator IPv4 entry, numeric-only Port and Pair Code fields, and Title Case display/status text except for user-entered values.
@@ -21,7 +23,7 @@
 ## Config Rules
 
 - `config.json` supports both top-level legacy scripts and the current `{ settings, offset, scripts, sequences }` shape; repository loading skips those category keys when scanning legacy scripts.
-- Settings are migrated from `hotkeyStartStopToggle` to `hotkeyStart`; do not reintroduce the old setting as the canonical key. Backup hotkeys use `hotkeyBackupStart` and `hotkeyBackupStop`, may be blank, and are tried only if the primary pair cannot register.
+- Settings are migrated from `hotkeyStartStopToggle` to `hotkeyStart`; do not reintroduce the old setting as the canonical key. Backup hotkeys use `hotkeyBackupStart` and `hotkeyBackupStop`, may be blank, and control Set 2 while Set 2 is open. They are registered independently from the primary Set 1 hotkeys.
 - Offset profiles are named `s<number>` and selected by matching digits in the script name; fallback keys include `offsetX`/`offsetY`, `ox`/`oy`, `x`/`y`, and `s`.
 - Script aliases are meaningful API: `d`, `imin`, `imax`, `i`, `config`, `steps`, nested `steps` with `repeat`/`rep`, `a`, `s`, `s2`, `p`, `p2`, `r`, `t`, and `o` must remain compatible unless intentionally migrated.
 - Runtime action normalization maps `left` to `leftclick`, `right` to `rightclick`, and leaves directional drag names usable; unknown actions are logged and skipped.
@@ -35,13 +37,14 @@
 
 ## Run Behavior
 
-- Start/stop is cancellation-token based. `StopRunAsync` cancels `_runCts` and waits for `_runTask`; avoid fire-and-forget script execution paths.
+- Start/stop is cancellation-token based. Each run set owns its own cancellation token and task; `StopRunAsync` cancels the selected set and waits for that set's task. Avoid fire-and-forget script execution paths.
 - `Duration <= 0` means run indefinitely. Positive duration is a loop count, not seconds.
 - Step sleeps and loop interval sleeps are randomized inclusively; inverted min/max values are swapped in `ScriptRunner.RandomBetween`.
 - Script and Sequence `emin` is an optional minimum cycle time in seconds. It cannot exceed the displayed max cycle time; runtime computes a cycle plan before execution and re-randomizes the lowest flexible waits upward until the plan reaches `emin`. If `emin` equals max cycle time, all flexible waits use their maximum values.
 - Drag steps use `s2`/`scrX2`/`scrY2` when supplied. Without an explicit end point, directional drag aliases derive the end point from `RandX`/`RandY`.
-- Global hotkeys are unregistered when the window is minimized and re-registered when restored/activated; this behavior is logged in the UI log and warning log.
+- Global hotkeys are unregistered when the window is minimized and re-registered when restored/activated; this behavior is logged in the UI log and warning log. Secondary hotkeys are included in registration only while Set 2 is open.
 - If active start and stop hotkeys are the same, only one hotkey is registered and it toggles start/stop.
+- In-app shortcuts are `Alt+1` for open/close Set 2, `Alt+2` for Config, and `Alt+3` for Pair / Connect. `Esc` stops active runs from the main window, calls the Config close-button flow in Config, and closes Pair / Connect.
 
 ## Build and Run
 

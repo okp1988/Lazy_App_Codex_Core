@@ -45,10 +45,9 @@ namespace Lazy_App_Codex_Core
         private Dictionary<string, DeviceInfo> _deviceMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DeviceInfo> _detectedDeviceMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _deviceInfoSyncing = new(StringComparer.OrdinalIgnoreCase);
-        private CancellationTokenSource? _runCts;
-        private Task? _runTask;
-        private bool _isRunning;
-        private LiveRunStatus _liveStatus = new LiveRunStatus { Idle = true };
+        private RunSlot _slot1 = null!;
+        private RunSlot _slot2 = null!;
+        private bool _slot2Visible;
         private Color _statusDotColor = Color.Red;
         private Color _adbStatusDotColor = Color.DarkGray;
         private bool? _lastHotkeyRegistrationSucceeded;
@@ -56,17 +55,17 @@ namespace Lazy_App_Codex_Core
         private readonly System.Windows.Forms.Timer _adbRetryTimer = new System.Windows.Forms.Timer();
         private readonly ToolTip _statusToolTip = new ToolTip();
         private AdbDeviceStatus _adbDeviceStatus = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status has not been checked yet.");
-        private string? _selectedDeviceSerial;
         private System.Diagnostics.Process? _adbTrackProcess;
         private TaskCompletionSource<AdbDeviceStatus>? _adbTrackFirstStatus;
         private bool _adbMonitorStarting;
         private bool _updatingDeviceDropdown;
-        private bool _deviceLossStopRequested;
         private bool _closing;
         private readonly string _baseTitle;
         private readonly Icon _baseIcon;
-        private readonly Icon _runningIcon;
-        private readonly Icon _stoppedIcon;
+        private readonly Icon _bothStoppedIcon;
+        private readonly Icon _slot1RunningIcon;
+        private readonly Icon _slot2RunningIcon;
+        private readonly Icon _bothRunningIcon;
         private ITaskbarList3? _taskbarList;
         private readonly List<string> _debugLog = new List<string>();
 
@@ -78,17 +77,17 @@ namespace Lazy_App_Codex_Core
             Icon? appIcon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             _baseIcon = appIcon != null ? (Icon)appIcon.Clone() : (Icon)SystemIcons.Application.Clone();
             appIcon?.Dispose();
-            _runningIcon = CreateOverlayIcon(Color.LimeGreen, true);
-            _stoppedIcon = CreateOverlayIcon(Color.DodgerBlue, false);
+            _bothStoppedIcon = CreateOverlayIcon(false, false);
+            _slot1RunningIcon = CreateOverlayIcon(true, false);
+            _slot2RunningIcon = CreateOverlayIcon(false, true);
+            _bothRunningIcon = CreateOverlayIcon(true, true);
             Icon = _baseIcon;
             _baseTitle = Text;
+            BuildRunSlots();
 
             Load += OnLoad;
             Activated += OnActivated;
             Resize += OnResize;
-            ddlScript.SelectionChanged += (_, _) => ApplySelectedDefaultOffset();
-            ddlDevice.DrawMode = DrawMode.OwnerDrawFixed;
-            ddlDevice.DrawItem += ddlDevice_DrawItem;
 
             ResetOffsetSelection();
 
@@ -105,9 +104,189 @@ namespace Lazy_App_Codex_Core
             _adbRetryTimer.Tick += async (_, _) => await EnsureAdbTrackMonitorAsync("retry timer");
             _statusToolTip.SetToolTip(statusDot, "Global hotkey status has not been checked yet.");
             _statusToolTip.SetToolTip(adbStatusDot, "ADB status has not been checked yet.");
-            _statusToolTip.SetToolTip(ddlDevice, "Select the ADB device to run commands on.");
+            _statusToolTip.SetToolTip(_slot1.DeviceBox, "Select the ADB device to run Set 1 commands on.");
+            _statusToolTip.SetToolTip(_slot2.DeviceBox, "Select the ADB device to run Set 2 commands on.");
             UpdateLiveStatusLabels();
-            SetRunningState(false);
+            SetRunningState(_slot1, false);
+            SetRunningState(_slot2, false);
+            SetSlot2Visible(false);
+        }
+
+        private void BuildRunSlots()
+        {
+            _slot1 = new RunSlot(
+                1,
+                ddlScript,
+                ddlOffset,
+                ddlTagFilter,
+                ddlDevice,
+                btnRun,
+                liveStatusLayout,
+                lblCurrentActionValue,
+                lblStepValue,
+                lblCycleValue,
+                lblNextActionValue,
+                lblNextAtValue,
+                lblEstimatedEndValue);
+
+            _slot1.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(_slot1);
+            _slot1.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(_slot1);
+            _slot1.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(_slot1);
+            _slot1.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
+            _slot1.DeviceBox.DrawItem += ddlDevice_DrawItem;
+            _slot1.RunButton.Click -= btnRun_Click;
+            _slot1.RunButton.Click += async (_, _) => await ToggleRunAsync(_slot1);
+
+            var content2 = CreateSlotContentLayout(out var selector2, out var live2);
+            var script2 = new SearchableDropdown
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
+                Margin = new Padding(0, 2, 8, 2),
+                MinimumSize = new Size(160, 30),
+                PlaceholderText = "Choose script or sequence"
+            };
+            selector2.Controls.Add(script2, 0, 0);
+
+            Label current2;
+            Label step2;
+            Label cycle2;
+            Label next2;
+            Label nextAt2;
+            Label estimated2;
+            AddStatusRow(live2, 0, "Current Action", current2 = new Label());
+            AddStatusRow(live2, 1, "Current Step", step2 = new Label());
+            AddStatusRow(live2, 2, "Current Cycle", cycle2 = new Label());
+            AddStatusRow(live2, 3, "Next Action", next2 = new Label());
+            AddStatusRow(live2, 4, "Next Action At", nextAt2 = new Label());
+            AddStatusRow(live2, 5, "Estimated End", estimated2 = new Label());
+
+            var action2 = CreateSlotActionPanel(
+                out var run2,
+                out var offset2,
+                out var tag2,
+                out var device2);
+
+            _slot2 = new RunSlot(2, script2, offset2, tag2, device2, run2, live2, current2, step2, cycle2, next2, nextAt2, estimated2)
+            {
+                ContentPanel = content2,
+                ActionPanel = action2
+            };
+            _slot2.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(_slot2);
+            _slot2.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(_slot2);
+            _slot2.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(_slot2);
+            _slot2.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
+            _slot2.DeviceBox.DrawItem += ddlDevice_DrawItem;
+            _slot2.RunButton.Click += async (_, _) => await ToggleRunAsync(_slot2);
+
+            mainLayout.ColumnCount = 4;
+            mainLayout.ColumnStyles[0].SizeType = SizeType.Percent;
+            mainLayout.ColumnStyles[0].Width = 100F;
+            mainLayout.ColumnStyles[1].SizeType = SizeType.Absolute;
+            mainLayout.ColumnStyles[1].Width = 150F;
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
+            mainLayout.Controls.Add(content2, 2, 0);
+            mainLayout.Controls.Add(action2, 3, 0);
+        }
+
+        private static TableLayoutPanel CreateSlotContentLayout(out TableLayoutPanel selector, out TableLayoutPanel liveStatus)
+        {
+            var content = new TableLayoutPanel
+            {
+                ColumnCount = 1,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(24, 0, 12, 0),
+                RowCount = 3
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 168F));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            selector = new TableLayoutPanel
+            {
+                ColumnCount = 1,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                RowCount = 1
+            };
+            selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            selector.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            liveStatus = new TableLayoutPanel
+            {
+                ColumnCount = 3,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 8, 0, 0),
+                RowCount = 6
+            };
+            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126F));
+            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 14F));
+            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (int i = 0; i < 6; i++)
+            {
+                liveStatus.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
+            }
+
+            content.Controls.Add(selector, 0, 0);
+            content.Controls.Add(liveStatus, 0, 1);
+            return content;
+        }
+
+        private static TableLayoutPanel CreateSlotActionPanel(out Button run, out ComboBox offset, out ComboBox tag, out ComboBox device)
+        {
+            var panel = new TableLayoutPanel
+            {
+                ColumnCount = 1,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                RowCount = 7,
+                Size = new Size(150, 172)
+            };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            for (int i = 0; i < 4; i++)
+            {
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+            }
+
+            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            run = CreateActionButton("Run");
+            offset = CreateActionCombo();
+            offset.Items.AddRange(OffsetDisplayOption.All.Cast<object>().ToArray());
+            tag = CreateActionCombo();
+            device = CreateActionCombo();
+
+            panel.Controls.Add(run, 0, 0);
+            panel.Controls.Add(offset, 0, 1);
+            panel.Controls.Add(tag, 0, 2);
+            panel.Controls.Add(device, 0, 3);
+            return panel;
+        }
+
+        private static Button CreateActionButton(string text)
+        {
+            return new Button
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
+                Margin = new Padding(0, 2, 0, 6),
+                Text = text,
+                UseVisualStyleBackColor = true
+            };
+        }
+
+        private static ComboBox CreateActionCombo()
+        {
+            return new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
+                FormattingEnabled = true,
+                Margin = new Padding(0, 4, 0, 6)
+            };
         }
 
         protected override void WndProc(ref Message m)
@@ -123,9 +302,27 @@ namespace Lazy_App_Codex_Core
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == Keys.Escape && _isRunning)
+            if (keyData == (Keys.Alt | Keys.D1))
             {
-                HandleHotkeyAction(HotkeyAction.Stop);
+                ToggleSlot2VisibleFromShortcut();
+                return true;
+            }
+
+            if (keyData == (Keys.Alt | Keys.D2))
+            {
+                btnConfig.PerformClick();
+                return true;
+            }
+
+            if (keyData == (Keys.Alt | Keys.D3))
+            {
+                btnWirelessAdb.PerformClick();
+                return true;
+            }
+
+            if (keyData == Keys.Escape && AnySlotRunning)
+            {
+                _ = StopAllRunsAsync();
                 return true;
             }
 
@@ -135,7 +332,7 @@ namespace Lazy_App_Codex_Core
         private void OnLoad(object? sender, EventArgs e)
         {
             RegisterHotkeysForWindowState();
-            SetTaskbarOverlayIcon(_stoppedIcon, "Stopped");
+            UpdateTaskbarOverlayIcon();
             _ = EnsureAdbTrackMonitorAsync("load");
         }
 
@@ -172,14 +369,13 @@ namespace Lazy_App_Codex_Core
 
         private void RegisterHotkeysForWindowState()
         {
-            HotkeyRegistrationProfile profile = _hotkeys.Register(Handle);
+            HotkeyRegistrationProfile profile = _hotkeys.Register(Handle, _slot2Visible);
             bool success = profile != HotkeyRegistrationProfile.None;
             UpdateHotkeyStatus(profile);
 
             if (success && _lastHotkeyRegistrationSucceeded != true)
             {
-                string profileName = profile == HotkeyRegistrationProfile.Backup ? "backup" : "primary";
-                WriteLog($"GLOBAL HOTKEY REGISTERED ({profileName}; Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}).");
+                WriteLog($"GLOBAL HOTKEY REGISTERED (Set 1: {_hotkeys.StartHotkeyText}/{_hotkeys.StopHotkeyText}; Set 2: {_hotkeys.BackupStartHotkeyText}/{_hotkeys.BackupStopHotkeyText}).");
             }
 
             if (!success && _lastHotkeyRegistrationSucceeded != false)
@@ -193,8 +389,10 @@ namespace Lazy_App_Codex_Core
 
         private void LoadConfig()
         {
-            string? selectedId = ddlScript.SelectedItem is RunTarget selected ? selected.Id : null;
-            string selectedTag = ddlTagFilter.SelectedItem?.ToString() ?? "All";
+            string? selectedId1 = _slot1.ScriptBox.SelectedItem is RunTarget selected1 ? selected1.Id : null;
+            string? selectedId2 = _slot2.ScriptBox.SelectedItem is RunTarget selected2 ? selected2.Id : null;
+            string selectedTag1 = _slot1.TagFilter.SelectedItem?.ToString() ?? "All";
+            string selectedTag2 = _slot2.TagFilter.SelectedItem?.ToString() ?? "All";
 
             try
             {
@@ -211,35 +409,38 @@ namespace Lazy_App_Codex_Core
             }
 
             _runTargets.Clear();
-            ddlScript.ClearSelection();
+            _slot1.ScriptBox.ClearSelection();
+            _slot2.ScriptBox.ClearSelection();
 
-            LoadTagFilter(selectedTag);
-            RebuildRunTargets(selectedId);
+            LoadTagFilter(_slot1, selectedTag1);
+            LoadTagFilter(_slot2, selectedTag2);
+            RebuildRunTargets(_slot1, selectedId1);
+            RebuildRunTargets(_slot2, selectedId2);
         }
 
-        private void LoadTagFilter(string selectedTag)
+        private void LoadTagFilter(RunSlot slot, string selectedTag)
         {
-            ddlTagFilter.BeginUpdate();
-            ddlTagFilter.Items.Clear();
-            ddlTagFilter.Items.Add("All");
+            slot.TagFilter.BeginUpdate();
+            slot.TagFilter.Items.Clear();
+            slot.TagFilter.Items.Add("All");
             foreach (string tag in NormalizeTags(_configRepository.Settings.Tags))
             {
                 if (!string.IsNullOrWhiteSpace(tag))
                 {
-                    ddlTagFilter.Items.Add(tag);
+                    slot.TagFilter.Items.Add(tag);
                 }
             }
 
-            int selectedIndex = ddlTagFilter.FindStringExact(selectedTag);
-            ddlTagFilter.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
-            ddlTagFilter.EndUpdate();
+            int selectedIndex = slot.TagFilter.FindStringExact(selectedTag);
+            slot.TagFilter.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+            slot.TagFilter.EndUpdate();
         }
 
-        private void RebuildRunTargets(string? selectedId = null)
+        private void RebuildRunTargets(RunSlot slot, string? selectedId = null)
         {
-            string selectedTag = ddlTagFilter.SelectedItem?.ToString() ?? "All";
+            string selectedTag = slot.TagFilter.SelectedItem?.ToString() ?? "All";
             _runTargets.Clear();
-            ddlScript.ClearSelection();
+            slot.ScriptBox.ClearSelection();
 
             foreach (var script in _library.Scripts)
             {
@@ -257,7 +458,7 @@ namespace Lazy_App_Codex_Core
                 }
             }
 
-            ddlScript.SetItems(_runTargets.Cast<object>());
+            slot.ScriptBox.SetItems(_runTargets.Cast<object>());
 
             if (string.IsNullOrWhiteSpace(selectedId))
             {
@@ -268,7 +469,7 @@ namespace Lazy_App_Codex_Core
             {
                 if (target.Id == selectedId)
                 {
-                    ddlScript.SelectedItem = target;
+                    slot.ScriptBox.SelectedItem = target;
                     break;
                 }
             }
@@ -300,22 +501,27 @@ namespace Lazy_App_Codex_Core
             return normalized;
         }
 
-        private async void btnRun_Click(object sender, EventArgs e)
+        private async void btnRun_Click(object? sender, EventArgs e)
         {
-            if (_isRunning)
+            await ToggleRunAsync(_slot1);
+        }
+
+        private async Task ToggleRunAsync(RunSlot slot)
+        {
+            if (slot.IsRunning)
             {
-                await StopRunAsync();
+                await StopRunAsync(slot);
                 return;
             }
 
-            await StartRunAsync();
+            await StartRunAsync(slot);
         }
 
-        private async Task StartRunAsync()
+        private async Task StartRunAsync(RunSlot slot)
         {
             await RefreshAdbStatusForRunAsync();
 
-            RunTarget? target = ddlScript.SelectedItem as RunTarget;
+            RunTarget? target = slot.ScriptBox.SelectedItem as RunTarget;
             if (target == null)
             {
                 MessageBox.Show("Select a script or sequence before run");
@@ -330,28 +536,28 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            string? selectedDeviceSerial = GetSelectedReadyDeviceSerial();
+            string? selectedDeviceSerial = GetSelectedReadyDeviceSerial(slot);
             if (selectedDeviceSerial == null)
             {
                 string message = _adbDeviceStatus.DeviceCount > 1
                     ? "Select a device before run."
                     : _adbDeviceStatus.Tooltip;
-                LogAdbStatus($"Run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={(string.IsNullOrWhiteSpace(_selectedDeviceSerial) ? "(none)" : _selectedDeviceSerial)}, message={message}");
+                LogAdbStatus($"Set {slot.Number} run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={(string.IsNullOrWhiteSpace(slot.SelectedDeviceSerial) ? "(none)" : slot.SelectedDeviceSerial)}, message={message}");
                 MessageBox.Show(message, "ADB Not Ready", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            LogAdbStatus($"Run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={selectedDeviceSerial}.");
+            LogAdbStatus($"Set {slot.Number} run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={selectedDeviceSerial}.");
 
-            _runCts = new CancellationTokenSource();
+            slot.RunCts = new CancellationTokenSource();
             _debugLog.Clear();
-            SetRunningState(true);
-            Text = $"{_baseTitle} - Running: {target.Name}";
+            SetRunningState(slot, true);
+            UpdateWindowTitle();
 
-            _runTask = RunSelectedTargetAsync(target, script, sequence, selectedDeviceSerial, _runCts.Token);
+            slot.RunTask = RunSelectedTargetAsync(slot, target, script, sequence, selectedDeviceSerial, slot.RunCts.Token);
             try
             {
-                await _runTask;
+                await slot.RunTask;
             }
             catch (OperationCanceledException)
             {
@@ -359,14 +565,16 @@ namespace Lazy_App_Codex_Core
             catch (Exception ex)
             {
                 AppLogger.LogError("Script run failed.", ex);
-                ShowRunError(ex);
+                ShowRunError(slot, ex);
                 WriteLog("ERROR: " + ex.Message);
             }
             finally
             {
-                _runTask = null;
-                SetRunningState(false);
-                Text = _baseTitle;
+                slot.RunTask = null;
+                slot.RunCts?.Dispose();
+                slot.RunCts = null;
+                SetRunningState(slot, false);
+                UpdateWindowTitle();
             }
         }
 
@@ -403,33 +611,33 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task RunSelectedTargetAsync(RunTarget target, ScriptModel? script, SequenceModel? sequence, string deviceSerial, CancellationToken token)
+        private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, string deviceSerial, CancellationToken token)
         {
-            var (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
-            WriteLog($"OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
+            var (offsetValue, offsetAxis) = GetSelectedOffset(slot, target.Name);
+            WriteLog($"SET {slot.Number} OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
             if (script != null)
             {
-                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, UpdateLiveStatus, IsAdbActionEnabled);
+                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, status => UpdateLiveStatus(slot, status), IsAdbActionEnabled);
             }
             else if (sequence != null)
             {
-                (offsetValue, offsetAxis) = GetSelectedOffset(target.Name);
+                (offsetValue, offsetAxis) = GetSelectedOffset(slot, target.Name);
                 await _runner.RunSequenceAsync(
                     sequence,
                     _library,
                     offsetValue,
                     offsetAxis,
-                    scriptItem => GetSelectedOffset(scriptItem.Name),
+                    scriptItem => GetSelectedOffset(slot, scriptItem.Name),
                     deviceSerial,
                     token,
-                    UpdateLiveStatus,
+                    status => UpdateLiveStatus(slot, status),
                     IsAdbActionEnabled);
             }
         }
 
-        private (int value, string axis) GetSelectedOffset(string scriptName)
+        private (int value, string axis) GetSelectedOffset(RunSlot slot, string scriptName)
         {
-            string raw = OffsetDisplayOption.ReadValue(ddlOffset.SelectedItem);
+            string raw = OffsetDisplayOption.ReadValue(slot.OffsetBox.SelectedItem);
             if (raw == "0")
             {
                 return (0, "y");
@@ -461,34 +669,56 @@ namespace Lazy_App_Codex_Core
         {
             if (action == HotkeyAction.Start)
             {
-                if (!_isRunning)
-                {
-                    btnRun.PerformClick();
-                }
+                _ = StartRunFromHotkeyAsync(_slot1);
             }
             else if (action == HotkeyAction.StartOrStop)
             {
-                btnRun.PerformClick();
+                _ = ToggleRunAsync(_slot1);
             }
             else if (action == HotkeyAction.Stop)
             {
-                _ = StopRunAsync();
+                _ = StopRunAsync(_slot1);
+            }
+            else if (action == HotkeyAction.BackupStart)
+            {
+                _ = StartRunFromHotkeyAsync(_slot2);
+            }
+            else if (action == HotkeyAction.BackupStartOrStop)
+            {
+                _ = ToggleRunAsync(_slot2);
+            }
+            else if (action == HotkeyAction.BackupStop)
+            {
+                _ = StopRunAsync(_slot2);
             }
         }
 
-        private async Task StopRunAsync()
+        private async Task StartRunFromHotkeyAsync(RunSlot slot)
         {
-            if (!_isRunning)
+            if (slot == _slot2 && !_slot2Visible)
+            {
+                SetSlot2Visible(true);
+            }
+
+            if (!slot.IsRunning)
+            {
+                await StartRunAsync(slot);
+            }
+        }
+
+        private async Task StopRunAsync(RunSlot slot)
+        {
+            if (!slot.IsRunning)
             {
                 return;
             }
 
-            _runCts?.Cancel();
+            slot.RunCts?.Cancel();
             try
             {
-                if (_runTask != null)
+                if (slot.RunTask != null)
                 {
-                    await _runTask;
+                    await slot.RunTask;
                 }
             }
             catch (OperationCanceledException)
@@ -496,39 +726,46 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private void SetRunningState(bool isRunning)
+        private async Task StopAllRunsAsync()
         {
-            _isRunning = isRunning;
-            ddlScript.Enabled = !isRunning;
-            ddlOffset.Enabled = !isRunning;
-            ddlTagFilter.Enabled = !isRunning;
-            ddlDevice.Enabled = !isRunning && ddlDevice.Items.Count > 0;
-            btnConfig.Enabled = !isRunning;
-            btnWirelessAdb.Enabled = !isRunning;
-            btnRun.Text = isRunning ? "Stop" : "Run";
-            SetTaskbarOverlayIcon(isRunning ? _runningIcon : _stoppedIcon, isRunning ? "Running" : "Stopped");
+            await Task.WhenAll(StopRunAsync(_slot1), StopRunAsync(_slot2));
+        }
+
+        private void SetRunningState(RunSlot slot, bool isRunning)
+        {
+            slot.IsRunning = isRunning;
+            slot.ScriptBox.Enabled = !isRunning;
+            slot.OffsetBox.Enabled = !isRunning;
+            slot.TagFilter.Enabled = !isRunning;
+            slot.DeviceBox.Enabled = !isRunning && slot.DeviceBox.Items.Count > 0;
+            slot.RunButton.Text = isRunning ? "Stop" : "Run";
+            btnConfig.Enabled = !AnySlotRunning;
+            btnWirelessAdb.Enabled = !AnySlotRunning;
+            UpdateTaskbarOverlayIcon();
 
             if (isRunning)
             {
-                UpdateLiveStatus(new LiveRunStatus { CurrentAction = "--", CurrentStep = "--", CurrentCycle = "--", NextAction = "--" });
+                UpdateLiveStatus(slot, new LiveRunStatus { CurrentAction = "--", CurrentStep = "--", CurrentCycle = "--", NextAction = "--" });
             }
             else
             {
-                UpdateLiveStatus(new LiveRunStatus { Idle = true });
+                UpdateLiveStatus(slot, new LiveRunStatus { Idle = true });
             }
+
+            UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
         }
 
-        private void UpdateLiveStatus(LiveRunStatus status)
+        private void UpdateLiveStatus(RunSlot slot, LiveRunStatus status)
         {
             if (InvokeRequired)
             {
-                BeginInvoke((Action)(() => UpdateLiveStatus(status)));
+                BeginInvoke((Action)(() => UpdateLiveStatus(slot, status)));
                 return;
             }
 
-            _liveStatus = status;
+            slot.LiveStatus = status;
             UpdateLiveStatusLabels();
-            WriteLog(status.CurrentAction);
+            WriteLog($"SET {slot.Number}: {status.CurrentAction}");
         }
 
         private void SetTaskbarOverlayIcon(Icon? overlayIcon, string description)
@@ -562,41 +799,34 @@ namespace Lazy_App_Codex_Core
             return taskbarList;
         }
 
-        private static Icon CreateOverlayIcon(Color badgeColor, bool isRunning)
+        private void UpdateTaskbarOverlayIcon()
+        {
+            Icon icon = (_slot1.IsRunning, _slot2.IsRunning) switch
+            {
+                (true, true) => _bothRunningIcon,
+                (true, false) => _slot1RunningIcon,
+                (false, true) => _slot2RunningIcon,
+                _ => _bothStoppedIcon
+            };
+            string description = (_slot1.IsRunning, _slot2.IsRunning) switch
+            {
+                (true, true) => "Set 1 and Set 2 running",
+                (true, false) => "Set 1 running",
+                (false, true) => "Set 2 running",
+                _ => "Both sets stopped"
+            };
+            SetTaskbarOverlayIcon(icon, description);
+        }
+
+        private static Icon CreateOverlayIcon(bool slot1Running, bool slot2Running)
         {
             using Bitmap bitmap = new Bitmap(32, 32);
             using Graphics graphics = Graphics.FromImage(bitmap);
             graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             graphics.Clear(Color.Transparent);
 
-            int badgeSize = 30;
-            int badgeX = 1;
-            int badgeY = 1;
-            var badgeBounds = new Rectangle(badgeX, badgeY, badgeSize - 1, badgeSize - 1);
-
-            using var badgeBrush = new SolidBrush(badgeColor);
-            using var borderPen = new Pen(Color.White, 3);
-            graphics.FillEllipse(badgeBrush, badgeBounds);
-            graphics.DrawEllipse(borderPen, badgeBounds);
-
-            using var symbolBrush = new SolidBrush(Color.White);
-            if (isRunning)
-            {
-                Point[] play =
-                {
-                    new Point(badgeX + badgeSize / 3, badgeY + badgeSize / 4),
-                    new Point(badgeX + badgeSize / 3, badgeY + badgeSize * 3 / 4),
-                    new Point(badgeX + badgeSize * 3 / 4, badgeY + badgeSize / 2)
-                };
-                graphics.FillPolygon(symbolBrush, play);
-            }
-            else
-            {
-                int squareSize = badgeSize / 3;
-                int squareX = badgeX + (badgeSize - squareSize) / 2;
-                int squareY = badgeY + (badgeSize - squareSize) / 2;
-                graphics.FillRectangle(symbolBrush, squareX, squareY, squareSize, squareSize);
-            }
+            DrawOverlaySlot(graphics, new Rectangle(2, 4, 13, 24), slot1Running);
+            DrawOverlaySlot(graphics, new Rectangle(17, 4, 13, 24), slot2Running);
 
             IntPtr iconHandle = bitmap.GetHicon();
             try
@@ -607,6 +837,14 @@ namespace Lazy_App_Codex_Core
             {
                 DestroyIcon(iconHandle);
             }
+        }
+
+        private static void DrawOverlaySlot(Graphics graphics, Rectangle bounds, bool running)
+        {
+            using var fill = new SolidBrush(running ? Color.LimeGreen : Color.DimGray);
+            using var border = new Pen(Color.White, 2);
+            graphics.FillRectangle(fill, bounds);
+            graphics.DrawRectangle(border, bounds);
         }
 
         private void statusDot_Paint(object? sender, PaintEventArgs e)
@@ -637,34 +875,40 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (_liveStatus.Idle)
+            UpdateLiveStatusLabels(_slot1);
+            UpdateLiveStatusLabels(_slot2);
+        }
+
+        private static void UpdateLiveStatusLabels(RunSlot slot)
+        {
+            if (slot.LiveStatus.Idle)
             {
-                lblCurrentActionValue.Text = "--";
-                lblStepValue.Text = "--";
-                lblCycleValue.Text = "--";
-                lblNextActionValue.Text = "--";
-                lblNextAtValue.Text = "--";
-                lblEstimatedEndValue.Text = "--";
+                slot.CurrentActionLabel.Text = "--";
+                slot.StepLabel.Text = "--";
+                slot.CycleLabel.Text = "--";
+                slot.NextActionLabel.Text = "--";
+                slot.NextAtLabel.Text = "--";
+                slot.EstimatedEndLabel.Text = "--";
                 return;
             }
 
-            lblCurrentActionValue.Text = _liveStatus.CurrentAction;
-            lblStepValue.Text = _liveStatus.CurrentStep;
-            lblCycleValue.Text = _liveStatus.CurrentCycle;
-            lblNextActionValue.Text = _liveStatus.NextAction;
-            lblNextAtValue.Text = FormatStatusTime(_liveStatus.NextActionAt);
-            lblEstimatedEndValue.Text = FormatStatusTime(_liveStatus.EstimatedEnd);
+            slot.CurrentActionLabel.Text = slot.LiveStatus.CurrentAction;
+            slot.StepLabel.Text = slot.LiveStatus.CurrentStep;
+            slot.CycleLabel.Text = slot.LiveStatus.CurrentCycle;
+            slot.NextActionLabel.Text = slot.LiveStatus.NextAction;
+            slot.NextAtLabel.Text = FormatStatusTime(slot.LiveStatus.NextActionAt);
+            slot.EstimatedEndLabel.Text = FormatStatusTime(slot.LiveStatus.EstimatedEnd);
         }
 
-        private void ShowRunError(Exception ex)
+        private void ShowRunError(RunSlot slot, Exception ex)
         {
             if (InvokeRequired)
             {
-                BeginInvoke((Action)(() => ShowRunError(ex)));
+                BeginInvoke((Action)(() => ShowRunError(slot, ex)));
                 return;
             }
 
-            _liveStatus = new LiveRunStatus
+            slot.LiveStatus = new LiveRunStatus
             {
                 CurrentAction = "ERROR",
                 CurrentStep = "--",
@@ -673,8 +917,8 @@ namespace Lazy_App_Codex_Core
                 Idle = false
             };
             UpdateLiveStatusLabels();
-            lblNextAtValue.Text = "Check ADB/device connection";
-            lblEstimatedEndValue.Text = ShortenError(ex.Message);
+            slot.NextAtLabel.Text = "Check ADB/device connection";
+            slot.EstimatedEndLabel.Text = ShortenError(ex.Message);
             MessageBox.Show(ex.Message, "Lazy App Run Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
@@ -695,28 +939,25 @@ namespace Lazy_App_Codex_Core
 
         private void UpdateHotkeyStatus(HotkeyRegistrationProfile profile)
         {
-            bool success = profile != HotkeyRegistrationProfile.None;
-            _statusDotColor = profile switch
+            _statusDotColor = (_hotkeys.PrimaryProfileRegistered, _hotkeys.BackupProfileRegistered) switch
             {
-                HotkeyRegistrationProfile.Primary => Color.Green,
-                HotkeyRegistrationProfile.Backup => Color.Gold,
+                (true, true) => Color.Gold,
+                (true, false) => Color.Green,
+                (false, true) => Color.DodgerBlue,
                 _ => Color.Red
             };
+            string primaryStatus = _hotkeys.PrimaryProfileRegistered ? "registered" : "not registered";
+            string backupStatus = _hotkeys.BackupProfileRegistered ? "registered" : "not registered";
             _statusToolTip.SetToolTip(
                 statusDot,
-                profile switch
-                {
-                    HotkeyRegistrationProfile.Primary => $"Primary global hotkeys are registered. Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}.",
-                    HotkeyRegistrationProfile.Backup => $"Backup global hotkeys are registered. Start: {_hotkeys.ActiveStartHotkeyText}, Stop: {_hotkeys.ActiveStopHotkeyText}.",
-                    _ => $"Global hotkeys are not registered. Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}."
-                });
+                $"Set 1 hotkeys {primaryStatus}. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}. Set 2 hotkeys {backupStatus}. Start: {_hotkeys.BackupStartHotkeyText}, Stop: {_hotkeys.BackupStopHotkeyText}.");
             statusDot.Invalidate();
         }
 
         private void btnConfig_Click(object sender, EventArgs e)
         {
             _ = EnsureAdbTrackMonitorAsync("config");
-            using var editor = new ConfigEditorForm(_configRepository, () => _adbDeviceStatus, () => _selectedDeviceSerial);
+            using var editor = new ConfigEditorForm(_configRepository, () => _adbDeviceStatus, () => _slot1.SelectedDeviceSerial);
             if (editor.ShowDialog(this) != DialogResult.OK || !editor.ConfigSaved)
             {
                 return;
@@ -750,24 +991,100 @@ namespace Lazy_App_Codex_Core
 
         private void ddlTagFilter_SelectedIndexChanged(object sender, EventArgs e)
         {
+            SlotTagFilterChanged(_slot1);
+        }
+
+        private void ddlDevice_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            SlotDeviceChanged(_slot1);
+        }
+
+        private void SlotTagFilterChanged(RunSlot slot)
+        {
             if (_library.Scripts.Count == 0 && _library.Sequences.Count == 0)
             {
                 return;
             }
 
-            RebuildRunTargets();
-            ResetOffsetSelection();
+            RebuildRunTargets(slot);
+            ResetOffsetSelection(slot);
         }
 
-        private void ddlDevice_SelectedIndexChanged(object sender, EventArgs e)
+        private void SlotDeviceChanged(RunSlot slot)
         {
             if (_updatingDeviceDropdown)
             {
                 return;
             }
 
-            _selectedDeviceSerial = (ddlDevice.SelectedItem as DeviceDisplayItem)?.Serial;
-            LogAdbStatus("Selected device changed: " + (_selectedDeviceSerial ?? "(none)"));
+            slot.SelectedDeviceSerial = (slot.DeviceBox.SelectedItem as DeviceDisplayItem)?.Serial;
+            LogAdbStatus($"Set {slot.Number} selected device changed: " + (slot.SelectedDeviceSerial ?? "(none)"));
+            UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
+        }
+
+        private bool AnySlotRunning => _slot1.IsRunning || _slot2.IsRunning;
+
+        private bool IsSlotDeviceSelectionActive(RunSlot slot)
+        {
+            return slot == _slot1 || _slot2Visible || slot.IsRunning;
+        }
+
+        private void ToggleSlot2VisibleFromShortcut()
+        {
+            if (_slot2Visible && _slot2.IsRunning)
+            {
+                WriteLog("STOP SET 2 BEFORE HIDING.");
+                return;
+            }
+
+            SetSlot2Visible(!_slot2Visible);
+        }
+
+        private void SetSlot2Visible(bool visible)
+        {
+            bool changed = _slot2Visible != visible;
+            _slot2Visible = visible;
+            if (!_slot2.IsRunning)
+            {
+                _slot2.SelectedDeviceSerial = null;
+            }
+
+            _slot2.ContentPanel.Visible = visible;
+            _slot2.ActionPanel.Visible = visible;
+            mainLayout.ColumnStyles[2].Width = visible ? 100F : 0F;
+            mainLayout.ColumnStyles[3].Width = visible ? 150F : 0F;
+            MinimumSize = visible ? new Size(1100, 340) : new Size(640, 340);
+            if (visible && Width < 1100)
+            {
+                Width = 1100;
+            }
+            else if (!visible && Width > 760 && !AnySlotRunning)
+            {
+                Width = 640;
+            }
+
+            UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
+            if (changed && WindowState != FormWindowState.Minimized)
+            {
+                _lastHotkeyRegistrationSucceeded = null;
+                RegisterHotkeysForWindowState();
+            }
+        }
+
+        private void UpdateWindowTitle()
+        {
+            var running = new List<string>();
+            if (_slot1.IsRunning && _slot1.ScriptBox.SelectedItem is RunTarget target1)
+            {
+                running.Add("Set 1: " + target1.Name);
+            }
+
+            if (_slot2.IsRunning && _slot2.ScriptBox.SelectedItem is RunTarget target2)
+            {
+                running.Add("Set 2: " + target2.Name);
+            }
+
+            Text = running.Count == 0 ? _baseTitle : $"{_baseTitle} - Running: {string.Join("; ", running)}";
         }
 
         private void ddlDevice_DrawItem(object? sender, DrawItemEventArgs e)
@@ -792,13 +1109,19 @@ namespace Lazy_App_Codex_Core
 
         private void ResetOffsetSelection()
         {
-            SelectOffsetValue("0");
+            ResetOffsetSelection(_slot1);
+            ResetOffsetSelection(_slot2);
         }
 
-        private void ApplySelectedDefaultOffset()
+        private void ResetOffsetSelection(RunSlot slot)
         {
-            ResetOffsetSelection();
-            RunTarget? target = ddlScript.SelectedItem as RunTarget;
+            SelectOffsetValue(slot, "0");
+        }
+
+        private void ApplySelectedDefaultOffset(RunSlot slot)
+        {
+            ResetOffsetSelection(slot);
+            RunTarget? target = slot.ScriptBox.SelectedItem as RunTarget;
             if (target == null)
             {
                 return;
@@ -824,22 +1147,22 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            SelectOffsetValue(defaultOffset);
+            SelectOffsetValue(slot, defaultOffset);
         }
 
-        private void SelectOffsetValue(string value)
+        private void SelectOffsetValue(RunSlot slot, string value)
         {
-            for (int index = 0; index < ddlOffset.Items.Count; index++)
+            for (int index = 0; index < slot.OffsetBox.Items.Count; index++)
             {
-                if (ddlOffset.Items[index] is OffsetDisplayOption option &&
+                if (slot.OffsetBox.Items[index] is OffsetDisplayOption option &&
                     option.Value.Equals(value, StringComparison.OrdinalIgnoreCase))
                 {
-                    ddlOffset.SelectedIndex = index;
+                    slot.OffsetBox.SelectedIndex = index;
                     return;
                 }
             }
 
-            ddlOffset.SelectedIndex = -1;
+            slot.OffsetBox.SelectedIndex = -1;
         }
 
         private async Task EnsureAdbTrackMonitorAsync(string trigger)
@@ -1163,44 +1486,64 @@ namespace Lazy_App_Codex_Core
                 QueueDeviceInfoSync(readyDevices);
             }
 
-            string? previousSelection = _selectedDeviceSerial;
+            UpdateDeviceDropdownForSlot(_slot1, _slot2, readyDevices);
+            UpdateDeviceDropdownForSlot(_slot2, _slot1, readyDevices);
+        }
+
+        private void UpdateDeviceDropdownForSlot(RunSlot slot, RunSlot otherSlot, List<AdbTrackedDevice> readyDevices)
+        {
+            string? previousSelection = slot.SelectedDeviceSerial;
             bool selectedDeviceRemoved = previousSelection != null &&
                 !readyDevices.Any(device => device.Serial.Equals(previousSelection, StringComparison.OrdinalIgnoreCase));
 
             if (selectedDeviceRemoved)
             {
-                _selectedDeviceSerial = null;
+                slot.SelectedDeviceSerial = null;
             }
 
-            string? desiredSelection = _selectedDeviceSerial;
+            string? desiredSelection = slot.SelectedDeviceSerial;
+            string? otherSelection = IsSlotDeviceSelectionActive(otherSlot) ? otherSlot.SelectedDeviceSerial : null;
+            if (!slot.IsRunning && SerialEquals(desiredSelection, otherSelection))
+            {
+                desiredSelection = null;
+                slot.SelectedDeviceSerial = null;
+            }
+
             if (desiredSelection == null && readyDevices.Count > 0)
             {
-                desiredSelection = readyDevices[0].Serial;
+                desiredSelection = readyDevices
+                    .FirstOrDefault(device => !SerialEquals(device.Serial, otherSelection))
+                    ?.Serial;
             }
 
             _updatingDeviceDropdown = true;
             try
             {
-                ddlDevice.BeginUpdate();
-                ddlDevice.Items.Clear();
+                slot.DeviceBox.BeginUpdate();
+                slot.DeviceBox.Items.Clear();
                 foreach (var device in readyDevices)
                 {
+                    if (!SerialEquals(device.Serial, desiredSelection) && SerialEquals(device.Serial, otherSelection))
+                    {
+                        continue;
+                    }
+
                     string key = AdbShellController.GetDeviceKey(device.Serial);
                     _deviceMetadata.TryGetValue(key, out var metadata);
                     _detectedDeviceMetadata.TryGetValue(key, out var detected);
-                    ddlDevice.Items.Add(new DeviceDisplayItem(device.Serial, GetDeviceDisplayName(device.Serial), HasDeviceMetadataMismatch(metadata, detected)));
+                    slot.DeviceBox.Items.Add(new DeviceDisplayItem(device.Serial, GetDeviceDisplayName(device.Serial), HasDeviceMetadataMismatch(metadata, detected)));
                 }
 
-                ddlDevice.SelectedIndex = -1;
+                slot.DeviceBox.SelectedIndex = -1;
                 if (desiredSelection != null)
                 {
-                    for (int index = 0; index < ddlDevice.Items.Count; index++)
+                    for (int index = 0; index < slot.DeviceBox.Items.Count; index++)
                     {
-                        if (ddlDevice.Items[index] is DeviceDisplayItem item &&
+                        if (slot.DeviceBox.Items[index] is DeviceDisplayItem item &&
                             item.Serial.Equals(desiredSelection, StringComparison.OrdinalIgnoreCase))
                         {
-                            ddlDevice.SelectedIndex = index;
-                            _selectedDeviceSerial = item.Serial;
+                            slot.DeviceBox.SelectedIndex = index;
+                            slot.SelectedDeviceSerial = item.Serial;
                             break;
                         }
                     }
@@ -1208,57 +1551,64 @@ namespace Lazy_App_Codex_Core
             }
             finally
             {
-                ddlDevice.EndUpdate();
+                slot.DeviceBox.EndUpdate();
                 _updatingDeviceDropdown = false;
             }
 
-            ddlDevice.Enabled = !_isRunning && readyDevices.Count > 0;
+            slot.DeviceBox.Enabled = !slot.IsRunning && slot.DeviceBox.Items.Count > 0;
             _statusToolTip.SetToolTip(
-                ddlDevice,
+                slot.DeviceBox,
                 readyDevices.Count == 0
                     ? "No ready ADB device is connected."
-                    : "Select the ADB device to run commands on.");
+                    : $"Select the ADB device to run Set {slot.Number} commands on.");
 
-            if (selectedDeviceRemoved && _isRunning && !_deviceLossStopRequested)
+            if (selectedDeviceRemoved && slot.IsRunning && !slot.DeviceLossStopRequested)
             {
-                _deviceLossStopRequested = true;
+                slot.DeviceLossStopRequested = true;
                 string removedDevice = GetDeviceDisplayName(previousSelection ?? "");
-                LogAdbStatus($"Selected device removed while running: {previousSelection}. Stopping run.");
-                _ = StopRunForMissingDeviceAsync(removedDevice);
+                LogAdbStatus($"Set {slot.Number} selected device removed while running: {previousSelection}. Stopping run.");
+                _ = StopRunForMissingDeviceAsync(slot, removedDevice);
             }
-            else if (!_isRunning)
+            else if (!slot.IsRunning)
             {
-                _deviceLossStopRequested = false;
+                slot.DeviceLossStopRequested = false;
             }
         }
 
-        private async Task StopRunForMissingDeviceAsync(string removedDevice)
+        private async Task StopRunForMissingDeviceAsync(RunSlot slot, string removedDevice)
         {
-            await StopRunAsync();
+            await StopRunAsync(slot);
             if (!_closing)
             {
                 MessageBox.Show(
-                    $"Selected device disconnected: {removedDevice}. Run stopped.",
+                    $"Set {slot.Number} selected device disconnected: {removedDevice}. Run stopped.",
                     "ADB Device Removed",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
 
-            _deviceLossStopRequested = false;
+            slot.DeviceLossStopRequested = false;
         }
 
-        private string? GetSelectedReadyDeviceSerial()
+        private string? GetSelectedReadyDeviceSerial(RunSlot slot)
         {
-            if (string.IsNullOrWhiteSpace(_selectedDeviceSerial))
+            if (string.IsNullOrWhiteSpace(slot.SelectedDeviceSerial))
             {
                 return null;
             }
 
             return _adbDeviceStatus.Devices.Any(device =>
                 device.IsReady &&
-                device.Serial.Equals(_selectedDeviceSerial, StringComparison.OrdinalIgnoreCase))
-                    ? _selectedDeviceSerial
+                device.Serial.Equals(slot.SelectedDeviceSerial, StringComparison.OrdinalIgnoreCase))
+                    ? slot.SelectedDeviceSerial
                     : null;
+        }
+
+        private static bool SerialEquals(string? left, string? right)
+        {
+            return !string.IsNullOrWhiteSpace(left) &&
+                !string.IsNullOrWhiteSpace(right) &&
+                left.Equals(right, StringComparison.OrdinalIgnoreCase);
         }
 
         private string GetDeviceDisplayName(string serial)
@@ -1465,10 +1815,68 @@ namespace Lazy_App_Codex_Core
             _adbRetryTimer.Dispose();
             StopTrackDevicesProcess();
             _statusToolTip.Dispose();
-            _runningIcon.Dispose();
-            _stoppedIcon.Dispose();
+            _bothStoppedIcon.Dispose();
+            _slot1RunningIcon.Dispose();
+            _slot2RunningIcon.Dispose();
+            _bothRunningIcon.Dispose();
             _baseIcon.Dispose();
-            _runCts?.Cancel();
+            _slot1.RunCts?.Cancel();
+            _slot2.RunCts?.Cancel();
+        }
+
+        private sealed class RunSlot
+        {
+            public RunSlot(
+                int number,
+                SearchableDropdown scriptBox,
+                ComboBox offsetBox,
+                ComboBox tagFilter,
+                ComboBox deviceBox,
+                Button runButton,
+                TableLayoutPanel liveStatusLayout,
+                Label currentActionLabel,
+                Label stepLabel,
+                Label cycleLabel,
+                Label nextActionLabel,
+                Label nextAtLabel,
+                Label estimatedEndLabel)
+            {
+                Number = number;
+                ScriptBox = scriptBox;
+                OffsetBox = offsetBox;
+                TagFilter = tagFilter;
+                DeviceBox = deviceBox;
+                RunButton = runButton;
+                LiveStatusLayout = liveStatusLayout;
+                CurrentActionLabel = currentActionLabel;
+                StepLabel = stepLabel;
+                CycleLabel = cycleLabel;
+                NextActionLabel = nextActionLabel;
+                NextAtLabel = nextAtLabel;
+                EstimatedEndLabel = estimatedEndLabel;
+            }
+
+            public int Number { get; }
+            public SearchableDropdown ScriptBox { get; }
+            public ComboBox OffsetBox { get; }
+            public ComboBox TagFilter { get; }
+            public ComboBox DeviceBox { get; }
+            public Button RunButton { get; }
+            public TableLayoutPanel LiveStatusLayout { get; }
+            public Label CurrentActionLabel { get; }
+            public Label StepLabel { get; }
+            public Label CycleLabel { get; }
+            public Label NextActionLabel { get; }
+            public Label NextAtLabel { get; }
+            public Label EstimatedEndLabel { get; }
+            public Control ContentPanel { get; init; } = null!;
+            public Control ActionPanel { get; init; } = null!;
+            public CancellationTokenSource? RunCts { get; set; }
+            public Task? RunTask { get; set; }
+            public bool IsRunning { get; set; }
+            public bool DeviceLossStopRequested { get; set; }
+            public string? SelectedDeviceSerial { get; set; }
+            public LiveRunStatus LiveStatus { get; set; } = new LiveRunStatus { Idle = true };
         }
 
         private sealed record RunTarget(string Kind, string Id, string Name, string Tag)

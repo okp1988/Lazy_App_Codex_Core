@@ -173,6 +173,17 @@ namespace Lazy_App_Codex_Core
 
         private string CurrentTab => _tabs.SelectedTab?.Name ?? "scripts";
 
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                _closeButton.PerformClick();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         private void BuildLayout()
         {
             _tabs.Dock = DockStyle.Top;

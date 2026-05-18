@@ -3,7 +3,7 @@
 ## Run Rules
 
 - Start and stop must be cancellation-token based.
-- `StopRunAsync` cancels `_runCts` and waits for `_runTask`.
+- Each run set owns its own cancellation token and task. `StopRunAsync` cancels the selected set and waits for that set's task.
 - Avoid fire-and-forget script execution.
 - `Duration <= 0` means run indefinitely.
 - Positive `Duration` means loop count, not seconds.
@@ -81,11 +81,11 @@ The controller also exposes captured Wireless ADB helpers for `adb pair`, `adb c
 - Green: exactly one ready device.
 - Yellow: multiple ready devices.
 
-The Device dropdown is populated only from currently ready `device` rows in the latest `adb track-devices` snapshot. One ready device is auto-selected. With multiple ready devices, the user must select which serial receives ADB commands. Wi-Fi serials are shown without their port in the dropdown, while commands still use the full serial internally.
+Each visible run-set Device dropdown is populated only from currently ready `device` rows in the latest `adb track-devices` snapshot. One ready device is auto-selected when it is not already selected by the other visible/running set. With multiple devices, the same serial must not be selectable in both visible/running run sets. Wi-Fi serials are shown without their port in the dropdown, while commands still use the full serial internally.
 
 Device display names come from `settings.devices`. New devices are synced from ADB properties and default to `manufacturer : model`. If a current connected device's detected manufacturer/model conflicts with saved metadata, the dropdown item is highlighted red instead of overwriting the saved entry.
 
-This is separate from `statusDot`, which reports global hotkey registration.
+This is separate from `statusDot`, which reports global hotkey registration: gold for both primary and secondary, green for primary only, blue for secondary only, and red for none.
 
 ## ADB Monitoring Rules
 
@@ -96,8 +96,8 @@ This is separate from `statusDot`, which reports global hotkey registration.
 - Refresh status after closing the Wireless ADB Pair / Connect window, including after ADB server restart.
 - Run should trust cached no-device status and prompt immediately.
 - Only dark gray should attempt a fresh ADB monitor start/check before showing a message or running.
-- Run starts only when a selected ready device is available.
-- If the selected device disappears while running, cancel the run and notify the user.
+- A run set starts only when its selected ready device is available.
+- If a selected device disappears while running, cancel only the affected run set and notify the user.
 - If `adb track-devices` starts successfully but emits no initial device block before the Run timeout, treat it as red/no ready device.
 - Do not add a separate polling or health-check path to cover `track-devices` bugs.
 

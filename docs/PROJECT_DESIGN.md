@@ -20,16 +20,16 @@ The app is designed for manual Android workflows where the user wants repeatable
 
 1. Start the app.
 2. App loads `config.json` from the current working directory.
-3. App registers global hotkeys when the main window is active/restored, using backup hotkeys if the primary hotkeys are already taken.
+3. App registers Set 1 primary global hotkeys when the main window is active/restored. Set 2 secondary hotkeys are registered only while Set 2 is open.
 4. App checks whether an ADB server is already listening on port `5037`.
 5. If ADB server is present, app starts a background `adb track-devices` monitor.
-6. Current ready devices appear in the Device dropdown.
+6. Current ready devices appear in the visible run-set Device dropdowns, with the same device excluded from the other visible/running set.
 7. If Wireless ADB is paired but not connected, the user may open Pair / Connect and manually pair or connect with the current phone IP and port.
-8. User selects a Script or Sequence.
-9. Optional default offset from the selected entry auto-selects the main offset dropdown.
-10. User clicks Run or presses the configured start hotkey.
-11. App refreshes ADB readiness, then runs only when a ready device is selected.
-12. User clicks Stop, presses Escape, or presses the configured stop/toggle hotkey to cancel.
+8. User selects a Script or Sequence in Set 1, or opens Set 2 with `Alt+1` and selects a second Script or Sequence there.
+9. Optional default offset from the selected entry auto-selects that run set's offset dropdown.
+10. User clicks Run or presses that set's configured start hotkey.
+11. App refreshes ADB readiness, then runs that set only when a ready device is selected.
+12. User clicks Stop, presses Escape from the main window, or presses the configured stop/toggle hotkey to cancel.
 
 ## Main Concepts
 
@@ -75,9 +75,15 @@ Sequences can define the same enforced minimum cycle time as Scripts. The limit 
 
 ### Hotkey
 
-Primary start and stop hotkeys are configured in Settings. Optional backup start and stop hotkeys may also be configured for running a second app instance or avoiding a hotkey already owned by another process.
+Primary start and stop hotkeys are configured in Settings and control Set 1. Optional backup start and stop hotkeys control Set 2 while Set 2 is open.
 
-The main hotkey status dot is green when primary hotkeys register, yellow when backup hotkeys register, and red when no hotkey registers.
+The main hotkey status dot is gold when both primary and secondary hotkeys register, green when primary only registers, blue when secondary only registers, and red when no hotkey registers.
+
+### Run Set
+
+The main window has two independent run sets. Set 1 is always visible. Set 2 opens and closes with `Alt+1`, has its own Script/Sequence picker, offset, tag, device, run button, and live status panel, but does not duplicate Config or Pair / Connect.
+
+The same ADB device cannot be selected in both visible/running sets. Closing a stopped Set 2 releases its selected device and unregisters Set 2 secondary hotkeys.
 
 ### Offset
 

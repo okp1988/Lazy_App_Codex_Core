@@ -6,15 +6,17 @@ Scope: current working tree for the Windows Forms ADB automation runner.
 
 ## Summary
 
-The project builds successfully when using a separate output path while a local app instance is running. The current code is coherent overall: config migration, the editor model, sequence support, primary/backup hotkey routing, ADB status dots, cycle enforcement, and cancellation-based run/stop behavior are all in place.
+The project builds successfully when using a separate output path while a local app instance is running. The current code is coherent overall: config migration, the editor model, sequence support, primary/secondary hotkey routing, two independent run sets, ADB status dots, cycle enforcement, and cancellation-based run/stop behavior are all in place.
 
-The main remaining risks are behavioral edge cases in action normalization and legacy directional drags. ADB tracking exposes ready device serials to the main Device dropdown so runs can target the selected device, and `settings.devices` stores friendly device names plus synced manufacturer/model metadata.
+The main remaining risks are behavioral edge cases in action normalization and legacy directional drags. ADB tracking exposes ready device serials to the run-set Device dropdowns so each run can target its selected device, and `settings.devices` stores friendly device names plus synced manufacturer/model metadata.
 
 Recent changes:
 
 - Scripts and Sequences now support `emin`, an enforced minimum cycle time capped by max cycle time.
-- Settings now support optional backup hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
-- The hotkey dot is green for primary registration, yellow for backup registration, and red when no hotkey is registered.
+- Settings support optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
+- Set 2 opens/closes with `Alt+1`; secondary hotkeys register only while Set 2 is open.
+- The hotkey dot is gold for both registrations, green for primary-only, blue for secondary-only, and red when no hotkey is registered.
+- The taskbar overlay distinguishes both stopped, Set 1 running, Set 2 running, and both running.
 
 ## Findings
 
@@ -61,6 +63,7 @@ Commands run:
 ```text
 dotnet build Lazy_App_Codex_Core.sln --configuration Release
 dotnet build Lazy_App_Codex_Core.sln -p:OutputPath=D:\Misc_Project\Lazy_App_Codex_Core\build_check\
+dotnet build Lazy_App_Codex_Core.sln --no-restore -p:OutputPath=build_check\
 ```
 
 Result: separate-output build succeeded with 0 warnings and 0 errors after sandbox escalation for local Windows SDK access. Normal output may be blocked when `Lazy App.exe` is already running and locking `bin`.
