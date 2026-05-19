@@ -17,7 +17,7 @@ Lazy App runs ADB-based tap, back, and drag workflows for Android devices. No ap
 2. For Visual Studio development, use Visual Studio 2022 version 17.8 or newer, or Visual Studio 2026, with the .NET desktop development workload installed. Visual Studio can read `.vsconfig` from this repository to install the required workload.
 3. Install ADB, for example at `C:\adb`.
 4. Enable USB Debugging or Wireless Debugging on the phone.
-5. Connect the device before running a Script or Sequence.
+5. Connect the device before running a Script, Sequence, or Run Plan.
 
 Open `Lazy_App_Codex_Core.sln` in Visual Studio. The project is an SDK-style Windows Forms app targeting `net8.0-windows`, so no legacy project migration is required. The WinForms designer metadata for `Form1`, `ConfigEditorForm`, `SearchableDropdown`, and `WirelessAdbConnectForm` is stored in the shared project file instead of user-local `.csproj.user` settings.
 
@@ -36,13 +36,14 @@ adb kill-server
 
 ## Main Window
 
-- Use the Script/Sequence dropdown to select what to run.
-- Click the Script/Sequence dropdown to open a custom picker.
-- The first dropdown row is a search box; matching Scripts and Sequences are shown below.
-- Opening the Script/Sequence dropdown highlights the current selected item when it is still in the filtered list.
+- Use the Script/Sequence/Run Plan dropdown to select what to run.
+- Click the Script/Sequence/Run Plan dropdown to open a custom picker.
+- The first dropdown row is a search box; matching Scripts, Sequences, and Run Plans are shown below.
+- Opening the Script/Sequence/Run Plan dropdown highlights the current selected item when it is still in the filtered list.
 - Selecting an item closes the dropdown, clears the search box, and keeps only the selected item in the main field.
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
+- Run Plans display as `[P] NAME`.
 - The first small status dot reports global hotkey registration: gold means both primary and secondary hotkeys registered, green means primary only, blue means secondary only, and red means no hotkey is registered. The taskbar overlay repeats this hotkey state with a small status dot, and shows one or two run-set identifiers depending on whether Set 2 is open. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
 - `Alt+1` opens or closes Set 2, a second independent run control set. Set 1 uses primary hotkeys. Set 2 uses secondary/backup hotkeys only while Set 2 is open and omits Config and Pair / Connect because those actions are shared. The main window uses fixed one-set and two-set sizes; users cannot resize or maximize it, and Run/Stop actions must not resize either run set. `Alt+2` opens Config, and `Alt+3` opens Pair / Connect.
 - Each run set has its own Device dropdown listing currently ready devices from `adb track-devices`. A device selected in one visible or running set is not selectable in the other set. One ready device is auto-selected when available; Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
@@ -60,15 +61,16 @@ Each live status panel shows current action, step, cycle, next action, next acti
 
 ## Config Editor
 
-The config editor uses in-memory changes while open. Switching tabs or selecting another Script/Sequence does not write `config.json`. The file is written only when using `Save All & Close`, confirming save on close, or restoring a backup. Pressing `Esc` calls the same close flow, so unsaved changes still prompt.
+The config editor uses in-memory changes while open. Switching tabs or selecting another Script, Sequence, or Run Plan does not write `config.json`. The file is written only when using `Save All & Close`, confirming save on close, or restoring a backup. Pressing `Esc` calls the same close flow, so unsaved changes still prompt.
 
 Available tabs:
 
-- Settings: primary start/stop hotkeys, optional backup start/stop hotkeys, and the tag list used by Scripts and Sequences.
+- Settings: primary start/stop hotkeys, optional backup start/stop hotkeys, and the tag list used by Scripts, Sequences, and Run Plans.
 - Devices: saved ADB device names and detected manufacturer/model data.
 - Offset: offset profiles such as `s26` or `s13`.
 - Scripts: script info, tag, hide-from-main toggle, default offset, action groups, and step rows.
-- Sequences: sequence info, tag, default offset, and mixed script/action items.
+- Sequences: sequence info, tag, hide-from-main toggle, default offset, and mixed script/action items.
+- Run Plans: ordered Script/Sequence targets with per-item repeat counts.
 
 The Devices tab stores friendly names under `settings.devices`. New connected devices are synced from ADB properties and default to `manufacturer : model`; names can be edited manually. Wi-Fi device keys are stored without the port. Connected devices can be synced, while disconnected saved devices can still be renamed or deleted.
 
@@ -105,7 +107,7 @@ A Sequence cannot contain another Sequence.
 
 Sequence script items store only the script internal ID, so renaming a Script does not break Sequence references.
 
-Scripts and Sequences may have one tag or a blank tag. The main window tag filter is below the offset selector. `All` is always the first filter option and shows all visible Scripts plus all Sequences. Selecting a configured tag shows entries with that tag plus entries without a tag. Hidden Scripts stay available for Sequence items, but do not appear in the main Script/Sequence dropdown.
+Scripts, Sequences, and Run Plans may have one tag or a blank tag. The main window tag filter is below the offset selector. `All` is always the first filter option and shows all visible Scripts, visible Sequences, and Run Plans. Selecting a configured tag shows entries with that tag plus entries without a tag. Hidden Scripts stay available for Sequence items, and hidden Sequences stay available for Run Plan items, but they do not appear in the main Script/Sequence/Run Plan dropdown.
 
 When a Script is run inside a Sequence:
 
@@ -123,6 +125,28 @@ When running a Sequence directly:
 
 Deleting a Script that is used by Sequences asks for confirmation and deletes the dependent Sequences only after confirmation.
 
+## Run Plans
+
+A Run Plan is a runnable ordered list of existing Scripts and Sequences. It can repeat targets in any order, for example:
+
+```text
+Seq A x1
+Seq B x1
+Seq A x1
+Seq B x2
+Seq A x1
+```
+
+Run Plan item order is preserved exactly. Each item stores:
+
+- Target type: Script or Sequence
+- Target ID
+- Repeat count
+
+The item repeat count overrides the target's saved loop count only for that Run Plan item. The target's internal cycle behavior still applies: Script and Sequence `emin`, `imin`, `imax`, sleeps, direct Sequence action delays, offsets, ADB OFF mode, live status updates, and cancellation all use the same rules as direct Script/Sequence runs. The Run Plans editor shows total min/max time by adding each referenced target cycle time with item repeats.
+
+Hidden Scripts may be used by Sequences, and hidden Sequences may be used by Run Plans. Run Plans cannot contain another Run Plan.
+
 ## Offset Behavior
 
 Scripts and Sequences can optionally bind a default offset. If enabled, selecting that Script/Sequence auto-selects the saved offset in the main window.
@@ -130,6 +154,8 @@ Scripts and Sequences can optionally bind a default offset. If enabled, selectin
 Offset profile lookup is based on the runnable name. For example, a script named `ENE_26` uses `s26` if that offset profile exists.
 
 For Sequence script items, offset lookup uses the script item's own script name. Direct action items use the selected Sequence/main offset context.
+
+For Run Plans, Script items use that Script's default offset when enabled, otherwise the run set's selected offset. Sequence items use that Sequence's default offset when enabled, otherwise the run set's selected offset. A Run Plan may switch offsets from item to item, so `Seq A` with X left 1 and `Seq B` with X right 1 keep their own defaults when both appear in the same plan.
 
 Only left-click actions apply the offset. Drag and back actions do not.
 

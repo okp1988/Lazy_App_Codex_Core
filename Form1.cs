@@ -148,7 +148,7 @@ namespace Lazy_App_Codex_Core
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
                 Margin = new Padding(0, 2, 8, 2),
                 MinimumSize = new Size(160, 30),
-                PlaceholderText = "Choose script or sequence"
+                PlaceholderText = "Choose script, sequence, or plan"
             };
             selector2.Controls.Add(script2, 0, 0);
 
@@ -461,9 +461,17 @@ namespace Lazy_App_Codex_Core
 
             foreach (var sequence in _library.Sequences)
             {
-                if (MatchesSelectedTag(sequence.Tag, selectedTag))
+                if (!sequence.Hidden && MatchesSelectedTag(sequence.Tag, selectedTag))
                 {
                     _runTargets.Add(new RunTarget("sequence", sequence.Id, sequence.Name, sequence.Tag));
+                }
+            }
+
+            foreach (var runPlan in _library.RunPlans)
+            {
+                if (MatchesSelectedTag(runPlan.Tag, selectedTag))
+                {
+                    _runTargets.Add(new RunTarget("plan", runPlan.Id, runPlan.Name, runPlan.Tag));
                 }
             }
 
@@ -533,15 +541,22 @@ namespace Lazy_App_Codex_Core
             RunTarget? target = slot.ScriptBox.SelectedItem as RunTarget;
             if (target == null)
             {
-                MessageBox.Show("Select a script or sequence before run");
+                MessageBox.Show("Select a script, sequence, or run plan before run");
                 return;
             }
 
             ScriptModel? script = target.Kind == "script" ? _library.FindScriptById(target.Id) : null;
-            SequenceModel? sequence = target.Kind == "sequence" ? _library.Sequences.FirstOrDefault(item => item.Id == target.Id) : null;
-            if (script == null && sequence == null)
+            SequenceModel? sequence = target.Kind == "sequence" ? _library.FindSequenceById(target.Id) : null;
+            RunPlanModel? runPlan = target.Kind == "plan" ? _library.FindRunPlanById(target.Id) : null;
+            if (script == null && sequence == null && runPlan == null)
             {
                 MessageBox.Show($"Missing config ({target.Name})");
+                return;
+            }
+
+            if (runPlan != null && TryGetRunPlanValidationError(runPlan, out string validationError))
+            {
+                MessageBox.Show(validationError, "Run Plan Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -563,7 +578,7 @@ namespace Lazy_App_Codex_Core
             SetRunningState(slot, true);
             UpdateWindowTitle();
 
-            slot.RunTask = RunSelectedTargetAsync(slot, target, script, sequence, selectedDeviceSerial, slot.RunCts.Token);
+            slot.RunTask = RunSelectedTargetAsync(slot, target, script, sequence, runPlan, selectedDeviceSerial, slot.RunCts.Token);
             try
             {
                 await slot.RunTask;
@@ -573,7 +588,7 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
-                AppLogger.LogError("Script run failed.", ex);
+                AppLogger.LogError("Run failed.", ex);
                 ShowRunError(slot, ex);
                 WriteLog("ERROR: " + ex.Message);
             }
@@ -620,7 +635,7 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, string deviceSerial, CancellationToken token)
+        private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, RunPlanModel? runPlan, string deviceSerial, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(slot, target.Name);
             WriteLog($"SET {slot.Number} OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
@@ -642,11 +657,82 @@ namespace Lazy_App_Codex_Core
                     status => UpdateLiveStatus(slot, status),
                     IsAdbActionEnabled);
             }
+            else if (runPlan != null)
+            {
+                await _runner.RunPlanAsync(
+                    runPlan,
+                    _library,
+                    scriptItem => GetRunPlanScriptOffset(slot, scriptItem),
+                    sequenceItem => GetRunPlanSequenceOffset(slot, sequenceItem),
+                    (sequenceItem, scriptItem) => GetRunPlanSequenceScriptOffset(slot, sequenceItem, scriptItem),
+                    deviceSerial,
+                    token,
+                    status => UpdateLiveStatus(slot, status),
+                    IsAdbActionEnabled);
+            }
+        }
+
+        private bool TryGetRunPlanValidationError(RunPlanModel runPlan, out string error)
+        {
+            if (runPlan.Items.Count == 0)
+            {
+                error = $"Run plan \"{runPlan.Name}\" has no items.";
+                return true;
+            }
+
+            foreach (var item in runPlan.Items)
+            {
+                if (item.Type == "sequence")
+                {
+                    if (_library.FindSequenceById(item.TargetId) == null)
+                    {
+                        error = $"Run plan \"{runPlan.Name}\" references a missing sequence: {item.TargetId}";
+                        return true;
+                    }
+
+                    continue;
+                }
+
+                if (_library.FindScriptById(item.TargetId) == null)
+                {
+                    error = $"Run plan \"{runPlan.Name}\" references a missing script: {item.TargetId}";
+                    return true;
+                }
+            }
+
+            error = "";
+            return false;
         }
 
         private (int value, string axis) GetSelectedOffset(RunSlot slot, string scriptName)
         {
             string raw = OffsetDisplayOption.ReadValue(slot.OffsetBox.SelectedItem);
+            return ResolveOffset(raw, scriptName);
+        }
+
+        private (int value, string axis) GetRunPlanScriptOffset(RunSlot slot, ScriptModel script)
+        {
+            return script.DefaultOffsetEnabled
+                ? ResolveOffset(script.DefaultOffset, script.Name)
+                : GetSelectedOffset(slot, script.Name);
+        }
+
+        private (int value, string axis) GetRunPlanSequenceOffset(RunSlot slot, SequenceModel sequence)
+        {
+            return sequence.DefaultOffsetEnabled
+                ? ResolveOffset(sequence.DefaultOffset, sequence.Name)
+                : GetSelectedOffset(slot, sequence.Name);
+        }
+
+        private (int value, string axis) GetRunPlanSequenceScriptOffset(RunSlot slot, SequenceModel sequence, ScriptModel script)
+        {
+            return sequence.DefaultOffsetEnabled
+                ? ResolveOffset(sequence.DefaultOffset, script.Name)
+                : GetSelectedOffset(slot, script.Name);
+        }
+
+        private (int value, string axis) ResolveOffset(string raw, string scriptName)
+        {
             if (raw == "0")
             {
                 return (0, "y");
@@ -1185,11 +1271,15 @@ namespace Lazy_App_Codex_Core
                 enabled = script?.DefaultOffsetEnabled == true;
                 defaultOffset = script?.DefaultOffset ?? "0";
             }
-            else
+            else if (target.Kind == "sequence")
             {
-                var sequence = _library.Sequences.FirstOrDefault(item => item.Id == target.Id);
+                var sequence = _library.FindSequenceById(target.Id);
                 enabled = sequence?.DefaultOffsetEnabled == true;
                 defaultOffset = sequence?.DefaultOffset ?? "0";
+            }
+            else
+            {
+                return;
             }
 
             if (!enabled)
@@ -1935,7 +2025,12 @@ namespace Lazy_App_Codex_Core
         {
             public override string ToString()
             {
-                return Kind == "sequence" ? "[Q] " + Name : "[S] " + Name;
+                return Kind switch
+                {
+                    "sequence" => "[Q] " + Name,
+                    "plan" => "[P] " + Name,
+                    _ => "[S] " + Name
+                };
             }
         }
 

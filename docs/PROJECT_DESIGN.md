@@ -25,7 +25,7 @@ The app is designed for manual Android workflows where the user wants repeatable
 5. If ADB server is present, app starts a background `adb track-devices` monitor.
 6. Current ready devices appear in the visible run-set Device dropdowns, with the same device excluded from the other visible/running set.
 7. If Wireless ADB is paired but not connected, the user may open Pair / Connect and manually pair or connect with the current phone IP and port.
-8. User selects a Script or Sequence in Set 1, or opens Set 2 with `Alt+1` and selects a second Script or Sequence there.
+8. User selects a Script, Sequence, or Run Plan in Set 1, or opens Set 2 with `Alt+1` and selects a second Script, Sequence, or Run Plan there.
 9. Optional default offset from the selected entry auto-selects that run set's offset dropdown.
 10. User clicks Run or presses that set's configured start hotkey.
 11. App refreshes ADB readiness, then runs that set only when a ready device is selected.
@@ -73,6 +73,16 @@ Sequences must not contain other Sequences.
 
 Sequences can define the same enforced minimum cycle time as Scripts. The limit applies to one sequence cycle and does not multiply by loop count.
 
+Sequences can be hidden from the main picker while remaining valid inside Run Plans.
+
+### Run Plan
+
+A Run Plan is a first-class runnable entry that executes an ordered list of existing Scripts and Sequences.
+
+Run Plan items store the target type, target ID, and repeat count. The repeat count overrides the target's saved loop count only for that item, while the referenced target keeps its own internal cycle rules such as `emin`, `imin`, `imax`, sleeps, Sequence item delays, default offsets, ADB OFF mode, status updates, and cancellation.
+
+Run Plans may repeat the same target multiple times and preserve the configured item order exactly. They must not contain other Run Plans.
+
 ### Hotkey
 
 Primary start and stop hotkeys are configured in Settings and control Set 1. Optional backup start and stop hotkeys control Set 2 while Set 2 is open.
@@ -83,7 +93,7 @@ The taskbar overlay mirrors the hotkey registration state with a small status id
 
 ### Run Set
 
-The main window has two independent run sets. Set 1 is always visible. Set 2 opens and closes with `Alt+1`, has its own Script/Sequence picker, offset, tag, device, run button, and live status panel, but does not duplicate Config or Pair / Connect.
+The main window has two independent run sets. Set 1 is always visible. Set 2 opens and closes with `Alt+1`, has its own Script/Sequence/Run Plan picker, offset, tag, device, run button, and live status panel, but does not duplicate Config or Pair / Connect.
 
 The same ADB device cannot be selected in both visible/running sets. Closing a stopped Set 2 releases its selected device and unregisters Set 2 secondary hotkeys.
 
@@ -97,7 +107,7 @@ Offset profiles are named `s<number>` and selected by matching digits in the run
 
 ### Tag
 
-Tags are configured under `settings.tag`. Scripts and Sequences may have one tag or a blank tag.
+Tags are configured under `settings.tag`. Scripts, Sequences, and Run Plans may have one tag or a blank tag.
 
 The main filter always includes `All`. Selecting a configured tag shows matching entries plus blank-tag entries.
 
@@ -116,3 +126,4 @@ The main window also provides a Pair / Connect Wireless ADB helper. It supports 
 - Do not make `config.json` part of build or publish output.
 - Do not add a separate health-check poller for ADB status.
 - Do not make hidden Scripts disappear from Sequence references.
+- Do not make hidden Sequences disappear from Run Plan references.

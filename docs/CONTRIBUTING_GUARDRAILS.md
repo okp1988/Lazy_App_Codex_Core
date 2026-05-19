@@ -10,7 +10,9 @@
 - Backward-compatible config aliases.
 - Script aliases listed in `CONFIG_AND_SETTINGS.md`.
 - Sequence support as first-class runnable entries.
+- Run Plans as first-class runnable entries.
 - Hidden Scripts remaining valid in Sequences.
+- Hidden Sequences remaining valid in Run Plans.
 - Tag filter behavior with `All` at index 0.
 - Separate hotkey and ADB status dots.
 - Hotkey dot color meanings: gold for both primary and secondary hotkeys, green for primary only, blue for secondary only, red for no registered hotkey.
@@ -21,6 +23,8 @@
 - Fixed one-set and two-set window sizes with user resize and maximize disabled; Run/Stop must not resize or stretch run-set controls.
 - Device dropdown exclusion between visible/running run sets so both sets cannot target the same ADB serial.
 - Script and Sequence `emin` minimum cycle enforcement.
+- Run Plan item repeat overriding only the referenced target's saved loop count.
+- Run Plans preserving referenced Script/Sequence `emin`, `imin`, `imax`, sleeps, offsets, ADB OFF mode, cancellation, and live status behavior.
 - Wireless ADB Pair / Connect and Restart Server as manual helpers, not a background reconnect loop.
 - Saved Wi-Fi device keys without ports, with current `IP:Port` stored in `lastSerial`.
 - Cancellation-based Run/Stop behavior.
@@ -48,12 +52,14 @@
 - Do not allow Script or Sequence `emin` to exceed the displayed max cycle time.
 - Do not apply UI offsets to drag or back actions.
 - Do not let Sequences reference other Sequences.
+- Do not let Run Plans reference other Run Plans.
 - Do not remove alias compatibility accidentally.
 - Do not convert unknown actions into real device touches.
 - Do not start `adb track-devices` unless ADB server is already listening.
 - Do not add a separate polling or health-check ADB status path.
 - Do not hide blank-tag entries when a configured tag is selected.
 - Do not remove hidden Scripts from Sequence script pickers.
+- Do not remove hidden Sequences from Run Plan target pickers.
 - Do not write unrelated formatting or metadata churn.
 
 ## Build Commands
@@ -114,5 +120,7 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Script picker highlights the current selected item when opened.
 - Tag filtering shows selected tag plus blank-tag entries.
 - Hidden Scripts are absent from main picker and present for Sequence references.
+- Hidden Sequences are absent from main picker and present for Run Plan references.
 - Script and Sequence Enforce Min rejects values above max cycle time and stretches randomized cycles up to the configured minimum.
+- Run Plans execute repeated alternating items in exact configured order, use each item repeat as the item loop count, and keep each target's `emin`, `imin`, and `imax`.
 - Track Touch starts only when the selected ADB device is ready and stops when that device is lost.

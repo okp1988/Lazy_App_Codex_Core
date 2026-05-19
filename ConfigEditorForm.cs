@@ -5,6 +5,9 @@ namespace Lazy_App_Codex_Core
 {
     public sealed class ConfigEditorForm : Form
     {
+        private const int ScriptInfoPanelHeight = 132;
+        private const int ScriptStepGridMinimumHeight = 120;
+        private const int ScriptTotalRowHeight = 36;
         private static readonly OffsetDisplayOption[] OffsetOptions = OffsetDisplayOption.All;
 
         private readonly ScriptConfigRepository _repository;
@@ -31,6 +34,7 @@ namespace Lazy_App_Codex_Core
 
         private readonly TextBox _scriptNameBox = new();
         private readonly TextBox _sequenceNameBox = new();
+        private readonly TextBox _runPlanNameBox = new();
         private readonly TextBox _offsetNameBox = new();
         private readonly TextBox _hotkeyStartBox = new();
         private readonly TextBox _hotkeyStopBox = new();
@@ -67,6 +71,8 @@ namespace Lazy_App_Codex_Core
         private readonly CheckBox _sequenceDefaultOffsetEnabledBox = new();
         private readonly ComboBox _sequenceDefaultOffsetBox = new();
         private readonly ComboBox _sequenceTagBox = new();
+        private readonly CheckBox _sequenceHiddenBox = new();
+        private readonly ComboBox _runPlanTagBox = new();
         private readonly ListBox _groupList = new();
         private readonly NumericUpDown _groupRepeatBox = CreateNumberBox(1);
         private readonly DataGridView _stepGrid = new();
@@ -89,6 +95,14 @@ namespace Lazy_App_Codex_Core
         private readonly Button _itemUpButton = new();
         private readonly Button _itemDownButton = new();
         private readonly Label _sequenceTotalLabel = new();
+        private readonly DataGridView _runPlanGrid = new();
+        private readonly Button _addRunPlanScriptButton = new();
+        private readonly Button _addRunPlanSequenceButton = new();
+        private readonly Button _removeRunPlanItemButton = new();
+        private readonly Button _cloneRunPlanItemButton = new();
+        private readonly Button _runPlanItemUpButton = new();
+        private readonly Button _runPlanItemDownButton = new();
+        private readonly Label _runPlanTotalLabel = new();
 
         private ConfigLibrary _library;
         private JObject _root;
@@ -97,6 +111,7 @@ namespace Lazy_App_Codex_Core
         private Dictionary<string, DeviceInfo> _workingDevices = new(StringComparer.OrdinalIgnoreCase);
         private ScriptModel? _selectedScript;
         private SequenceModel? _selectedSequence;
+        private RunPlanModel? _selectedRunPlan;
         private string? _selectedDeviceKey;
         private string _selectedSettingsKey = "hotkeys";
         private string? _selectedOffsetKey;
@@ -257,6 +272,7 @@ namespace Lazy_App_Codex_Core
             right.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             right.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
             var editorHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            editorHost.Controls.Add(BuildRunPlanEditor());
             editorHost.Controls.Add(BuildSequenceEditor());
             editorHost.Controls.Add(BuildScriptEditor());
             editorHost.Controls.Add(BuildOffsetEditor());
@@ -426,14 +442,22 @@ namespace Lazy_App_Codex_Core
 
         private Control BuildScriptEditor()
         {
-            var panel = new TableLayoutPanel { Name = "scriptEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
+            var panel = new TableLayoutPanel
+            {
+                Name = "scriptEditor",
+                Dock = DockStyle.Top,
+                ColumnCount = 1,
+                RowCount = 5,
+                Height = ScriptInfoPanelHeight + 118 + 44 + ScriptStepGridMinimumHeight + ScriptTotalRowHeight,
+                Visible = false
+            };
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, ScriptInfoPanelHeight));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, ScriptStepGridMinimumHeight));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, ScriptTotalRowHeight));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 6, Padding = new Padding(0, 4, 0, 4) };
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -442,9 +466,7 @@ namespace Lazy_App_Codex_Core
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             AddTextField(info, "Name", _scriptNameBox, 0);
             AddNumberField(info, "Loop Count", _loopBox, 1);
             AddNumberField(info, "Interval Min", _intervalMinBox, 2);
@@ -507,8 +529,12 @@ namespace Lazy_App_Codex_Core
             ConfigureButton(_rowDownButton, "Row Down", (_, _) => MoveRow(1), 92);
             rowTools.Controls.AddRange(new Control[] { _cloneRowButton, _deleteRowButton, _rowUpButton, _rowDownButton });
             ConfigureStepGrid(_stepGrid);
-            _stepGrid.MinimumSize = new Size(0, 120);
+            _stepGrid.MinimumSize = new Size(0, ScriptStepGridMinimumHeight);
+            _stepGrid.Margin = new Padding(0, 0, 0, 8);
             _stepTotalLabel.Dock = DockStyle.Fill;
+            _stepTotalLabel.Padding = new Padding(2, 0, 0, 0);
+            _stepTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
+            _stepTotalLabel.AutoEllipsis = true;
             _stepTotalLabel.Font = new Font(_stepTotalLabel.Font, FontStyle.Bold);
 
             panel.Controls.Add(info, 0, 0);
@@ -551,7 +577,12 @@ namespace Lazy_App_Codex_Core
             _sequenceDefaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
             _sequenceDefaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
             _sequenceTagBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _sequenceHiddenBox.Text = "Hide from Main";
+            _sequenceHiddenBox.AutoSize = true;
+            _sequenceHiddenBox.Dock = DockStyle.Fill;
+            _sequenceHiddenBox.Margin = new Padding(0, 4, 4, 2);
             namePanel.Controls.Add(_sequenceDefaultOffsetEnabledBox, 0, 2);
+            namePanel.Controls.Add(_sequenceHiddenBox, 0, 4);
             namePanel.Controls.Add(Label("Default Offset"), 1, 2);
             namePanel.Controls.Add(_sequenceDefaultOffsetBox, 1, 3);
             namePanel.Controls.Add(Label("Tag"), 2, 2);
@@ -574,6 +605,47 @@ namespace Lazy_App_Codex_Core
             panel.Controls.Add(itemTools, 0, 1);
             panel.Controls.Add(_sequenceGrid, 0, 2);
             panel.Controls.Add(_sequenceTotalLabel, 0, 3);
+            return panel;
+        }
+
+        private Control BuildRunPlanEditor()
+        {
+            var panel = new TableLayoutPanel { Name = "runPlanEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Padding(0, 4, 0, 4) };
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+            info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            AddTextField(info, "Name", _runPlanNameBox, 0);
+            _runPlanTagBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            info.Controls.Add(Label("Tag"), 1, 0);
+            info.Controls.Add(_runPlanTagBox, 1, 1);
+            info.Controls.Add(CreateHelpButton("Run Plans execute existing Scripts and Sequences in this exact item order. Item repeat counts override the target duration for that item only."), 2, 0);
+
+            var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
+            ConfigureButton(_addRunPlanScriptButton, "Add Script", (_, _) => AddRunPlanItem("script"), 100);
+            ConfigureButton(_addRunPlanSequenceButton, "Add Sequence", (_, _) => AddRunPlanItem("sequence"), 120);
+            ConfigureButton(_removeRunPlanItemButton, "Remove", (_, _) => RemoveRunPlanItem(), 82);
+            ConfigureButton(_cloneRunPlanItemButton, "Clone", (_, _) => CloneRunPlanItem(), 76);
+            ConfigureButton(_runPlanItemUpButton, "Up", (_, _) => MoveRunPlanItem(-1), 58);
+            ConfigureButton(_runPlanItemDownButton, "Down", (_, _) => MoveRunPlanItem(1), 70);
+            itemTools.Controls.AddRange(new Control[] { _addRunPlanScriptButton, _addRunPlanSequenceButton, _removeRunPlanItemButton, _cloneRunPlanItemButton, _runPlanItemUpButton, _runPlanItemDownButton });
+
+            ConfigureRunPlanGrid();
+            _runPlanGrid.MinimumSize = new Size(0, 160);
+            _runPlanTotalLabel.Dock = DockStyle.Fill;
+            _runPlanTotalLabel.Font = new Font(_runPlanTotalLabel.Font, FontStyle.Bold);
+
+            panel.Controls.Add(info, 0, 0);
+            panel.Controls.Add(itemTools, 0, 1);
+            panel.Controls.Add(_runPlanGrid, 0, 2);
+            panel.Controls.Add(_runPlanTotalLabel, 0, 3);
             return panel;
         }
 
@@ -638,6 +710,27 @@ namespace Lazy_App_Codex_Core
             _sequenceGrid.CurrentCellDirtyStateChanged += (_, _) => { if (_sequenceGrid.IsCurrentCellDirty) _sequenceGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
         }
 
+        private void ConfigureRunPlanGrid()
+        {
+            _runPlanGrid.Dock = DockStyle.Fill;
+            _runPlanGrid.AllowUserToAddRows = false;
+            _runPlanGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _runPlanGrid.ScrollBars = ScrollBars.Both;
+            var targetCol = new DataGridViewComboBoxColumn { Name = "target", HeaderText = "Target", Width = 260, MinimumWidth = 180, FlatStyle = FlatStyle.Flat };
+            _runPlanGrid.Columns.Add(targetCol);
+            _runPlanGrid.Columns.Add(TextColumn("repeat", "Repeat", 80));
+            _runPlanGrid.CellValueChanged += (_, _) =>
+            {
+                UpdateSelectedRunPlanFromGrid();
+                UpdateRunPlanTotals();
+                MarkDirty();
+            };
+            _runPlanGrid.RowsAdded += (_, _) => { UpdateSelectedRunPlanFromGrid(); UpdateRunPlanTotals(); MarkDirty(); };
+            _runPlanGrid.RowsRemoved += (_, _) => { UpdateSelectedRunPlanFromGrid(); UpdateRunPlanTotals(); MarkDirty(); };
+            _runPlanGrid.DataError += (_, e) => e.ThrowException = false;
+            _runPlanGrid.CurrentCellDirtyStateChanged += (_, _) => { if (_runPlanGrid.IsCurrentCellDirty) _runPlanGrid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
+        }
+
         private void LoadTabs()
         {
             _tabs.TabPages.Add("settings", "Settings");
@@ -645,6 +738,7 @@ namespace Lazy_App_Codex_Core
             _tabs.TabPages.Add("offset", "Offset");
             _tabs.TabPages.Add("scripts", "Scripts");
             _tabs.TabPages.Add("sequences", "Sequences");
+            _tabs.TabPages.Add("runPlans", "Run Plans");
             _tabs.SelectedTab = _tabs.TabPages["scripts"];
             _currentTabIndex = _tabs.SelectedIndex;
             _activeEditorTab = CurrentTab;
@@ -656,6 +750,7 @@ namespace Lazy_App_Codex_Core
             {
                 "scripts" => _selectedScript?.Id,
                 "sequences" => _selectedSequence?.Id,
+                "runPlans" => _selectedRunPlan?.Id,
                 "offset" => _selectedOffsetKey,
                 "settings" => _selectedSettingsKey,
                 "devices" => _selectedDeviceKey,
@@ -677,6 +772,13 @@ namespace Lazy_App_Codex_Core
                 foreach (var sequence in _library.Sequences.Where(s => Matches(s.Name, filter)))
                 {
                     _entryList.Items.Add(new EntryRef(sequence.Name, sequence.Id));
+                }
+            }
+            else if (CurrentTab == "runPlans")
+            {
+                foreach (var runPlan in _library.RunPlans.Where(s => Matches(s.Name, filter)))
+                {
+                    _entryList.Items.Add(new EntryRef(runPlan.Name, runPlan.Id));
                 }
             }
             else if (CurrentTab == "settings")
@@ -763,6 +865,7 @@ namespace Lazy_App_Codex_Core
             _selectedSettingsKey = CurrentTab == "settings" ? entry.Id : _selectedSettingsKey;
             _selectedScript = CurrentTab == "scripts" ? _library.Scripts.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedSequence = CurrentTab == "sequences" ? _library.Sequences.FirstOrDefault(s => s.Id == entry.Id) : null;
+            _selectedRunPlan = CurrentTab == "runPlans" ? _library.RunPlans.FirstOrDefault(s => s.Id == entry.Id) : null;
             _selectedOffsetKey = CurrentTab == "offset" ? entry.Id : null;
             _selectedDeviceKey = CurrentTab == "devices" ? entry.Id : null;
         }
@@ -830,7 +933,14 @@ namespace Lazy_App_Codex_Core
                 _sequenceDefaultOffsetBox.Enabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 SelectOffsetValue(_sequenceDefaultOffsetBox, _selectedSequence.DefaultOffset);
                 RefreshTagCombo(_sequenceTagBox, _selectedSequence.Tag);
+                _sequenceHiddenBox.Checked = _selectedSequence.Hidden;
                 RefreshSequenceGrid();
+            }
+            else if (_selectedRunPlan != null)
+            {
+                _runPlanNameBox.Text = _selectedRunPlan.Name;
+                RefreshTagCombo(_runPlanTagBox, _selectedRunPlan.Tag);
+                RefreshRunPlanGrid();
             }
 
             _dirty = false;
@@ -845,6 +955,7 @@ namespace Lazy_App_Codex_Core
             {
                 "scripts" => _selectedScript != null,
                 "sequences" => _selectedSequence != null,
+                "runPlans" => _selectedRunPlan != null,
                 "offset" => !string.IsNullOrWhiteSpace(_selectedOffsetKey),
                 "devices" => !string.IsNullOrWhiteSpace(_selectedDeviceKey),
                 _ => true
@@ -854,6 +965,7 @@ namespace Lazy_App_Codex_Core
             {
                 "scripts" => "scriptEditor",
                 "sequences" => "sequenceEditor",
+                "runPlans" => "runPlanEditor",
                 "offset" => "offsetEditor",
                 "devices" => "devicesEditor",
                 _ => "settingsEditor"
@@ -870,6 +982,7 @@ namespace Lazy_App_Codex_Core
         {
             _scriptNameBox.Clear();
             _sequenceNameBox.Clear();
+            _runPlanNameBox.Clear();
             _offsetNameBox.Clear();
             _hotkeyStartBox.Clear();
             _hotkeyStopBox.Clear();
@@ -902,11 +1015,15 @@ namespace Lazy_App_Codex_Core
             _sequenceDefaultOffsetBox.Enabled = false;
             SelectOffsetValue(_sequenceDefaultOffsetBox, "0");
             _sequenceTagBox.Items.Clear();
+            _sequenceHiddenBox.Checked = false;
+            _runPlanTagBox.Items.Clear();
             _groupList.Items.Clear();
             _loadedGroupIndex = -1;
             _stepGrid.Rows.Clear();
             _sequenceGrid.Rows.Clear();
+            _runPlanGrid.Rows.Clear();
             UpdateStepTotals();
+            UpdateRunPlanTotals();
             UpdateGroupButtonStates();
         }
 
@@ -921,16 +1038,17 @@ namespace Lazy_App_Codex_Core
                     "offsetEditor" => CurrentTab == "offset",
                     "scriptEditor" => CurrentTab == "scripts",
                     "sequenceEditor" => CurrentTab == "sequences",
+                    "runPlanEditor" => CurrentTab == "runPlans",
                     _ => false
                 };
             }
 
-            bool listEditable = CurrentTab is "scripts" or "sequences" or "offset";
+            bool listEditable = CurrentTab is "scripts" or "sequences" or "runPlans" or "offset";
             _addButton.Enabled = listEditable;
             _cloneButton.Enabled = listEditable;
             _removeButton.Enabled = listEditable || CurrentTab == "devices";
-            _moveUpButton.Enabled = CurrentTab is "scripts" or "sequences";
-            _moveDownButton.Enabled = CurrentTab is "scripts" or "sequences";
+            _moveUpButton.Enabled = CurrentTab is "scripts" or "sequences" or "runPlans";
+            _moveDownButton.Enabled = CurrentTab is "scripts" or "sequences" or "runPlans";
             SyncTrackTouchAvailability();
         }
 
@@ -981,6 +1099,21 @@ namespace Lazy_App_Codex_Core
                 RefreshEntryList();
                 SelectById(sequence.Id);
             }
+            else if (CurrentTab == "runPlans")
+            {
+                var runPlan = new RunPlanModel
+                {
+                    Id = ScriptConfigRepository.NewId("plan"),
+                    Name = UniqueName("PLAN", _library.RunPlans.Select(s => s.Name)),
+                    Tag = "",
+                    Order = _library.RunPlans.Count
+                };
+                _library.RunPlans.Add(runPlan);
+                _selectedRunPlan = runPlan;
+                _dirty = false;
+                RefreshEntryList();
+                SelectById(runPlan.Id);
+            }
             else if (CurrentTab == "offset")
             {
                 string name = UniqueName("s_new", _workingOffsets.Properties().Select(p => p.Name));
@@ -1023,6 +1156,17 @@ namespace Lazy_App_Codex_Core
                 SelectById(clone.Id);
                 MarkDirty();
             }
+            else if (CurrentTab == "runPlans" && _selectedRunPlan != null)
+            {
+                var clone = CloneRunPlan(_selectedRunPlan);
+                clone.Name = UniqueCopyName(_selectedRunPlan.Name, _library.RunPlans.Select(s => s.Name));
+                clone.Id = ScriptConfigRepository.NewId("plan");
+                clone.Order = _library.RunPlans.Count;
+                _library.RunPlans.Add(clone);
+                RefreshEntryList();
+                SelectById(clone.Id);
+                MarkDirty();
+            }
             else if (CurrentTab == "offset" && !string.IsNullOrWhiteSpace(_selectedOffsetKey))
             {
                 string name = UniqueCopyName(_selectedOffsetKey, _workingOffsets.Properties().Select(p => p.Name));
@@ -1039,9 +1183,24 @@ namespace Lazy_App_Codex_Core
             if (CurrentTab == "scripts" && _selectedScript != null)
             {
                 var dependents = _library.Sequences.Where(seq => seq.Items.Any(item => item.Type == "script" && item.ScriptId == _selectedScript.Id)).ToList();
-                string message = dependents.Count == 0
-                    ? $"Delete script \"{_selectedScript.Name}\"?"
-                    : $"Deleting script \"{_selectedScript.Name}\" will also delete:{Environment.NewLine}- " + string.Join(Environment.NewLine + "- ", dependents.Select(seq => seq.Name)) + Environment.NewLine + Environment.NewLine + "Continue?";
+                var dependentSequenceIds = new HashSet<string>(dependents.Select(sequence => sequence.Id), StringComparer.OrdinalIgnoreCase);
+                var runPlanDependents = _library.RunPlans
+                    .Where(plan => plan.Items.Any(item =>
+                        (item.Type == "script" && item.TargetId == _selectedScript.Id) ||
+                        (item.Type == "sequence" && dependentSequenceIds.Contains(item.TargetId))))
+                    .ToList();
+                string message = $"Delete script \"{_selectedScript.Name}\"?";
+                if (dependents.Count > 0)
+                {
+                    message += $"{Environment.NewLine}{Environment.NewLine}This will also delete Sequences:{Environment.NewLine}- " + string.Join(Environment.NewLine + "- ", dependents.Select(seq => seq.Name));
+                }
+
+                if (runPlanDependents.Count > 0)
+                {
+                    message += $"{Environment.NewLine}{Environment.NewLine}Run Plans that reference deleted targets will show a missing target:{Environment.NewLine}- " + string.Join(Environment.NewLine + "- ", runPlanDependents.Select(plan => plan.Name));
+                }
+
+                message += $"{Environment.NewLine}{Environment.NewLine}Continue?";
                 if (MessageBox.Show(message, "Delete Script", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 {
                     return;
@@ -1055,12 +1214,25 @@ namespace Lazy_App_Codex_Core
             }
             else if (CurrentTab == "sequences" && _selectedSequence != null)
             {
-                if (MessageBox.Show($"Delete sequence \"{_selectedSequence.Name}\"?", "Delete Sequence", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                var dependents = _library.RunPlans.Where(plan => plan.Items.Any(item => item.Type == "sequence" && item.TargetId == _selectedSequence.Id)).ToList();
+                string message = dependents.Count == 0
+                    ? $"Delete sequence \"{_selectedSequence.Name}\"?"
+                    : $"Delete sequence \"{_selectedSequence.Name}\"? Run Plans that reference it will show a missing target:{Environment.NewLine}- " + string.Join(Environment.NewLine + "- ", dependents.Select(plan => plan.Name));
+                if (MessageBox.Show(message, "Delete Sequence", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 {
                     return;
                 }
 
                 _library.Sequences.Remove(_selectedSequence);
+            }
+            else if (CurrentTab == "runPlans" && _selectedRunPlan != null)
+            {
+                if (MessageBox.Show($"Delete run plan \"{_selectedRunPlan.Name}\"?", "Delete Run Plan", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                {
+                    return;
+                }
+
+                _library.RunPlans.Remove(_selectedRunPlan);
             }
             else if (CurrentTab == "offset" && !string.IsNullOrWhiteSpace(_selectedOffsetKey))
             {
@@ -1099,6 +1271,11 @@ namespace Lazy_App_Codex_Core
             {
                 selectedId = _selectedSequence.Id;
                 MoveItem(_library.Sequences, _selectedSequence, direction);
+            }
+            else if (CurrentTab == "runPlans" && _selectedRunPlan != null)
+            {
+                selectedId = _selectedRunPlan.Id;
+                MoveItem(_library.RunPlans, _selectedRunPlan, direction);
             }
 
             NormalizeOrders();
@@ -1240,7 +1417,29 @@ namespace Lazy_App_Codex_Core
                 _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
                 _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
                 _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
+                _selectedSequence.Hidden = _sequenceHiddenBox.Checked;
                 _selectedSequence.Items = ReadSequenceItemsFromGrid();
+                return true;
+            }
+
+            if (tabKey == "runPlans" && _selectedRunPlan != null)
+            {
+                string name = _runPlanNameBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    ShowValidation("Name is required.");
+                    return false;
+                }
+
+                if (_library.RunPlans.Any(s => s != _selectedRunPlan && s.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ShowValidation("Duplicate run plan names are not allowed.");
+                    return false;
+                }
+
+                _selectedRunPlan.Name = name;
+                _selectedRunPlan.Tag = RequireSelectedTag(_runPlanTagBox);
+                _selectedRunPlan.Items = ReadRunPlanItemsFromGrid();
                 return true;
             }
 
@@ -1297,8 +1496,15 @@ namespace Lazy_App_Codex_Core
                 sequences[sequence.Name] = ScriptConfigRepository.BuildSequenceJson(sequence);
             }
 
+            var runPlans = new JObject();
+            foreach (var runPlan in _library.RunPlans.OrderBy(s => s.Order))
+            {
+                runPlans[runPlan.Name] = ScriptConfigRepository.BuildRunPlanJson(runPlan);
+            }
+
             _root["scripts"] = scripts;
             _root["sequences"] = sequences;
+            _root["runPlans"] = runPlans;
         }
 
         private void RefreshGroupList()
@@ -1576,6 +1782,254 @@ namespace Lazy_App_Codex_Core
             return items;
         }
 
+        private void AddRunPlanItem(string type)
+        {
+            RefreshRunPlanTargetChoices();
+            string? target = type == "sequence"
+                ? _library.Sequences.Select(sequence => FormatRunPlanTarget("sequence", sequence.Id)).FirstOrDefault()
+                : _library.Scripts.Select(script => FormatRunPlanTarget("script", script.Id)).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                ShowValidation(type == "sequence" ? "No Sequences are available." : "No Scripts are available.");
+                return;
+            }
+
+            int index = _runPlanGrid.Rows.Add();
+            var row = _runPlanGrid.Rows[index];
+            row.Cells["target"].Value = target;
+            row.Cells["repeat"].Value = 1;
+            UpdateSelectedRunPlanFromGrid();
+            UpdateRunPlanTotals();
+            MarkDirty();
+        }
+
+        private void RemoveRunPlanItem()
+        {
+            if (_runPlanGrid.CurrentRow == null) return;
+            if (MessageBox.Show("Delete selected run plan item?", "Delete Item", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            _runPlanGrid.Rows.Remove(_runPlanGrid.CurrentRow);
+            UpdateSelectedRunPlanFromGrid();
+            UpdateRunPlanTotals();
+            MarkDirty();
+        }
+
+        private void CloneRunPlanItem()
+        {
+            if (_runPlanGrid.CurrentRow == null) return;
+            int index = _runPlanGrid.Rows.Add();
+            CopyRowValues(_runPlanGrid.CurrentRow, _runPlanGrid.Rows[index]);
+            UpdateSelectedRunPlanFromGrid();
+            UpdateRunPlanTotals();
+            MarkDirty();
+        }
+
+        private void MoveRunPlanItem(int direction)
+        {
+            MoveGridRow(_runPlanGrid, direction);
+            UpdateSelectedRunPlanFromGrid();
+            UpdateRunPlanTotals();
+        }
+
+        private void RefreshRunPlanGrid()
+        {
+            _runPlanGrid.Rows.Clear();
+            _runPlanTotalLabel.Text = "";
+            RefreshRunPlanTargetChoices();
+            _addRunPlanScriptButton.Enabled = _library.Scripts.Count > 0;
+            _addRunPlanSequenceButton.Enabled = _library.Sequences.Count > 0;
+            if (_selectedRunPlan == null) return;
+
+            foreach (var item in _selectedRunPlan.Items)
+            {
+                string target = FormatRunPlanTarget(item.Type, item.TargetId);
+                AddRunPlanTargetChoice(target);
+                int index = _runPlanGrid.Rows.Add();
+                var row = _runPlanGrid.Rows[index];
+                row.Cells["target"].Value = target;
+                row.Cells["repeat"].Value = Math.Max(1, item.Repeat);
+            }
+
+            UpdateRunPlanTotals();
+        }
+
+        private void RefreshRunPlanTargetChoices()
+        {
+            if (_runPlanGrid.Columns["target"] is not DataGridViewComboBoxColumn targetColumn)
+            {
+                return;
+            }
+
+            targetColumn.Items.Clear();
+            foreach (var script in _library.Scripts)
+            {
+                targetColumn.Items.Add(FormatRunPlanTarget("script", script.Id));
+            }
+
+            foreach (var sequence in _library.Sequences)
+            {
+                targetColumn.Items.Add(FormatRunPlanTarget("sequence", sequence.Id));
+            }
+
+            foreach (DataGridViewRow row in _runPlanGrid.Rows)
+            {
+                string existing = row.Cells["target"].Value?.ToString() ?? "";
+                if (!string.IsNullOrWhiteSpace(existing) && !targetColumn.Items.Contains(existing))
+                {
+                    targetColumn.Items.Add(existing);
+                }
+            }
+        }
+
+        private void AddRunPlanTargetChoice(string target)
+        {
+            if (_runPlanGrid.Columns["target"] is DataGridViewComboBoxColumn targetColumn &&
+                !targetColumn.Items.Contains(target))
+            {
+                targetColumn.Items.Add(target);
+            }
+        }
+
+        private void UpdateSelectedRunPlanFromGrid()
+        {
+            if (_loading || _selectedRunPlan == null)
+            {
+                return;
+            }
+
+            _selectedRunPlan.Items = ReadRunPlanItemsFromGrid();
+        }
+
+        private List<RunPlanItem> ReadRunPlanItemsFromGrid()
+        {
+            var items = new List<RunPlanItem>();
+            foreach (DataGridViewRow row in _runPlanGrid.Rows)
+            {
+                if (row.IsNewRow) continue;
+                if (!TryResolveRunPlanTarget(ReadCell(row, "target", ""), out string type, out string targetId))
+                {
+                    continue;
+                }
+
+                items.Add(new RunPlanItem
+                {
+                    Type = type,
+                    TargetId = targetId,
+                    Repeat = Math.Max(1, ParseInt(row, "repeat", 1))
+                });
+            }
+
+            return items;
+        }
+
+        private void UpdateRunPlanTotals()
+        {
+            int itemCount = 0;
+            int cycleCount = 0;
+            int missingCount = 0;
+            int totalMin = 0;
+            int totalMax = 0;
+            foreach (DataGridViewRow row in _runPlanGrid.Rows)
+            {
+                if (row.IsNewRow || string.IsNullOrWhiteSpace(ReadCell(row, "target", "")))
+                {
+                    continue;
+                }
+
+                itemCount++;
+                int repeat = Math.Max(1, ParseInt(row, "repeat", 1));
+                cycleCount += repeat;
+                if (!TryResolveRunPlanTarget(ReadCell(row, "target", ""), out string type, out string targetId) ||
+                    !TryGetRunPlanTargetCycleTotals(type, targetId, out var cycleTotals))
+                {
+                    missingCount++;
+                    continue;
+                }
+
+                totalMin += cycleTotals.min * repeat;
+                totalMax += cycleTotals.max * repeat;
+            }
+
+            string missingText = missingCount > 0 ? $" | Missing {missingCount}" : "";
+            _runPlanTotalLabel.Text = $"Run plan total time: Min {totalMin}s | Max {totalMax}s | Items {itemCount} | Target cycles {cycleCount}{missingText}";
+        }
+
+        private bool TryGetRunPlanTargetCycleTotals(string type, string targetId, out (int min, int max) totals)
+        {
+            if (type == "sequence")
+            {
+                var sequence = _library.FindSequenceById(targetId);
+                if (sequence != null)
+                {
+                    totals = GetSequenceCycleTotals(sequence);
+                    return true;
+                }
+            }
+            else
+            {
+                var script = _library.FindScriptById(targetId);
+                if (script != null)
+                {
+                    totals = GetScriptCycleTotalsFromModel(script);
+                    return true;
+                }
+            }
+
+            totals = (0, 0);
+            return false;
+        }
+
+        private string FormatRunPlanTarget(string type, string targetId)
+        {
+            if (type == "sequence")
+            {
+                var sequence = _library.FindSequenceById(targetId);
+                return sequence == null ? "Missing Sequence: " + targetId : "[Q] " + sequence.Name;
+            }
+
+            var script = _library.FindScriptById(targetId);
+            return script == null ? "Missing Script: " + targetId : "[S] " + script.Name;
+        }
+
+        private bool TryResolveRunPlanTarget(string target, out string type, out string targetId)
+        {
+            target = (target ?? "").Trim();
+            if (target.StartsWith("[Q] ", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "sequence";
+                string name = target[4..].Trim();
+                targetId = _library.Sequences.FirstOrDefault(sequence => sequence.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Id ?? "";
+                return targetId.Length > 0;
+            }
+
+            if (target.StartsWith("[S] ", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "script";
+                string name = target[4..].Trim();
+                targetId = _library.Scripts.FirstOrDefault(script => script.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Id ?? "";
+                return targetId.Length > 0;
+            }
+
+            if (target.StartsWith("Missing Sequence: ", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "sequence";
+                const string prefix = "Missing Sequence: ";
+                targetId = target[prefix.Length..].Trim();
+                return targetId.Length > 0;
+            }
+
+            if (target.StartsWith("Missing Script: ", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "script";
+                const string prefix = "Missing Script: ";
+                targetId = target[prefix.Length..].Trim();
+                return targetId.Length > 0;
+            }
+
+            type = "script";
+            targetId = "";
+            return false;
+        }
+
         private string ResolveScriptId(string displayedScript)
         {
             return _library.Scripts.FirstOrDefault(script => script.Name.Equals(displayedScript, StringComparison.OrdinalIgnoreCase))?.Id
@@ -1701,6 +2155,39 @@ namespace Lazy_App_Codex_Core
             return (min, max);
         }
 
+        private (int min, int max) GetSequenceCycleTotals(SequenceModel sequence)
+        {
+            int min = 0;
+            int max = 0;
+            foreach (var item in sequence.Items)
+            {
+                if (item.Type == "script")
+                {
+                    var script = _library.FindScriptById(item.ScriptId);
+                    if (script == null)
+                    {
+                        continue;
+                    }
+
+                    int repeat = Math.Max(1, item.Repeat);
+                    var stepTotals = GetScriptStepTotals(script);
+                    var delayRange = NormalizeRange(item.Interval_Min, item.Interval_Max);
+                    min += (stepTotals.min * repeat) + delayRange.min;
+                    max += (stepTotals.max * repeat) + delayRange.max;
+                    continue;
+                }
+
+                var sleepRange = NormalizeRange(item.Action.Sleep_Min, item.Action.Sleep_Max);
+                min += sleepRange.min;
+                max += sleepRange.max;
+            }
+
+            var intervalRange = NormalizeRange(sequence.Interval_Min, sequence.Interval_Max);
+            min += intervalRange.min;
+            max += intervalRange.max;
+            return ApplyEnforceMinimum(min, max, sequence.Enforce_Min);
+        }
+
         private (int min, int max) GetScriptCycleTotals(ScriptModel script)
         {
             var stepTotals = GetScriptStepTotals(script);
@@ -1708,6 +2195,22 @@ namespace Lazy_App_Codex_Core
             return (
                 stepTotals.min + intervalRange.min,
                 stepTotals.max + intervalRange.max);
+        }
+
+        private static (int min, int max) GetScriptCycleTotalsFromModel(ScriptModel script)
+        {
+            var stepTotals = GetScriptStepTotals(script);
+            var intervalRange = NormalizeRange(script.Interval_Min, script.Interval_Max);
+            return ApplyEnforceMinimum(
+                stepTotals.min + intervalRange.min,
+                stepTotals.max + intervalRange.max,
+                script.Enforce_Min);
+        }
+
+        private static (int min, int max) ApplyEnforceMinimum(int min, int max, int enforceMin)
+        {
+            int target = Math.Clamp(enforceMin, 0, Math.Max(0, max));
+            return (Math.Max(min, target), max);
         }
 
         private bool ValidateEnforceMin(int requested, int max, string label)
@@ -2043,6 +2546,14 @@ namespace Lazy_App_Codex_Core
                 if (!string.IsNullOrWhiteSpace(sequence.Tag) && !knownTags.Contains(sequence.Tag))
                 {
                     sequence.Tag = "";
+                }
+            }
+
+            foreach (var runPlan in _library.RunPlans)
+            {
+                if (!string.IsNullOrWhiteSpace(runPlan.Tag) && !knownTags.Contains(runPlan.Tag))
+                {
+                    runPlan.Tag = "";
                 }
             }
         }
@@ -2501,6 +3012,9 @@ namespace Lazy_App_Codex_Core
             _sequenceEnforceMinBox.ValueChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceDefaultOffsetEnabledBox.CheckedChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceDefaultOffsetBox.SelectedIndexChanged += (_, _) => UpdateSelectedSequenceSettings();
+            _sequenceTagBox.SelectedIndexChanged += (_, _) => UpdateSelectedSequenceSettings();
+            _sequenceHiddenBox.CheckedChanged += (_, _) => UpdateSelectedSequenceSettings();
+            _runPlanNameBox.TextChanged += (_, _) => UpdateSelectedListName(_runPlanNameBox.Text.Trim());
         }
 
         private void UpdateSelectedSequenceSettings()
@@ -2517,6 +3031,7 @@ namespace Lazy_App_Codex_Core
             _selectedSequence.DefaultOffsetEnabled = _sequenceDefaultOffsetEnabledBox.Checked;
             _selectedSequence.DefaultOffset = OffsetDisplayOption.ReadValue(_sequenceDefaultOffsetBox.SelectedItem);
             _selectedSequence.Tag = RequireSelectedTag(_sequenceTagBox);
+            _selectedSequence.Hidden = _sequenceHiddenBox.Checked;
             UpdateSequenceTotals();
         }
 
@@ -2531,6 +3046,7 @@ namespace Lazy_App_Codex_Core
             {
                 "scripts" => _selectedScript?.Id,
                 "sequences" => _selectedSequence?.Id,
+                "runPlans" => _selectedRunPlan?.Id,
                 _ => null
             };
             if (string.IsNullOrWhiteSpace(id))
@@ -2546,6 +3062,10 @@ namespace Lazy_App_Codex_Core
             else if (CurrentTab == "sequences" && _selectedSequence != null)
             {
                 _selectedSequence.Name = name;
+            }
+            else if (CurrentTab == "runPlans" && _selectedRunPlan != null)
+            {
+                _selectedRunPlan.Name = name;
             }
 
             _loading = true;
@@ -2569,6 +3089,7 @@ namespace Lazy_App_Codex_Core
         {
             for (int i = 0; i < _library.Scripts.Count; i++) _library.Scripts[i].Order = i;
             for (int i = 0; i < _library.Sequences.Count; i++) _library.Sequences[i].Order = i;
+            for (int i = 0; i < _library.RunPlans.Count; i++) _library.RunPlans[i].Order = i;
         }
 
         private void SelectById(string id)
@@ -2587,6 +3108,7 @@ namespace Lazy_App_Codex_Core
         {
             _selectedScript = null;
             _selectedSequence = null;
+            _selectedRunPlan = null;
             _selectedDeviceKey = null;
             if (CurrentTab == "settings")
             {
@@ -2658,6 +3180,7 @@ namespace Lazy_App_Codex_Core
                 Id = source.Id,
                 Name = source.Name,
                 Tag = source.Tag,
+                Hidden = source.Hidden,
                 Order = source.Order,
                 Duration = source.Duration,
                 Interval_Min = source.Interval_Min,
@@ -2673,6 +3196,23 @@ namespace Lazy_App_Codex_Core
                     Interval_Min = item.Interval_Min,
                     Interval_Max = item.Interval_Max,
                     Action = CloneStep(item.Action)
+                }).ToList()
+            };
+        }
+
+        private static RunPlanModel CloneRunPlan(RunPlanModel source)
+        {
+            return new RunPlanModel
+            {
+                Id = source.Id,
+                Name = source.Name,
+                Tag = source.Tag,
+                Order = source.Order,
+                Items = source.Items.Select(item => new RunPlanItem
+                {
+                    Type = item.Type,
+                    TargetId = item.TargetId,
+                    Repeat = item.Repeat
                 }).ToList()
             };
         }

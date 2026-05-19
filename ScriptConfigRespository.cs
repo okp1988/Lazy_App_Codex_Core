@@ -108,8 +108,19 @@ namespace Lazy_App_Codex_Core
                 }
             }
 
+            var runPlans = (JObject)root["runPlans"]!;
+            fallbackOrder = 0;
+            foreach (var property in runPlans.Properties())
+            {
+                if (property.Value is JObject runPlanObj)
+                {
+                    library.RunPlans.Add(ParseRunPlan(property.Name, runPlanObj, fallbackOrder++));
+                }
+            }
+
             library.Scripts = library.Scripts.OrderBy(script => script.Order).ThenBy(script => script.Name).ToList();
             library.Sequences = library.Sequences.OrderBy(sequence => sequence.Order).ThenBy(sequence => sequence.Name).ToList();
+            library.RunPlans = library.RunPlans.OrderBy(plan => plan.Order).ThenBy(plan => plan.Name).ToList();
             return library;
         }
 
@@ -176,7 +187,8 @@ namespace Lazy_App_Codex_Core
                     ["s13"] = new JArray(5, 5)
                 },
                 ["scripts"] = new JObject(),
-                ["sequences"] = new JObject()
+                ["sequences"] = new JObject(),
+                ["runPlans"] = new JObject()
             };
         }
 
@@ -186,6 +198,7 @@ namespace Lazy_App_Codex_Core
             EnsureCategory(root, "offset");
             EnsureCategory(root, "scripts");
             EnsureCategory(root, "sequences");
+            EnsureCategory(root, "runPlans");
             MigrateSetting(root, "hotkeyStartStopToggle", "hotkeyStart");
             NormalizeSettingKey(root, "HotkeyStart", "hotkeyStart");
             NormalizeSettingKey(root, "HotkeyStop", "hotkeyStop");
@@ -292,6 +305,7 @@ namespace Lazy_App_Codex_Core
                 {
                     sequence["tag"] = "";
                 }
+                sequence["hide"] ??= false;
                 sequence["d"] ??= 1;
                 sequence["imin"] ??= 0;
                 sequence["imax"] ??= 0;
@@ -299,6 +313,25 @@ namespace Lazy_App_Codex_Core
                 sequence["defaultOffsetEnabled"] ??= false;
                 sequence["defaultOffset"] ??= "0";
                 sequence["items"] ??= new JArray();
+            }
+
+            var runPlans = (JObject)root["runPlans"]!;
+            order = 0;
+            foreach (var property in runPlans.Properties().ToList())
+            {
+                if (property.Value is not JObject runPlan)
+                {
+                    continue;
+                }
+
+                runPlan["id"] ??= NewId("plan");
+                runPlan["name"] ??= property.Name;
+                runPlan["order"] ??= order++;
+                if (runPlan["tag"] == null || (runPlan["tag"]!.ToString().Length > 0 && !tagSet.Contains(runPlan["tag"]!.ToString())))
+                {
+                    runPlan["tag"] = "";
+                }
+                runPlan["items"] ??= new JArray();
             }
         }
 
@@ -439,6 +472,7 @@ namespace Lazy_App_Codex_Core
                 Id = ReadString(sequenceObj, null, NewId("seq"), "id"),
                 Name = ReadString(sequenceObj, null, key, "name"),
                 Tag = ReadString(sequenceObj, null, "", "tag"),
+                Hidden = ReadBool(sequenceObj, false, "hide", "hidden"),
                 Order = ReadInt(sequenceObj, null, fallbackOrder, -1, "order"),
                 Duration = ReadInt(sequenceObj, null, 1, -1, "duration", "d"),
                 Interval_Min = ReadInt(sequenceObj, null, 0, 0, "interval_min", "imin", "interval", "i"),
@@ -467,6 +501,39 @@ namespace Lazy_App_Codex_Core
             }
 
             return sequence;
+        }
+
+        private static RunPlanModel ParseRunPlan(string key, JObject runPlanObj, int fallbackOrder)
+        {
+            var runPlan = new RunPlanModel
+            {
+                Id = ReadString(runPlanObj, null, NewId("plan"), "id"),
+                Name = ReadString(runPlanObj, null, key, "name"),
+                Tag = ReadString(runPlanObj, null, "", "tag"),
+                Order = ReadInt(runPlanObj, null, fallbackOrder, -1, "order")
+            };
+
+            if (runPlanObj["items"] is JArray items)
+            {
+                foreach (var item in items.OfType<JObject>())
+                {
+                    string type = ReadString(item, null, "script", "type", "targetType").ToLowerInvariant();
+                    string targetId = ReadString(item, null, "", "targetId", "id", "scriptId", "sequenceId");
+                    if (string.IsNullOrWhiteSpace(targetId))
+                    {
+                        continue;
+                    }
+
+                    runPlan.Items.Add(new RunPlanItem
+                    {
+                        Type = type == "sequence" ? "sequence" : "script",
+                        TargetId = targetId,
+                        Repeat = Math.Max(1, ReadInt(item, null, 1, -1, "repeat", "rep", "loops", "d"))
+                    });
+                }
+            }
+
+            return runPlan;
         }
 
         public static JObject BuildScriptJson(ScriptModel script)
@@ -506,6 +573,7 @@ namespace Lazy_App_Codex_Core
                 ["id"] = string.IsNullOrWhiteSpace(sequence.Id) ? NewId("seq") : sequence.Id,
                 ["name"] = sequence.Name,
                 ["tag"] = sequence.Tag,
+                ["hide"] = sequence.Hidden,
                 ["order"] = sequence.Order,
                 ["d"] = sequence.Duration,
                 ["imin"] = sequence.Interval_Min,
@@ -533,6 +601,28 @@ namespace Lazy_App_Codex_Core
                 ["repeat"] = Math.Max(1, item.Repeat),
                 ["imin"] = item.Interval_Min,
                 ["imax"] = item.Interval_Max
+            };
+        }
+
+        public static JObject BuildRunPlanJson(RunPlanModel runPlan)
+        {
+            return new JObject
+            {
+                ["id"] = string.IsNullOrWhiteSpace(runPlan.Id) ? NewId("plan") : runPlan.Id,
+                ["name"] = runPlan.Name,
+                ["tag"] = runPlan.Tag,
+                ["order"] = runPlan.Order,
+                ["items"] = new JArray(runPlan.Items.Select(BuildRunPlanItemJson))
+            };
+        }
+
+        public static JObject BuildRunPlanItemJson(RunPlanItem item)
+        {
+            return new JObject
+            {
+                ["type"] = item.Type == "sequence" ? "sequence" : "script",
+                ["targetId"] = item.TargetId,
+                ["repeat"] = Math.Max(1, item.Repeat)
             };
         }
 

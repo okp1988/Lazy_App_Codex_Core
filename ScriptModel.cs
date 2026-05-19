@@ -4,10 +4,21 @@ namespace Lazy_App_Codex_Core
     {
         public List<ScriptModel> Scripts { get; set; } = new();
         public List<SequenceModel> Sequences { get; set; } = new();
+        public List<RunPlanModel> RunPlans { get; set; } = new();
 
         public ScriptModel? FindScriptById(string? id)
         {
             return Scripts.FirstOrDefault(script => script.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public SequenceModel? FindSequenceById(string? id)
+        {
+            return Sequences.FirstOrDefault(sequence => sequence.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public RunPlanModel? FindRunPlanById(string? id)
+        {
+            return RunPlans.FirstOrDefault(plan => plan.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -52,6 +63,7 @@ namespace Lazy_App_Codex_Core
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Tag { get; set; } = "";
+        public bool Hidden { get; set; }
         public int Order { get; set; }
         public int Duration { get; set; }
         public int Interval_Min { get; set; }
@@ -70,6 +82,22 @@ namespace Lazy_App_Codex_Core
         public int Interval_Min { get; set; }
         public int Interval_Max { get; set; }
         public StepAction Action { get; set; } = new();
+    }
+
+    public sealed class RunPlanModel
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Tag { get; set; } = "";
+        public int Order { get; set; }
+        public List<RunPlanItem> Items { get; set; } = new();
+    }
+
+    public sealed class RunPlanItem
+    {
+        public string Type { get; set; } = "script";
+        public string TargetId { get; set; } = "";
+        public int Repeat { get; set; } = 1;
     }
 
     public sealed class StepAction

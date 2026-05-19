@@ -101,7 +101,7 @@ namespace Lazy_App_Codex_Core
             ddlScript.Margin = new Padding(0, 2, 8, 2);
             ddlScript.MinimumSize = new Size(160, 30);
             ddlScript.Name = "ddlScript";
-            ddlScript.PlaceholderText = "Choose script or sequence";
+            ddlScript.PlaceholderText = "Choose script, sequence, or plan";
             ddlScript.Size = new Size(432, 30);
             ddlScript.TabIndex = 0;
             // 

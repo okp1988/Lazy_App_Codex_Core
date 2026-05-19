@@ -12,6 +12,10 @@ The main remaining risks are behavioral edge cases in action normalization and l
 
 Recent changes:
 
+- Run Plans are now first-class runnable entries with ordered Script/Sequence items, stable target IDs, per-item repeat counts, main picker support, editor support, and independent run-set cancellation/status behavior.
+- Run Plan item repeat overrides the referenced target loop count only for that item while preserving the target's `emin`, `imin`, `imax`, sleeps, offsets, ADB OFF behavior, cancellation, and live status updates.
+- Run Plans can be tagged and show total min/max time in the Config Editor.
+- Sequences now support Hide from Main while remaining valid Run Plan targets.
 - Scripts and Sequences now support `emin`, an enforced minimum cycle time capped by max cycle time.
 - Settings support optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
 - Set 2 opens/closes with `Alt+1`; secondary hotkeys register only while Set 2 is open.

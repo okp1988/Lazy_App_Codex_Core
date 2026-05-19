@@ -19,7 +19,8 @@ The project file intentionally does not copy `config.json` to build or publish o
   "settings": {},
   "offset": {},
   "scripts": {},
-  "sequences": {}
+  "sequences": {},
+  "runPlans": {}
 }
 ```
 
@@ -45,7 +46,7 @@ Rules:
 - `settings.tags` is legacy and migrates to `settings.tag`.
 - `All` is reserved for the main filter and must not be stored as a configured tag.
 - Duplicate tags are removed case-insensitively.
-- Blank tags are allowed on Scripts and Sequences.
+- Blank tags are allowed on Scripts, Sequences, and Run Plans.
 
 ## Devices
 
@@ -170,6 +171,7 @@ Sequence fields:
 - `id`
 - `name`
 - `tag`
+- `hide`
 - `order`
 - `d`
 - `imin`
@@ -189,7 +191,35 @@ Rules:
 - Sequences must not reference other Sequences.
 - Sequence Script items store only Script IDs so Script renames do not break references.
 - Hidden Scripts remain valid for Sequence Script items.
+- Hidden Sequences remain valid for Run Plan items.
 - Deleting a Script used by Sequences must ask for confirmation before deleting dependent Sequences.
+
+## Run Plan JSON
+
+Run Plan fields:
+
+- `id`
+- `name`
+- `tag`
+- `order`
+- `items`
+
+Run Plan item fields:
+
+- `type`: `script` or `sequence`
+- `targetId`: stable Script or Sequence ID
+- `repeat`: item loop count
+
+Rules:
+
+- Run Plans are stored under top-level `runPlans`.
+- Run Plans are first-class runnable entries, separate from Scripts and Sequences.
+- Run Plans may reference Scripts or Sequences, including hidden entries.
+- Run Plans must not reference other Run Plans.
+- Item order is preserved exactly as configured.
+- Item `repeat` overrides the referenced target's saved `d` only for that item.
+- Referenced targets keep their own internal timing rules, including `emin`, `imin`, `imax`, step sleeps, Sequence item delays, and Sequence direct actions.
+- Run Plans may have one configured `tag` or a blank tag and participate in the main tag filter.
 
 ## Alias Compatibility
 

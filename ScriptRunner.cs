@@ -35,10 +35,7 @@ namespace Lazy_App_Codex_Core
                 }
             }
 
-            for (long loop = 1; loop <= script.Duration; loop++)
-            {
-                await RunLoopAsync(script, loop, script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
-            }
+            await RunScriptForCyclesAsync(script, script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
         }
 
         public async Task RunSequenceAsync(
@@ -66,6 +63,89 @@ namespace Lazy_App_Codex_Core
             for (long loop = 1; loop <= sequence.Duration; loop++)
             {
                 await RunSequenceLoopAsync(sequence, library, loop, sequence.Duration, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
+            }
+        }
+
+        public async Task RunPlanAsync(
+            RunPlanModel runPlan,
+            ConfigLibrary library,
+            Func<ScriptModel, (int value, string axis)> scriptOffsetResolver,
+            Func<SequenceModel, (int value, string axis)> sequenceOffsetResolver,
+            Func<SequenceModel, ScriptModel, (int value, string axis)> sequenceScriptOffsetResolver,
+            string deviceSerial,
+            CancellationToken token,
+            Action<LiveRunStatus> onStatus,
+            bool isAdbEnabled)
+        {
+            if (runPlan.Items.Count == 0)
+            {
+                throw new InvalidOperationException($"Run plan \"{runPlan.Name}\" has no items.");
+            }
+
+            var adb = new AdbShellController(deviceSerial: deviceSerial);
+            foreach (var item in runPlan.Items)
+            {
+                token.ThrowIfCancellationRequested();
+                int cycles = Math.Max(1, item.Repeat);
+                if (item.Type == "sequence")
+                {
+                    var sequence = library.FindSequenceById(item.TargetId)
+                        ?? throw new InvalidOperationException($"Run plan \"{runPlan.Name}\" references missing sequence \"{item.TargetId}\".");
+                    var offset = sequenceOffsetResolver(sequence);
+                    await RunSequenceForCyclesAsync(
+                        sequence,
+                        library,
+                        cycles,
+                        offset.value,
+                        offset.axis,
+                        script => sequenceScriptOffsetResolver(sequence, script),
+                        adb,
+                        token,
+                        onStatus,
+                        isAdbEnabled);
+                    continue;
+                }
+
+                var script = library.FindScriptById(item.TargetId)
+                    ?? throw new InvalidOperationException($"Run plan \"{runPlan.Name}\" references missing script \"{item.TargetId}\".");
+                var scriptOffset = scriptOffsetResolver(script);
+                await RunScriptForCyclesAsync(script, cycles, scriptOffset.value, scriptOffset.axis, adb, token, onStatus, isAdbEnabled);
+            }
+        }
+
+        public async Task RunScriptForCyclesAsync(
+            ScriptModel script,
+            int cycleCount,
+            int selectedOffset,
+            string selectedOffsetAxis,
+            AdbShellController adb,
+            CancellationToken token,
+            Action<LiveRunStatus> onStatus,
+            bool isAdbEnabled)
+        {
+            int cycles = Math.Max(1, cycleCount);
+            for (long loop = 1; loop <= cycles; loop++)
+            {
+                await RunLoopAsync(script, loop, cycles, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+            }
+        }
+
+        public async Task RunSequenceForCyclesAsync(
+            SequenceModel sequence,
+            ConfigLibrary library,
+            int cycleCount,
+            int selectedOffset,
+            string selectedOffsetAxis,
+            Func<ScriptModel, (int value, string axis)> scriptOffsetResolver,
+            AdbShellController adb,
+            CancellationToken token,
+            Action<LiveRunStatus> onStatus,
+            bool isAdbEnabled)
+        {
+            int cycles = Math.Max(1, cycleCount);
+            for (long loop = 1; loop <= cycles; loop++)
+            {
+                await RunSequenceLoopAsync(sequence, library, loop, cycles, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
             }
         }
 

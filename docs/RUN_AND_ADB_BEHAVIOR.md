@@ -10,6 +10,7 @@
 - Step sleeps and loop interval sleeps are randomized inclusively.
 - Inverted min/max values are swapped by `ScriptRunner.RandomBetween`.
 - Optional Script and Sequence `emin` enforces a minimum cycle time and must not exceed the displayed max cycle time.
+- Run Plan item repeat counts override the referenced target's saved loop count only for that item.
 - ADB OFF mode skips ADB commands but still updates status and waits through configured sleeps.
 
 ## Script Execution
@@ -38,6 +39,20 @@ For a Sequence:
 
 The Sequence total shown in the editor is one Sequence cycle and does not multiply by Sequence loop count.
 
+## Run Plan Execution
+
+For a Run Plan:
+
+1. Execute items in the configured order.
+2. For Script items, resolve the referenced Script by stable ID.
+3. For Sequence items, resolve the referenced Sequence by stable ID.
+4. Run each item for that item's repeat count.
+5. Ignore the referenced target's saved loop count for that item only.
+6. Preserve the target's own cycle internals: Script/Sequence `emin`, interval min/max, step sleeps, Sequence item delays, direct actions, and ADB OFF behavior.
+7. Use the same run-set cancellation token and live status panel as direct Script/Sequence runs.
+
+Run Plan totals shown in the editor add each referenced target's min/max cycle time multiplied by that item repeat. Broken or deleted targets are shown as missing and are excluded from the computed total.
+
 ## Cycle Enforcement
 
 When `emin` is greater than zero, the runner computes the whole cycle plan before execution. If the randomized plan is shorter than `emin`, it re-randomizes the lowest flexible wait upward, including step sleeps, Sequence item delays folded into their item, and the cycle interval. This repeats until the plan reaches `emin` or max cycle time.
@@ -51,6 +66,9 @@ If `emin` equals max cycle time, the runner skips extra random attempts and uses
 - The selected main offset is applied to the first left-click step in a Script run.
 - For Sequence Script items, offset lookup uses the script item's own Script name.
 - Direct Sequence action items use the selected Sequence/main offset context.
+- For Run Plan Script items, the Script default offset wins when enabled; otherwise the run set's selected offset is used.
+- For Run Plan Sequence items, the Sequence default offset wins when enabled; otherwise the run set's selected offset is used.
+- A Run Plan can switch offsets per item, so different Sequence defaults are preserved inside the same plan.
 - A per-step `offset` or `o` value of `x` or `y` overrides the selected axis.
 
 ## Drag Behavior

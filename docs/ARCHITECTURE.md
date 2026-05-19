@@ -13,7 +13,7 @@ Main window and runtime coordinator.
 Responsibilities:
 
 - Load and reload configuration.
-- Build the Script/Sequence run target list.
+- Build the Script/Sequence/Run Plan target list.
 - Apply tag filtering.
 - Apply default offsets.
 - Register and unregister primary Set 1 and secondary Set 2 global hotkeys.
@@ -40,6 +40,7 @@ Hand-built config editor for:
 - Offset profiles
 - Scripts
 - Sequences
+- Run Plans
 
 The editor works in memory while open. It writes `config.json` only on explicit save, confirmed close-save, or restore. Pressing `Esc` calls the same close flow as the Close button.
 
@@ -51,7 +52,7 @@ Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server r
 
 ### `SearchableDropdown.cs`
 
-Custom main Script/Sequence picker. The popup owns search text and clears it on close. The main field displays only the selected item. When opened, the popup highlights the current selected item if it is present in the current filtered list.
+Custom main Script/Sequence/Run Plan picker. The popup owns search text and clears it on close. The main field displays only the selected item. When opened, the popup highlights the current selected item if it is present in the current filtered list.
 
 ### `ScriptConfigRespository.cs`
 
@@ -68,11 +69,13 @@ In-memory config models:
 - `ActionGroup`
 - `SequenceModel`
 - `SequenceItem`
+- `RunPlanModel`
+- `RunPlanItem`
 - `StepAction`
 
 ### `ScriptRunner.cs`
 
-Runtime planner and executor. It expands Scripts and Sequences into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, updates live status, and respects cancellation.
+Runtime planner and executor. It expands Scripts, Sequences, and Run Plans into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, updates live status, and respects cancellation.
 
 ### `AdbShellController.cs`
 
@@ -103,7 +106,7 @@ flowchart TD
     A["config.json"] --> B["ScriptConfigRepository"]
     B --> C["ConfigLibrary"]
     C --> D["Form1 run target list"]
-    D --> E["User selects Script or Sequence"]
+    D --> E["User selects Script, Sequence, or Run Plan"]
     E --> F["Form1 validates ADB status"]
     F --> G["ScriptRunner expands plan"]
     G --> H["ScriptRunner enforces min cycle time"]
@@ -152,7 +155,7 @@ flowchart TD
     D -->|no| E["Show ADB warning and do not run"]
     D -->|yes| F["Create CancellationTokenSource"]
     F --> G["Disable editable UI"]
-    G --> H["Run Script or Sequence"]
+    G --> H["Run Script, Sequence, or Run Plan"]
     H --> I["Update live status each step"]
     I --> J["Complete or cancel"]
     J --> K["Re-enable UI and reset title"]
