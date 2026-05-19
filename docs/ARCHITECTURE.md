@@ -31,6 +31,20 @@ Responsibilities:
 
 Designer-managed main-window controls. Keep layout edits compatible with WinForms designer expectations.
 
+The current main window shell is intentionally small: it hosts `mainLayout`, while the repeated run-set UI lives in `RunSetControl`. `Form1.cs` creates two `RunSetControl` instances and switches fixed one-set/two-set window sizes.
+
+### `RunSetControl.cs`
+
+Designer-backed `UserControl` for one main-window run set. Set 1 and Set 2 both use this same control. Set 1 shows the hotkey/ADB dots plus Config and Pair / Connect; Set 2 hides those shared controls.
+
+`RunSetControl.cs` also applies the stable runtime layout after `InitializeComponent()`. This is deliberate: Visual Studio 2026 rewrote some designer values during the UI work, including autoscale metadata, combo heights, status rows, and offset items. Runtime layout setup keeps the compact PC layout from being lost if the designer file is opened.
+
+### `RunSetControl.Designer.cs`
+
+Designer-managed controls for one run set. Keep status labels as explicit designer fields. Do not replace them with helper-created controls inside the designer file; the WinForms designer may strip those from `InitializeComponent()`.
+
+The designer should not own runtime data population such as `OffsetDisplayOption.All`. Populate those values in behavior code so designer regeneration cannot leave the Offset dropdown blank.
+
 ### `ConfigEditorForm.cs`
 
 Hand-built config editor for:

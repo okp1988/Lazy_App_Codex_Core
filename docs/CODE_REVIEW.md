@@ -4,6 +4,30 @@ Review date: 2026-05-19
 
 Scope: current working tree for the Windows Forms ADB automation runner.
 
+## Handoff: Main Window RunSetControl UI
+
+This session converted the main run-set UI to a shared `RunSetControl` so Set 1 and Set 2 are built from the same control. The compact PC layout is now the current baseline: one-set window `500 x 264`, two-set window `984 x 264`, and each `RunSetControl` `472 x 216`.
+
+Problems encountered:
+
+- Panel/UserControl conversion initially made Set 2 look different from Set 1 because the repeated layout was still partly hand-built or designer-incompatible.
+- Visual Studio 2026 rewrote WinForms designer metadata after opening/rebuilding. It changed autoscale values, removed helper-created status rows from `RunSetControl.Designer.cs`, shrank ComboBox heights, and left the Offset dropdown blank when designer-owned items disappeared.
+- Shrinking Device dropdown height affected nearby buttons when row heights and button heights were adjusted together. Config/Pair text clipped when buttons were reduced too far.
+- Large whitespace was reduced only after shrinking both the fixed form size and the actual run-set/control dimensions. Small outer size changes alone were barely noticeable.
+
+Current fixes:
+
+- `RunSetControl.Designer.cs` now uses explicit status labels/colon labels, not helper-created status rows.
+- `Form1` and `RunSetControl` use `AutoScaleMode.None` for the fixed-size main window.
+- `RunSetControl.cs` applies stable runtime layout after `InitializeComponent()` and repopulates `ddlOffset` from `OffsetDisplayOption.All`, so Visual Studio designer rewrites should not blank the Offset dropdown or shrink the control stack at runtime.
+- Buttons are kept at `32px` height to avoid text clipping; Offset/tag combos target `28px`; Device combo targets `26px`.
+
+Laptop-design follow-up:
+
+- Start by preserving the PC baseline. Take a PC screenshot before changing laptop values, then compare after changes.
+- If laptop needs different spacing/sizing, prefer an explicit layout profile selected by DPI/screen/font context rather than replacing the PC constants.
+- Keep all new run-set files in Git: `RunSetControl.cs`, `RunSetControl.Designer.cs`, and `RunSetControl.resx`.
+
 ## Summary
 
 The project builds successfully when using a separate output path while a local app instance is running. The current code is coherent overall: config migration, the editor model, sequence support, primary/secondary hotkey routing, two independent run sets, ADB status dots, cycle enforcement, and cancellation-based run/stop behavior are all in place.

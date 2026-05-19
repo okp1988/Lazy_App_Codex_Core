@@ -170,6 +170,11 @@ namespace Lazy_App_Codex_Core
 
             foreach (var item in _repository.Settings.Devices.OrderBy(item => GetDeviceLabel(item.Key, item.Value), StringComparer.OrdinalIgnoreCase))
             {
+                if (!TryGetSavedDeviceIp(item.Key, item.Value, out _))
+                {
+                    continue;
+                }
+
                 var choice = new DeviceChoice(item.Key, item.Value);
                 _devices.Add(choice);
                 _deviceBox.Items.Add(choice);
@@ -188,9 +193,14 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (TryGetIp(choice.Key, out string ip) || TryGetIp(AdbShellController.GetDeviceKey(choice.Info.LastSerial), out ip))
+            if (TryGetSavedDeviceIp(choice.Key, choice.Info, out string ip))
             {
                 SetIp(ip);
+            }
+            else
+            {
+                _ipBox.ClearAddress();
+                _portBox.Clear();
             }
         }
 
@@ -414,6 +424,12 @@ namespace Lazy_App_Codex_Core
             }
 
             return TryNormalizeIp(candidate, out ip);
+        }
+
+        private static bool TryGetSavedDeviceIp(string key, DeviceInfo info, out string ip)
+        {
+            return TryGetIp(key, out ip) ||
+                TryGetIp(AdbShellController.GetDeviceKey(info.LastSerial), out ip);
         }
 
         private static bool IsSuccessfulOutput(string output)

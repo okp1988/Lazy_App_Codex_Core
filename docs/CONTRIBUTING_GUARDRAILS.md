@@ -21,6 +21,7 @@
 - Optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`; register them only while Set 2 is open.
 - Two independent run sets, with Set 2 opened by `Alt+1` and no duplicate Config or Pair / Connect buttons.
 - Fixed one-set and two-set window sizes with user resize and maximize disabled; Run/Stop must not resize or stretch run-set controls.
+- The compact PC main-window layout: one-set `500 x 264`, two-set `984 x 264`, `RunSetControl` `472 x 216`, content column `322`, action column `150`, and set gap `12`. Preserve this profile when adjusting laptop design unless an explicit alternate profile is added.
 - Device dropdown exclusion between visible/running run sets so both sets cannot target the same ADB serial.
 - Script and Sequence `emin` minimum cycle enforcement.
 - Run Plan item repeat overriding only the referenced target's saved loop count.
@@ -37,6 +38,8 @@
 - Run `dotnet build Lazy_App_Codex_Core.sln` before delivering code changes when possible.
 - Keep UI changes compatible with Windows Forms designer metadata.
 - Preserve fixed run-set column widths when changing the main-window layout.
+- Keep `RunSetControl` designer-safe: explicit controls in `RunSetControl.Designer.cs`; fixed layout and data population in `RunSetControl.cs`.
+- Keep `AutoScaleMode.None` for `Form1` and `RunSetControl` unless there is a deliberate, tested replacement for the fixed-size main-window behavior.
 - Keep `ConfigEditorForm` button rows from clipping by using explicit `TableLayoutPanel` row heights and docked buttons.
 - Leave bottom padding in scrollable/editor panels.
 - Validate Run against ADB status before executing commands.
@@ -61,6 +64,8 @@
 - Do not remove hidden Scripts from Sequence script pickers.
 - Do not remove hidden Sequences from Run Plan target pickers.
 - Do not write unrelated formatting or metadata churn.
+- Do not use helper-created status rows or data-populated combo items inside `RunSetControl.Designer.cs`; Visual Studio 2026 may remove or rewrite them.
+- Do not tune laptop dimensions by overwriting the compact PC dimensions without preserving the PC profile.
 
 ## Build Commands
 
@@ -124,3 +129,5 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Script and Sequence Enforce Min rejects values above max cycle time and stretches randomized cycles up to the configured minimum.
 - Run Plans execute repeated alternating items in exact configured order, use each item repeat as the item loop count, and keep each target's `emin`, `imin`, and `imax`.
 - Track Touch starts only when the selected ADB device is ready and stops when that device is lost.
+- Open/rebuild in Visual Studio 2026 does not remove RunSetControl status rows, blank the Offset dropdown, shrink controls unexpectedly, or reintroduce large PC whitespace.
+- Laptop layout tuning keeps the PC layout visually intact when retested on the PC.

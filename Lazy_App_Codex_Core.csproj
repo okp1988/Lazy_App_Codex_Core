@@ -21,8 +21,20 @@
   <ItemGroup>
     <Compile Update="ConfigEditorForm.cs" />
     <Compile Update="Form1.cs" />
+    <Compile Update="RunSetControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="RunSetControl.Designer.cs">
+      <DependentUpon>RunSetControl.cs</DependentUpon>
+    </Compile>
     <Compile Update="SearchableDropdown.cs" />
     <Compile Update="WirelessAdbConnectForm.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="RunSetControl.resx">
+      <DependentUpon>RunSetControl.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

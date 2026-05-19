@@ -40,12 +40,13 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptRunner _runner = new ScriptRunner();
         private readonly AdbShellController _adbController = new AdbShellController();
 
-        private const int SingleSetWindowWidth = 568;
-        private const int DualSetWindowWidth = 1100;
-        private const int WindowHeight = 340;
-        private const int Slot1ContentColumnWidth = 382;
-        private const int Slot2ContentColumnWidth = 382;
+        private const int SingleSetWindowWidth = 500;
+        private const int DualSetWindowWidth = 984;
+        private const int WindowHeight = 264;
+        private const int Slot1ContentColumnWidth = 322;
+        private const int Slot2ContentColumnWidth = 322;
         private const int ActionColumnWidth = 150;
+        private const int RunSetGapWidth = 12;
 
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
@@ -118,179 +119,80 @@ namespace Lazy_App_Codex_Core
 
         private void BuildRunSlots()
         {
+            var set1Control = new RunSetControl(showStatusDots: true, showSharedButtons: true);
+            var set2Control = new RunSetControl(showStatusDots: false, showSharedButtons: false);
+            statusDot = set1Control.StatusDot!;
+            adbStatusDot = set1Control.AdbStatusDot!;
+            btnConfig = set1Control.ConfigButton!;
+            btnWirelessAdb = set1Control.WirelessAdbButton!;
+            statusDot.Paint += statusDot_Paint;
+            adbStatusDot.Paint += statusDot_Paint;
+            btnConfig.Click += (_, e) => btnConfig_Click(btnConfig, e);
+            btnWirelessAdb.Click += (_, e) => btnWirelessAdb_Click(btnWirelessAdb, e);
+
             _slot1 = new RunSlot(
                 1,
-                ddlScript,
-                ddlOffset,
-                ddlTagFilter,
-                ddlDevice,
-                btnRun,
-                liveStatusLayout,
-                lblCurrentActionValue,
-                lblStepValue,
-                lblCycleValue,
-                lblNextActionValue,
-                lblNextAtValue,
-                lblEstimatedEndValue);
-
-            _slot1.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(_slot1);
-            _slot1.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(_slot1);
-            _slot1.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(_slot1);
-            _slot1.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
-            _slot1.DeviceBox.DrawItem += ddlDevice_DrawItem;
-            _slot1.RunButton.Click -= btnRun_Click;
-            _slot1.RunButton.Click += async (_, _) => await ToggleRunAsync(_slot1);
-
-            var content2 = CreateSlotContentLayout(out var selector2, out var live2);
-            var script2 = new SearchableDropdown
+                set1Control.ScriptBox,
+                set1Control.OffsetBox,
+                set1Control.TagFilter,
+                set1Control.DeviceBox,
+                set1Control.RunButton,
+                set1Control.LiveStatusLayout,
+                set1Control.CurrentActionLabel,
+                set1Control.StepLabel,
+                set1Control.CycleLabel,
+                set1Control.NextActionLabel,
+                set1Control.NextAtLabel,
+                set1Control.EstimatedEndLabel)
             {
-                Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
-                Margin = new Padding(0, 2, 8, 2),
-                MinimumSize = new Size(160, 30),
-                PlaceholderText = "Choose script, sequence, or plan"
+                ContentPanel = set1Control,
+                ActionPanel = set1Control
             };
-            selector2.Controls.Add(script2, 0, 0);
 
-            Label current2;
-            Label step2;
-            Label cycle2;
-            Label next2;
-            Label nextAt2;
-            Label estimated2;
-            AddStatusRow(live2, 0, "Current Action", current2 = new Label());
-            AddStatusRow(live2, 1, "Current Step", step2 = new Label());
-            AddStatusRow(live2, 2, "Current Cycle", cycle2 = new Label());
-            AddStatusRow(live2, 3, "Next Action", next2 = new Label());
-            AddStatusRow(live2, 4, "Next Action At", nextAt2 = new Label());
-            AddStatusRow(live2, 5, "Estimated End", estimated2 = new Label());
+            WireRunSlot(_slot1);
 
-            var action2 = CreateSlotActionPanel(
-                out var run2,
-                out var offset2,
-                out var tag2,
-                out var device2);
-
-            _slot2 = new RunSlot(2, script2, offset2, tag2, device2, run2, live2, current2, step2, cycle2, next2, nextAt2, estimated2)
+            _slot2 = new RunSlot(
+                2,
+                set2Control.ScriptBox,
+                set2Control.OffsetBox,
+                set2Control.TagFilter,
+                set2Control.DeviceBox,
+                set2Control.RunButton,
+                set2Control.LiveStatusLayout,
+                set2Control.CurrentActionLabel,
+                set2Control.StepLabel,
+                set2Control.CycleLabel,
+                set2Control.NextActionLabel,
+                set2Control.NextAtLabel,
+                set2Control.EstimatedEndLabel)
             {
-                ContentPanel = content2,
-                ActionPanel = action2
+                ContentPanel = set2Control,
+                ActionPanel = set2Control
             };
-            _slot2.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(_slot2);
-            _slot2.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(_slot2);
-            _slot2.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(_slot2);
-            _slot2.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
-            _slot2.DeviceBox.DrawItem += ddlDevice_DrawItem;
-            _slot2.RunButton.Click += async (_, _) => await ToggleRunAsync(_slot2);
 
-            mainLayout.ColumnCount = 4;
-            mainLayout.ColumnStyles[0].SizeType = SizeType.Absolute;
-            mainLayout.ColumnStyles[0].Width = Slot1ContentColumnWidth;
-            mainLayout.ColumnStyles[1].SizeType = SizeType.Absolute;
-            mainLayout.ColumnStyles[1].Width = ActionColumnWidth;
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Slot2ContentColumnWidth));
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ActionColumnWidth));
-            mainLayout.Controls.Add(content2, 2, 0);
-            mainLayout.Controls.Add(action2, 3, 0);
+            WireRunSlot(_slot2);
+
+            mainLayout.ColumnCount = 3;
+            mainLayout.ColumnStyles.Clear();
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Slot1ContentColumnWidth + ActionColumnWidth));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RunSetGapWidth));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Slot2ContentColumnWidth + ActionColumnWidth));
+            mainLayout.RowStyles.Clear();
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            mainLayout.Controls.Clear();
+            mainLayout.Controls.Add(set1Control, 0, 0);
+            mainLayout.Controls.Add(set2Control, 2, 0);
         }
 
-        private static TableLayoutPanel CreateSlotContentLayout(out TableLayoutPanel selector, out TableLayoutPanel liveStatus)
+        private void WireRunSlot(RunSlot slot)
         {
-            var content = new TableLayoutPanel
-            {
-                ColumnCount = 1,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(24, 0, 12, 0),
-                RowCount = 3
-            };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 168F));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            selector = new TableLayoutPanel
-            {
-                ColumnCount = 1,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0),
-                RowCount = 1
-            };
-            selector.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            selector.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            liveStatus = new TableLayoutPanel
-            {
-                ColumnCount = 3,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 8, 0, 0),
-                RowCount = 6
-            };
-            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126F));
-            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 14F));
-            liveStatus.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            for (int i = 0; i < 6; i++)
-            {
-                liveStatus.RowStyles.Add(new RowStyle(SizeType.Absolute, 26F));
-            }
-
-            content.Controls.Add(selector, 0, 0);
-            content.Controls.Add(liveStatus, 0, 1);
-            return content;
-        }
-
-        private static TableLayoutPanel CreateSlotActionPanel(out Button run, out ComboBox offset, out ComboBox tag, out ComboBox device)
-        {
-            var panel = new TableLayoutPanel
-            {
-                ColumnCount = 1,
-                Dock = DockStyle.Top,
-                Margin = new Padding(0),
-                RowCount = 7,
-                Size = new Size(150, 172)
-            };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            for (int i = 0; i < 4; i++)
-            {
-                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
-            }
-
-            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            run = CreateActionButton("Run");
-            offset = CreateActionCombo();
-            offset.Items.AddRange(OffsetDisplayOption.All.Cast<object>().ToArray());
-            tag = CreateActionCombo();
-            device = CreateActionCombo();
-
-            panel.Controls.Add(run, 0, 0);
-            panel.Controls.Add(offset, 0, 1);
-            panel.Controls.Add(tag, 0, 2);
-            panel.Controls.Add(device, 0, 3);
-            return panel;
-        }
-
-        private static Button CreateActionButton(string text)
-        {
-            return new Button
-            {
-                Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
-                Margin = new Padding(0, 2, 0, 6),
-                Text = text,
-                UseVisualStyleBackColor = true
-            };
-        }
-
-        private static ComboBox CreateActionCombo()
-        {
-            return new ComboBox
-            {
-                Dock = DockStyle.Fill,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
-                FormattingEnabled = true,
-                Margin = new Padding(0, 4, 0, 6)
-            };
+            slot.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(slot);
+            slot.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(slot);
+            slot.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(slot);
+            slot.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
+            slot.DeviceBox.DrawItem += ddlDevice_DrawItem;
+            slot.RunButton.Click += async (_, _) => await ToggleRunAsync(slot);
         }
 
         protected override void WndProc(ref Message m)
@@ -516,11 +418,6 @@ namespace Lazy_App_Codex_Core
             }
 
             return normalized;
-        }
-
-        private async void btnRun_Click(object? sender, EventArgs e)
-        {
-            await ToggleRunAsync(_slot1);
         }
 
         private async Task ToggleRunAsync(RunSlot slot)
@@ -1119,16 +1016,6 @@ namespace Lazy_App_Codex_Core
             await EnsureAdbTrackMonitorAsync(dialog.ServerRestarted ? "wireless adb server restart" : "wireless adb");
         }
 
-        private void ddlTagFilter_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            SlotTagFilterChanged(_slot1);
-        }
-
-        private void ddlDevice_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            SlotDeviceChanged(_slot1);
-        }
-
         private void SlotTagFilterChanged(RunSlot slot)
         {
             if (_library.Scripts.Count == 0 && _library.Sequences.Count == 0)
@@ -1181,8 +1068,8 @@ namespace Lazy_App_Codex_Core
 
             _slot2.ContentPanel.Visible = visible;
             _slot2.ActionPanel.Visible = visible;
-            mainLayout.ColumnStyles[2].Width = visible ? Slot2ContentColumnWidth : 0F;
-            mainLayout.ColumnStyles[3].Width = visible ? ActionColumnWidth : 0F;
+            mainLayout.ColumnStyles[1].Width = visible ? RunSetGapWidth : 0F;
+            mainLayout.ColumnStyles[2].Width = visible ? Slot2ContentColumnWidth + ActionColumnWidth : 0F;
             ApplyWindowSizeForSetCount(visible);
 
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
@@ -1226,19 +1113,19 @@ namespace Lazy_App_Codex_Core
         private void ddlDevice_DrawItem(object? sender, DrawItemEventArgs e)
         {
             e.DrawBackground();
-            if (e.Index < 0 || e.Index >= ddlDevice.Items.Count)
+            if (sender is not ComboBox combo || e.Index < 0 || e.Index >= combo.Items.Count)
             {
                 return;
             }
 
-            if (ddlDevice.Items[e.Index] is not DeviceDisplayItem item)
+            if (combo.Items[e.Index] is not DeviceDisplayItem item)
             {
                 return;
             }
 
             bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-            Color textColor = selected ? SystemColors.HighlightText : (item.MetadataMismatch ? Color.Firebrick : ddlDevice.ForeColor);
-            using Font fallbackFont = new Font(ddlDevice.Font, ddlDevice.Font.Style);
+            Color textColor = selected ? SystemColors.HighlightText : (item.MetadataMismatch ? Color.Firebrick : combo.ForeColor);
+            using Font fallbackFont = new Font(combo.Font, combo.Font.Style);
             TextRenderer.DrawText(e.Graphics, item.ToString(), e.Font ?? fallbackFont, e.Bounds, textColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             e.DrawFocusRectangle();
         }
