@@ -79,11 +79,15 @@ Primary start and stop hotkeys are configured in Settings and control Set 1. Opt
 
 The main hotkey status dot is gold when both primary and secondary hotkeys register, green when primary only registers, blue when secondary only registers, and red when no hotkey registers.
 
+The taskbar overlay mirrors the hotkey registration state with a small status identifier and shows one or two run-set identifiers depending on whether Set 2 is open.
+
 ### Run Set
 
 The main window has two independent run sets. Set 1 is always visible. Set 2 opens and closes with `Alt+1`, has its own Script/Sequence picker, offset, tag, device, run button, and live status panel, but does not duplicate Config or Pair / Connect.
 
 The same ADB device cannot be selected in both visible/running sets. Closing a stopped Set 2 releases its selected device and unregisters Set 2 secondary hotkeys.
+
+The main window uses fixed sizes for one-set and two-set layouts. User resize and maximize are disabled, and run actions should not stretch or shrink either set; only opening or closing Set 2 changes the window size.
 
 ### Offset
 

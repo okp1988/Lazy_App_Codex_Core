@@ -1,6 +1,6 @@
 # Code Review
 
-Review date: 2026-05-18
+Review date: 2026-05-19
 
 Scope: current working tree for the Windows Forms ADB automation runner.
 
@@ -16,7 +16,8 @@ Recent changes:
 - Settings support optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`.
 - Set 2 opens/closes with `Alt+1`; secondary hotkeys register only while Set 2 is open.
 - The hotkey dot is gold for both registrations, green for primary-only, blue for secondary-only, and red when no hotkey is registered.
-- The taskbar overlay distinguishes both stopped, Set 1 running, Set 2 running, and both running.
+- The taskbar overlay distinguishes Set 1/Set 2 run state and includes a hotkey-registration status identifier.
+- The main window uses fixed one-set and two-set sizes, disables user resize/maximize, and does not resize on Run/Stop actions.
 
 ## Findings
 

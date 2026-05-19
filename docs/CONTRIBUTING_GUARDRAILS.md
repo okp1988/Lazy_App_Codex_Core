@@ -14,9 +14,11 @@
 - Tag filter behavior with `All` at index 0.
 - Separate hotkey and ADB status dots.
 - Hotkey dot color meanings: gold for both primary and secondary hotkeys, green for primary only, blue for secondary only, red for no registered hotkey.
+- Taskbar overlay identifiers: mirror hotkey registration color and show one run-set identifier when only Set 1 is visible, or two identifiers when Set 2 is open.
 - ADB monitor color meanings.
 - Optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`; register them only while Set 2 is open.
 - Two independent run sets, with Set 2 opened by `Alt+1` and no duplicate Config or Pair / Connect buttons.
+- Fixed one-set and two-set window sizes with user resize and maximize disabled; Run/Stop must not resize or stretch run-set controls.
 - Device dropdown exclusion between visible/running run sets so both sets cannot target the same ADB serial.
 - Script and Sequence `emin` minimum cycle enforcement.
 - Wireless ADB Pair / Connect and Restart Server as manual helpers, not a background reconnect loop.
@@ -30,6 +32,7 @@
 
 - Run `dotnet build Lazy_App_Codex_Core.sln` before delivering code changes when possible.
 - Keep UI changes compatible with Windows Forms designer metadata.
+- Preserve fixed run-set column widths when changing the main-window layout.
 - Keep `ConfigEditorForm` button rows from clipping by using explicit `TableLayoutPanel` row heights and docked buttons.
 - Leave bottom padding in scrollable/editor panels.
 - Validate Run against ADB status before executing commands.
@@ -90,6 +93,9 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - App opens.
 - Global hotkey dot reflects registration.
 - Primary-only hotkeys show a green dot, secondary-only hotkeys show a blue dot, both registered shows a gold dot, and no registered hotkey shows a red dot.
+- Taskbar overlay shows the matching hotkey-status identifier and the correct one/two run-set identifiers.
+- The main window cannot be manually resized or maximized.
+- Opening Set 2 switches to the fixed two-set size, closing Set 2 switches to the fixed one-set size, and Run/Stop does not resize either layout.
 - `Alt+1` opens and closes Set 2; Set 2 secondary hotkeys register only while Set 2 is open and unregister when it closes.
 - `Alt+2` opens Config, `Alt+3` opens Pair / Connect, `Esc` closes Config through its close flow, and `Esc` closes Pair / Connect.
 - ADB dot shows dark gray/yellow/green/red correctly.

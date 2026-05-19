@@ -20,7 +20,8 @@ Responsibilities:
 - Route Run, Stop, Escape, and hotkey actions.
 - Own independent run-slot cancellation state for Set 1 and Set 2.
 - Own live run status labels for each visible run set.
-- Own taskbar overlay icons for both stopped, Set 1 running, Set 2 running, and both running.
+- Own fixed one-set/two-set window sizing with user resize and maximize disabled.
+- Own taskbar overlay icons for hotkey registration status plus Set 1/Set 2 run identifiers.
 - Own ADB status monitor state.
 - Own current ADB device dropdown state for each run set and prevent both visible/running sets from selecting the same device.
 - Open `ConfigEditorForm`.

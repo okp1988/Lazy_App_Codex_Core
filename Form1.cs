@@ -40,6 +40,13 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptRunner _runner = new ScriptRunner();
         private readonly AdbShellController _adbController = new AdbShellController();
 
+        private const int SingleSetWindowWidth = 568;
+        private const int DualSetWindowWidth = 1100;
+        private const int WindowHeight = 340;
+        private const int Slot1ContentColumnWidth = 382;
+        private const int Slot2ContentColumnWidth = 382;
+        private const int ActionColumnWidth = 150;
+
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
         private Dictionary<string, DeviceInfo> _deviceMetadata = new(StringComparer.OrdinalIgnoreCase);
@@ -62,10 +69,7 @@ namespace Lazy_App_Codex_Core
         private bool _closing;
         private readonly string _baseTitle;
         private readonly Icon _baseIcon;
-        private readonly Icon _bothStoppedIcon;
-        private readonly Icon _slot1RunningIcon;
-        private readonly Icon _slot2RunningIcon;
-        private readonly Icon _bothRunningIcon;
+        private readonly Dictionary<string, Icon> _taskbarStatusIcons = new Dictionary<string, Icon>(StringComparer.Ordinal);
         private ITaskbarList3? _taskbarList;
         private readonly List<string> _debugLog = new List<string>();
 
@@ -74,18 +78,18 @@ namespace Lazy_App_Codex_Core
         public Form1()
         {
             InitializeComponent();
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            ApplyWindowSizeForSetCount(false);
             Icon? appIcon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             _baseIcon = appIcon != null ? (Icon)appIcon.Clone() : (Icon)SystemIcons.Application.Clone();
             appIcon?.Dispose();
-            _bothStoppedIcon = CreateOverlayIcon(false, false);
-            _slot1RunningIcon = CreateOverlayIcon(true, false);
-            _slot2RunningIcon = CreateOverlayIcon(false, true);
-            _bothRunningIcon = CreateOverlayIcon(true, true);
             Icon = _baseIcon;
             _baseTitle = Text;
             BuildRunSlots();
 
             Load += OnLoad;
+            Shown += OnShown;
             Activated += OnActivated;
             Resize += OnResize;
 
@@ -180,12 +184,12 @@ namespace Lazy_App_Codex_Core
             _slot2.RunButton.Click += async (_, _) => await ToggleRunAsync(_slot2);
 
             mainLayout.ColumnCount = 4;
-            mainLayout.ColumnStyles[0].SizeType = SizeType.Percent;
-            mainLayout.ColumnStyles[0].Width = 100F;
+            mainLayout.ColumnStyles[0].SizeType = SizeType.Absolute;
+            mainLayout.ColumnStyles[0].Width = Slot1ContentColumnWidth;
             mainLayout.ColumnStyles[1].SizeType = SizeType.Absolute;
-            mainLayout.ColumnStyles[1].Width = 150F;
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
+            mainLayout.ColumnStyles[1].Width = ActionColumnWidth;
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Slot2ContentColumnWidth));
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ActionColumnWidth));
             mainLayout.Controls.Add(content2, 2, 0);
             mainLayout.Controls.Add(action2, 3, 0);
         }
@@ -334,6 +338,11 @@ namespace Lazy_App_Codex_Core
             RegisterHotkeysForWindowState();
             UpdateTaskbarOverlayIcon();
             _ = EnsureAdbTrackMonitorAsync("load");
+        }
+
+        private void OnShown(object? sender, EventArgs e)
+        {
+            BeginInvoke((Action)UpdateTaskbarOverlayIcon);
         }
 
         private void OnActivated(object? sender, EventArgs e)
@@ -801,13 +810,19 @@ namespace Lazy_App_Codex_Core
 
         private void UpdateTaskbarOverlayIcon()
         {
-            Icon icon = (_slot1.IsRunning, _slot2.IsRunning) switch
+            bool showSlot2Identifier = _slot2Visible || _slot2.IsRunning;
+            string iconKey = string.Join(
+                "|",
+                _slot1.IsRunning,
+                _slot2.IsRunning,
+                showSlot2Identifier,
+                _statusDotColor.ToArgb());
+            if (!_taskbarStatusIcons.TryGetValue(iconKey, out Icon? icon))
             {
-                (true, true) => _bothRunningIcon,
-                (true, false) => _slot1RunningIcon,
-                (false, true) => _slot2RunningIcon,
-                _ => _bothStoppedIcon
-            };
+                icon = CreateTaskbarOverlayIcon(_slot1.IsRunning, _slot2.IsRunning, showSlot2Identifier, _statusDotColor);
+                _taskbarStatusIcons.Add(iconKey, icon);
+            }
+
             string description = (_slot1.IsRunning, _slot2.IsRunning) switch
             {
                 (true, true) => "Set 1 and Set 2 running",
@@ -818,15 +833,15 @@ namespace Lazy_App_Codex_Core
             SetTaskbarOverlayIcon(icon, description);
         }
 
-        private static Icon CreateOverlayIcon(bool slot1Running, bool slot2Running)
+        private static Icon CreateTaskbarOverlayIcon(bool slot1Running, bool slot2Running, bool showSlot2Identifier, Color hotkeyStatusColor)
         {
             using Bitmap bitmap = new Bitmap(32, 32);
             using Graphics graphics = Graphics.FromImage(bitmap);
             graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             graphics.Clear(Color.Transparent);
 
-            DrawOverlaySlot(graphics, new Rectangle(2, 4, 13, 24), slot1Running);
-            DrawOverlaySlot(graphics, new Rectangle(17, 4, 13, 24), slot2Running);
+            DrawRunSetIdentifiers(graphics, slot1Running, slot2Running, showSlot2Identifier);
+            DrawHotkeyStatusIdentifier(graphics, hotkeyStatusColor);
 
             IntPtr iconHandle = bitmap.GetHicon();
             try
@@ -839,12 +854,40 @@ namespace Lazy_App_Codex_Core
             }
         }
 
+        private static void DrawRunSetIdentifiers(Graphics graphics, bool slot1Running, bool slot2Running, bool showSlot2Identifier)
+        {
+            const int markerWidth = 7;
+            const int markerHeight = 18;
+            const int markerTop = 2;
+            const int markerRight = 2;
+            const int markerGap = 2;
+
+            int slot2X = 32 - markerRight - markerWidth;
+            if (showSlot2Identifier)
+            {
+                DrawOverlaySlot(graphics, new Rectangle(slot2X - markerGap - markerWidth, markerTop, markerWidth, markerHeight), slot1Running);
+                DrawOverlaySlot(graphics, new Rectangle(slot2X, markerTop, markerWidth, markerHeight), slot2Running);
+                return;
+            }
+
+            DrawOverlaySlot(graphics, new Rectangle(slot2X, markerTop, markerWidth, markerHeight), slot1Running);
+        }
+
         private static void DrawOverlaySlot(Graphics graphics, Rectangle bounds, bool running)
         {
             using var fill = new SolidBrush(running ? Color.LimeGreen : Color.DimGray);
-            using var border = new Pen(Color.White, 2);
+            using var border = new Pen(Color.White, 1F);
             graphics.FillRectangle(fill, bounds);
             graphics.DrawRectangle(border, bounds);
+        }
+
+        private static void DrawHotkeyStatusIdentifier(Graphics graphics, Color hotkeyStatusColor)
+        {
+            var bounds = new Rectangle(22, 22, 8, 8);
+            using var fill = new SolidBrush(hotkeyStatusColor);
+            using var border = new Pen(Color.White, 1F);
+            graphics.FillEllipse(fill, bounds);
+            graphics.DrawEllipse(border, bounds);
         }
 
         private void statusDot_Paint(object? sender, PaintEventArgs e)
@@ -952,6 +995,7 @@ namespace Lazy_App_Codex_Core
                 statusDot,
                 $"Set 1 hotkeys {primaryStatus}. Start: {_hotkeys.StartHotkeyText}, Stop: {_hotkeys.StopHotkeyText}. Set 2 hotkeys {backupStatus}. Start: {_hotkeys.BackupStartHotkeyText}, Stop: {_hotkeys.BackupStopHotkeyText}.");
             statusDot.Invalidate();
+            UpdateTaskbarOverlayIcon();
         }
 
         private void btnConfig_Click(object sender, EventArgs e)
@@ -1051,24 +1095,30 @@ namespace Lazy_App_Codex_Core
 
             _slot2.ContentPanel.Visible = visible;
             _slot2.ActionPanel.Visible = visible;
-            mainLayout.ColumnStyles[2].Width = visible ? 100F : 0F;
-            mainLayout.ColumnStyles[3].Width = visible ? 150F : 0F;
-            MinimumSize = visible ? new Size(1100, 340) : new Size(640, 340);
-            if (visible && Width < 1100)
-            {
-                Width = 1100;
-            }
-            else if (!visible && Width > 760 && !AnySlotRunning)
-            {
-                Width = 640;
-            }
+            mainLayout.ColumnStyles[2].Width = visible ? Slot2ContentColumnWidth : 0F;
+            mainLayout.ColumnStyles[3].Width = visible ? ActionColumnWidth : 0F;
+            ApplyWindowSizeForSetCount(visible);
 
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
+            UpdateTaskbarOverlayIcon();
             if (changed && WindowState != FormWindowState.Minimized)
             {
                 _lastHotkeyRegistrationSucceeded = null;
                 RegisterHotkeysForWindowState();
             }
+        }
+
+        private void ApplyWindowSizeForSetCount(bool set2Visible)
+        {
+            var fixedSize = new Size(set2Visible ? DualSetWindowWidth : SingleSetWindowWidth, WindowHeight);
+            MaximumSize = Size.Empty;
+            MinimumSize = fixedSize;
+            if (WindowState == FormWindowState.Normal)
+            {
+                Size = fixedSize;
+            }
+
+            MaximumSize = fixedSize;
         }
 
         private void UpdateWindowTitle()
@@ -1815,10 +1865,12 @@ namespace Lazy_App_Codex_Core
             _adbRetryTimer.Dispose();
             StopTrackDevicesProcess();
             _statusToolTip.Dispose();
-            _bothStoppedIcon.Dispose();
-            _slot1RunningIcon.Dispose();
-            _slot2RunningIcon.Dispose();
-            _bothRunningIcon.Dispose();
+            foreach (Icon icon in _taskbarStatusIcons.Values)
+            {
+                icon.Dispose();
+            }
+
+            _taskbarStatusIcons.Clear();
             _baseIcon.Dispose();
             _slot1.RunCts?.Cancel();
             _slot2.RunCts?.Cancel();
