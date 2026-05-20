@@ -40,9 +40,9 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptRunner _runner = new ScriptRunner();
         private readonly AdbShellController _adbController = new AdbShellController();
 
-        private const int SingleSetWindowWidth = 500;
-        private const int DualSetWindowWidth = 984;
-        private const int WindowHeight = 264;
+        private const int SingleSetClientWidth = 484;
+        private const int DualSetClientWidth = 968;
+        private const int ClientHeight = 224;
         private const int Slot1ContentColumnWidth = 322;
         private const int Slot2ContentColumnWidth = 322;
         private const int ActionColumnWidth = 150;
@@ -1083,14 +1083,16 @@ namespace Lazy_App_Codex_Core
 
         private void ApplyWindowSizeForSetCount(bool set2Visible)
         {
-            var fixedSize = new Size(set2Visible ? DualSetWindowWidth : SingleSetWindowWidth, WindowHeight);
+            var fixedClientSize = new Size(set2Visible ? DualSetClientWidth : SingleSetClientWidth, ClientHeight);
             MaximumSize = Size.Empty;
-            MinimumSize = fixedSize;
-            if (WindowState == FormWindowState.Normal)
+            MinimumSize = Size.Empty;
+            if (WindowState == FormWindowState.Normal && ClientSize != fixedClientSize)
             {
-                Size = fixedSize;
+                ClientSize = fixedClientSize;
             }
 
+            var fixedSize = SizeFromClientSize(fixedClientSize);
+            MinimumSize = fixedSize;
             MaximumSize = fixedSize;
         }
 

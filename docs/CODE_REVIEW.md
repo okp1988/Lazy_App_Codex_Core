@@ -6,7 +6,7 @@ Scope: current working tree for the Windows Forms ADB automation runner.
 
 ## Handoff: Main Window RunSetControl UI
 
-This session converted the main run-set UI to a shared `RunSetControl` so Set 1 and Set 2 are built from the same control. The compact PC layout is now the current baseline: one-set window `500 x 264`, two-set window `984 x 264`, and each `RunSetControl` `472 x 216`.
+This session converted the main run-set UI to a shared `RunSetControl` so Set 1 and Set 2 are built from the same control. The compact layout is now client-area based: one-set client `484 x 224`, two-set client `968 x 224`, and each `RunSetControl` `472 x 216`. The outer window size is derived with `SizeFromClientSize(...)`, so Windows DPI/title-bar differences may add a few outer pixels without squeezing the app contents.
 
 Problems encountered:
 
@@ -21,11 +21,13 @@ Current fixes:
 - `Form1` and `RunSetControl` use `AutoScaleMode.None` for the fixed-size main window.
 - `RunSetControl.cs` applies stable runtime layout after `InitializeComponent()` and repopulates `ddlOffset` from `OffsetDisplayOption.All`, so Visual Studio designer rewrites should not blank the Offset dropdown or shrink the control stack at runtime.
 - Buttons are kept at `32px` height to avoid text clipping; Offset/tag combos target `28px`; Device combo targets `26px`.
+- The action column uses six fixed `34px` rows plus a `12px` bottom spacer row so laptop-scale layouts can keep visible bottom space without stretching the Pair / Connect button.
+- `Form1` now fixes `ClientSize` rather than only outer `Size`, which keeps the usable layout consistent between 100% and 125% display scaling.
 
 Laptop-design follow-up:
 
-- Start by preserving the PC baseline. Take a PC screenshot before changing laptop values, then compare after changes.
-- If laptop needs different spacing/sizing, prefer an explicit layout profile selected by DPI/screen/font context rather than replacing the PC constants.
+- Start by preserving the client-size baseline. Take a PC screenshot before changing laptop values, then compare after changes.
+- If laptop needs different spacing/sizing, prefer an explicit layout profile selected by DPI/screen/font context rather than replacing the current client-size constants.
 - Keep all new run-set files in Git: `RunSetControl.cs`, `RunSetControl.Designer.cs`, and `RunSetControl.resx`.
 
 ## Summary
@@ -45,7 +47,7 @@ Recent changes:
 - Set 2 opens/closes with `Alt+1`; secondary hotkeys register only while Set 2 is open.
 - The hotkey dot is gold for both registrations, green for primary-only, blue for secondary-only, and red when no hotkey is registered.
 - The taskbar overlay distinguishes Set 1/Set 2 run state and includes a hotkey-registration status identifier.
-- The main window uses fixed one-set and two-set sizes, disables user resize/maximize, and does not resize on Run/Stop actions.
+- The main window uses fixed one-set and two-set client sizes, disables user resize/maximize, and does not resize on Run/Stop actions.
 
 ## Findings
 

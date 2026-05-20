@@ -32,13 +32,13 @@ namespace Lazy_App_Codex_Core
             mainLayout.Padding = new Padding(6, 6, 6, 2);
             mainLayout.RowCount = 1;
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            mainLayout.Size = new Size(484, 264);
+            mainLayout.Size = new Size(484, 224);
             mainLayout.TabIndex = 0;
             // 
             // Form1
             // 
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new Size(484, 264);
+            ClientSize = new Size(484, 224);
             Controls.Add(mainLayout);
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             MinimumSize = new Size(500, 264);

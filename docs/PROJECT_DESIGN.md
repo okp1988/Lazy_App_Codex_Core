@@ -97,7 +97,7 @@ The main window has two independent run sets. Set 1 is always visible. Set 2 ope
 
 The same ADB device cannot be selected in both visible/running sets. Closing a stopped Set 2 releases its selected device and unregisters Set 2 secondary hotkeys.
 
-The main window uses fixed sizes for one-set and two-set layouts. User resize and maximize are disabled, and run actions should not stretch or shrink either set; only opening or closing Set 2 changes the window size.
+The main window uses fixed client sizes for one-set and two-set layouts. User resize and maximize are disabled, and run actions should not stretch or shrink either set; only opening or closing Set 2 changes the window size. The outer window may differ by a few pixels across display scaling because Windows owns the title bar and border metrics, but the usable client layout is fixed.
 
 ### Offset
 

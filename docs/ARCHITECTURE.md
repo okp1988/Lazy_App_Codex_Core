@@ -20,7 +20,7 @@ Responsibilities:
 - Route Run, Stop, Escape, and hotkey actions.
 - Own independent run-slot cancellation state for Set 1 and Set 2.
 - Own live run status labels for each visible run set.
-- Own fixed one-set/two-set window sizing with user resize and maximize disabled.
+- Own fixed one-set/two-set client-area sizing with user resize and maximize disabled.
 - Own taskbar overlay icons for hotkey registration status plus Set 1/Set 2 run identifiers.
 - Own ADB status monitor state.
 - Own current ADB device dropdown state for each run set and prevent both visible/running sets from selecting the same device.
@@ -31,13 +31,13 @@ Responsibilities:
 
 Designer-managed main-window controls. Keep layout edits compatible with WinForms designer expectations.
 
-The current main window shell is intentionally small: it hosts `mainLayout`, while the repeated run-set UI lives in `RunSetControl`. `Form1.cs` creates two `RunSetControl` instances and switches fixed one-set/two-set window sizes.
+The current main window shell is intentionally small: it hosts `mainLayout`, while the repeated run-set UI lives in `RunSetControl`. `Form1.cs` creates two `RunSetControl` instances and switches fixed one-set/two-set client sizes. The outer form size is derived with `SizeFromClientSize(...)` so DPI-dependent window chrome can vary without changing the usable layout area.
 
 ### `RunSetControl.cs`
 
 Designer-backed `UserControl` for one main-window run set. Set 1 and Set 2 both use this same control. Set 1 shows the hotkey/ADB dots plus Config and Pair / Connect; Set 2 hides those shared controls.
 
-`RunSetControl.cs` also applies the stable runtime layout after `InitializeComponent()`. This is deliberate: Visual Studio 2026 rewrote some designer values during the UI work, including autoscale metadata, combo heights, status rows, and offset items. Runtime layout setup keeps the compact PC layout from being lost if the designer file is opened.
+`RunSetControl.cs` also applies the stable runtime layout after `InitializeComponent()`. This is deliberate: Visual Studio 2026 rewrote some designer values during the UI work, including autoscale metadata, combo heights, status rows, and offset items. Runtime layout setup keeps the compact layout from being lost if the designer file is opened. The action column uses fixed rows plus an explicit bottom spacer row so spare height does not stretch the Pair / Connect button.
 
 ### `RunSetControl.Designer.cs`
 
