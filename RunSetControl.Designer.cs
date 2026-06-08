@@ -45,6 +45,7 @@ namespace Lazy_App_Codex_Core
             lblEstimatedEndValue = new Label();
             actionPanel = new TableLayoutPanel();
             btnRun = new Button();
+            ddlSkip = new SkipPickerControl();
             ddlOffset = new ComboBox();
             ddlTagFilter = new ComboBox();
             ddlDevice = new ComboBox();
@@ -60,8 +61,8 @@ namespace Lazy_App_Codex_Core
             // layout
             // 
             layout.ColumnCount = 2;
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 322F));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 410F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 184F));
             layout.Controls.Add(contentLayout, 0, 0);
             layout.Controls.Add(actionPanel, 1, 0);
             layout.Dock = DockStyle.Fill;
@@ -71,7 +72,7 @@ namespace Lazy_App_Codex_Core
             layout.Name = "layout";
             layout.RowCount = 1;
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.Size = new Size(472, 216);
+            layout.Size = new Size(594, 284);
             layout.TabIndex = 0;
             // 
             // contentLayout
@@ -84,11 +85,12 @@ namespace Lazy_App_Codex_Core
             contentLayout.Location = new Point(0, 0);
             contentLayout.Margin = new Padding(0, 0, 12, 0);
             contentLayout.Name = "contentLayout";
-            contentLayout.RowCount = 3;
+            contentLayout.RowCount = 4;
             contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 168F));
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82F));
             contentLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            contentLayout.Size = new Size(310, 216);
+            contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+            contentLayout.Size = new Size(398, 284);
             contentLayout.TabIndex = 0;
             // 
             // selectorLayout
@@ -106,7 +108,7 @@ namespace Lazy_App_Codex_Core
             selectorLayout.Name = "selectorLayout";
             selectorLayout.RowCount = 1;
             selectorLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            selectorLayout.Size = new Size(310, 34);
+            selectorLayout.Size = new Size(398, 34);
             selectorLayout.TabIndex = 0;
             // 
             // ddlScript
@@ -121,14 +123,14 @@ namespace Lazy_App_Codex_Core
             ddlScript.Padding = new Padding(5, 5, 1, 1);
             ddlScript.PlaceholderText = "Choose script, sequence, or plan";
             ddlScript.SelectedItem = null;
-            ddlScript.Size = new Size(266, 30);
+            ddlScript.Size = new Size(354, 30);
             ddlScript.TabIndex = 0;
             // 
             // statusDot
             // 
             statusDot.Anchor = AnchorStyles.None;
             statusDot.BackColor = Color.Transparent;
-            statusDot.Location = new Point(277, 11);
+            statusDot.Location = new Point(365, 11);
             statusDot.Margin = new Padding(0);
             statusDot.Name = "statusDot";
             statusDot.Size = new Size(12, 12);
@@ -138,7 +140,7 @@ namespace Lazy_App_Codex_Core
             // 
             adbStatusDot.Anchor = AnchorStyles.None;
             adbStatusDot.BackColor = Color.Transparent;
-            adbStatusDot.Location = new Point(295, 11);
+            adbStatusDot.Location = new Point(383, 11);
             adbStatusDot.Margin = new Padding(0);
             adbStatusDot.Name = "adbStatusDot";
             adbStatusDot.Size = new Size(12, 12);
@@ -385,24 +387,26 @@ namespace Lazy_App_Codex_Core
             actionPanel.ColumnCount = 1;
             actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             actionPanel.Controls.Add(btnRun, 0, 0);
-            actionPanel.Controls.Add(ddlOffset, 0, 1);
-            actionPanel.Controls.Add(ddlTagFilter, 0, 2);
-            actionPanel.Controls.Add(ddlDevice, 0, 3);
-            actionPanel.Controls.Add(btnConfig, 0, 4);
-            actionPanel.Controls.Add(btnWirelessAdb, 0, 5);
+            actionPanel.Controls.Add(ddlSkip, 0, 1);
+            actionPanel.Controls.Add(ddlOffset, 0, 2);
+            actionPanel.Controls.Add(ddlTagFilter, 0, 3);
+            actionPanel.Controls.Add(ddlDevice, 0, 4);
+            actionPanel.Controls.Add(btnConfig, 0, 5);
+            actionPanel.Controls.Add(btnWirelessAdb, 0, 6);
             actionPanel.Dock = DockStyle.Top;
-            actionPanel.Location = new Point(322, 0);
+            actionPanel.Location = new Point(410, 0);
             actionPanel.Margin = new Padding(0);
             actionPanel.Name = "actionPanel";
-            actionPanel.RowCount = 7;
+            actionPanel.RowCount = 8;
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 12F));
-            actionPanel.Size = new Size(150, 216);
+            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+            actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46F));
+            actionPanel.Size = new Size(184, 284);
             actionPanel.TabIndex = 1;
             // 
             // btnRun
@@ -412,10 +416,20 @@ namespace Lazy_App_Codex_Core
             btnRun.Location = new Point(0, 1);
             btnRun.Margin = new Padding(0, 1, 0, 1);
             btnRun.Name = "btnRun";
-            btnRun.Size = new Size(150, 32);
+            btnRun.Size = new Size(184, 32);
             btnRun.TabIndex = 0;
             btnRun.Text = "Run";
             btnRun.UseVisualStyleBackColor = true;
+            //
+            // ddlSkip
+            //
+            ddlSkip.Dock = DockStyle.Fill;
+            ddlSkip.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ddlSkip.Location = new Point(0, 38);
+            ddlSkip.Margin = new Padding(0, 4, 0, 6);
+            ddlSkip.Name = "ddlSkip";
+            ddlSkip.Size = new Size(184, 24);
+            ddlSkip.TabIndex = 1;
             // 
             // ddlOffset
             // 
@@ -424,11 +438,11 @@ namespace Lazy_App_Codex_Core
             ddlOffset.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             ddlOffset.FormattingEnabled = true;
             ddlOffset.ItemHeight = 20;
-            ddlOffset.Location = new Point(0, 37);
+            ddlOffset.Location = new Point(0, 71);
             ddlOffset.Margin = new Padding(0, 3, 0, 3);
             ddlOffset.Name = "ddlOffset";
-            ddlOffset.Size = new Size(150, 28);
-            ddlOffset.TabIndex = 1;
+            ddlOffset.Size = new Size(184, 28);
+            ddlOffset.TabIndex = 2;
             // 
             // ddlTagFilter
             // 
@@ -437,11 +451,11 @@ namespace Lazy_App_Codex_Core
             ddlTagFilter.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             ddlTagFilter.FormattingEnabled = true;
             ddlTagFilter.ItemHeight = 20;
-            ddlTagFilter.Location = new Point(0, 71);
+            ddlTagFilter.Location = new Point(0, 105);
             ddlTagFilter.Margin = new Padding(0, 3, 0, 3);
             ddlTagFilter.Name = "ddlTagFilter";
-            ddlTagFilter.Size = new Size(150, 28);
-            ddlTagFilter.TabIndex = 2;
+            ddlTagFilter.Size = new Size(184, 28);
+            ddlTagFilter.TabIndex = 3;
             // 
             // ddlDevice
             // 
@@ -450,21 +464,21 @@ namespace Lazy_App_Codex_Core
             ddlDevice.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             ddlDevice.FormattingEnabled = true;
             ddlDevice.ItemHeight = 18;
-            ddlDevice.Location = new Point(0, 106);
+            ddlDevice.Location = new Point(0, 140);
             ddlDevice.Margin = new Padding(0, 4, 0, 4);
             ddlDevice.Name = "ddlDevice";
-            ddlDevice.Size = new Size(150, 26);
-            ddlDevice.TabIndex = 3;
+            ddlDevice.Size = new Size(184, 26);
+            ddlDevice.TabIndex = 4;
             // 
             // btnConfig
             // 
             btnConfig.Dock = DockStyle.Fill;
             btnConfig.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnConfig.Location = new Point(0, 137);
+            btnConfig.Location = new Point(0, 171);
             btnConfig.Margin = new Padding(0, 1, 0, 1);
             btnConfig.Name = "btnConfig";
-            btnConfig.Size = new Size(150, 32);
-            btnConfig.TabIndex = 4;
+            btnConfig.Size = new Size(184, 32);
+            btnConfig.TabIndex = 5;
             btnConfig.Text = "Config";
             btnConfig.UseVisualStyleBackColor = true;
             // 
@@ -472,11 +486,11 @@ namespace Lazy_App_Codex_Core
             // 
             btnWirelessAdb.Dock = DockStyle.Fill;
             btnWirelessAdb.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnWirelessAdb.Location = new Point(0, 171);
+            btnWirelessAdb.Location = new Point(0, 205);
             btnWirelessAdb.Margin = new Padding(0, 1, 0, 1);
             btnWirelessAdb.Name = "btnWirelessAdb";
-            btnWirelessAdb.Size = new Size(150, 32);
-            btnWirelessAdb.TabIndex = 5;
+            btnWirelessAdb.Size = new Size(184, 32);
+            btnWirelessAdb.TabIndex = 6;
             btnWirelessAdb.Text = "Pair / Connect";
             btnWirelessAdb.UseVisualStyleBackColor = true;
             // RunSetControl
@@ -486,7 +500,7 @@ namespace Lazy_App_Codex_Core
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             Margin = new Padding(0);
             Name = "RunSetControl";
-            Size = new Size(472, 216);
+            Size = new Size(594, 284);
             layout.ResumeLayout(false);
             contentLayout.ResumeLayout(false);
             selectorLayout.ResumeLayout(false);
@@ -522,6 +536,7 @@ namespace Lazy_App_Codex_Core
         private Label lblEstimatedEndValue;
         private TableLayoutPanel actionPanel;
         private Button btnRun;
+        private SkipPickerControl ddlSkip;
         private ComboBox ddlOffset;
         private ComboBox ddlTagFilter;
         private ComboBox ddlDevice;

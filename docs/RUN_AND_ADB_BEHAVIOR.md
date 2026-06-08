@@ -12,30 +12,34 @@
 - Optional Script and Sequence `emin` enforces a minimum cycle time and must not exceed the displayed max cycle time.
 - Run Plan item repeat counts override the referenced target's saved loop count only for that item.
 - ADB OFF mode skips ADB commands but still updates status and waits through configured sleeps.
+- Skip is a pre-run UI option only. It is disabled while running and reset after completion or cancellation.
+- Skip is disabled for infinite direct Scripts/Sequences. The last finite loop is never offered as a skip option.
 
 ## Script Execution
 
 For a Script:
 
-1. Expand action groups into steps.
-2. Apply selected UI offset only to the first planned left-click step.
-3. Execute each planned step.
-4. Sleep for each step's randomized sleep.
-5. Sleep for the Script interval after each loop when interval max is positive.
-6. If Script `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
+1. If finite Skip is selected, start at loop `skip + 1`.
+2. Expand action groups into steps.
+3. Apply selected UI offset only to the first planned left-click step.
+4. Execute each planned step.
+5. Sleep for each step's randomized sleep.
+6. Sleep for the Script interval after each loop when interval max is positive.
+7. If Script `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
 
 ## Sequence Execution
 
 For a Sequence:
 
-1. Expand each Sequence item in order.
-2. For Script items, resolve the referenced Script by `scriptId`.
-3. Ignore the Script's own loop count and interval inside the Sequence.
-4. Use the Sequence item's `Repeat`.
-5. Add the Sequence item's delay to the last expanded step for that item.
-6. For direct action items, use the selected Sequence/main offset context.
-7. Sleep for the Sequence interval after each Sequence cycle when interval max is positive.
-8. If Sequence `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
+1. If finite Skip is selected, start at sequence loop `skip + 1`.
+2. Expand each Sequence item in order.
+3. For Script items, resolve the referenced Script by `scriptId`.
+4. Ignore the Script's own loop count and interval inside the Sequence.
+5. Use the Sequence item's `Repeat`.
+6. Add the Sequence item's delay to the last expanded step for that item.
+7. For direct action items, use the selected Sequence/main offset context.
+8. Sleep for the Sequence interval after each Sequence cycle when interval max is positive.
+9. If Sequence `emin` is set, adjust the planned waits before the first action so the cycle lasts at least `emin` seconds.
 
 The Sequence total shown in the editor is one Sequence cycle and does not multiply by Sequence loop count.
 
@@ -50,8 +54,19 @@ For a Run Plan:
 5. Ignore the referenced target's saved loop count for that item only.
 6. Preserve the target's own cycle internals: Script/Sequence `emin`, interval min/max, step sleeps, Sequence item delays, direct actions, and ADB OFF behavior.
 7. Use the same run-set cancellation token and live status panel as direct Script/Sequence runs.
+8. If Skip is selected, consume the flattened plan item-repeat order before executing. For example, `A A A A A B B B` with skip 3 starts at the fourth global plan cycle; skip 5 starts at the first `B`.
 
 Run Plan totals shown in the editor add each referenced target's min/max cycle time multiplied by that item repeat. Broken or deleted targets are shown as missing and are excluded from the computed total.
+
+## Live Progress
+
+Runtime status updates include:
+
+- Current action, step, cycle, next action, next action time, and estimated end.
+- Countdown start/end timestamps and countdown length for waits.
+- A six-chip action timeline used by the main window.
+
+The main form updates countdown display once per second only while at least one run set is active. While idle, the timer is stopped.
 
 ## Cycle Enforcement
 

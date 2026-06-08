@@ -44,6 +44,9 @@ adb kill-server
 - Scripts display as `[S] NAME`.
 - Sequences display as `[Q] NAME`.
 - Run Plans display as `[P] NAME`.
+- The Skip dropdown sits below Run. It must be chosen before pressing Run, is locked while the run is active, and resets to `No Skip` after the run finishes or is stopped. Changing the selected Script, Sequence, or Run Plan also resets Skip to `No Skip`.
+- Skip is offered only when there is something meaningful to skip. Infinite direct Scripts/Sequences cannot be skipped, and the final loop is not offered because there would be nothing left to run. For Run Plans, skip counts through the flattened item-repeat order.
+- The Skip popup keeps the selected field compact while showing details in the popup. Details use separate `Skip:` and `Start:` lines so long Script/Sequence names remain readable.
 - The first small status dot reports global hotkey registration: gold means both primary and secondary hotkeys registered, green means primary only, blue means secondary only, and red means no hotkey is registered. The taskbar overlay repeats this hotkey state with a small status dot, and shows one or two run-set identifiers depending on whether Set 2 is open. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
 - `Alt+1` opens or closes Set 2, a second independent run control set. Set 1 uses primary hotkeys. Set 2 uses secondary/backup hotkeys only while Set 2 is open and omits Config and Pair / Connect because those actions are shared. The main window uses fixed one-set and two-set client sizes so 100% and 125% display scaling keep the same usable app layout; users cannot resize or maximize it, and Run/Stop actions must not resize either run set. `Alt+2` opens Config, and `Alt+3` opens Pair / Connect.
 - Each run set has its own Device dropdown listing currently ready devices from `adb track-devices`. A device selected in one visible or running set is not selectable in the other set. One ready device is auto-selected when available; Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
@@ -57,7 +60,7 @@ X offset left 3 steps, X offset left 2 steps, X offset left 1 step,
 X offset right 1 step, X offset right 2 steps, X offset right 3 steps
 ```
 
-Each live status panel shows current action, step, cycle, next action, next action time, and estimated end for its own run set. If ADB or the device is not available, the affected panel shows an error state instead of relying on a visible log box.
+Each live status panel shows current action, step, cycle, next action, next action time, estimated end, a six-chip action timeline, and a countdown progress bar for the current wait. If ADB or the device is not available, the affected panel shows an error state instead of relying on a visible log box.
 
 ## Config Editor
 

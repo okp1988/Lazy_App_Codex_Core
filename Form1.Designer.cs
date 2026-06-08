@@ -32,16 +32,16 @@ namespace Lazy_App_Codex_Core
             mainLayout.Padding = new Padding(6, 6, 6, 2);
             mainLayout.RowCount = 1;
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            mainLayout.Size = new Size(484, 224);
+            mainLayout.Size = new Size(606, 292);
             mainLayout.TabIndex = 0;
             // 
             // Form1
             // 
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new Size(484, 224);
+            ClientSize = new Size(606, 292);
             Controls.Add(mainLayout);
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            MinimumSize = new Size(500, 264);
+            MinimumSize = new Size(622, 332);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Lazy App";

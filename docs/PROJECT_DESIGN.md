@@ -27,9 +27,10 @@ The app is designed for manual Android workflows where the user wants repeatable
 7. If Wireless ADB is paired but not connected, the user may open Pair / Connect and manually pair or connect with the current phone IP and port.
 8. User selects a Script, Sequence, or Run Plan in Set 1, or opens Set 2 with `Alt+1` and selects a second Script, Sequence, or Run Plan there.
 9. Optional default offset from the selected entry auto-selects that run set's offset dropdown.
-10. User clicks Run or presses that set's configured start hotkey.
-11. App refreshes ADB readiness, then runs that set only when a ready device is selected.
-12. User clicks Stop, presses Escape from the main window, or presses the configured stop/toggle hotkey to cancel.
+10. User optionally chooses a pre-run Skip value for a finite Script, Sequence, or Run Plan.
+11. User clicks Run or presses that set's configured start hotkey.
+12. App refreshes ADB readiness, then runs that set only when a ready device is selected.
+13. User clicks Stop, presses Escape from the main window, or presses the configured stop/toggle hotkey to cancel.
 
 ## Main Concepts
 
@@ -97,7 +98,13 @@ The main window has two independent run sets. Set 1 is always visible. Set 2 ope
 
 The same ADB device cannot be selected in both visible/running sets. Closing a stopped Set 2 releases its selected device and unregisters Set 2 secondary hotkeys.
 
-The main window uses fixed client sizes for one-set and two-set layouts. User resize and maximize are disabled, and run actions should not stretch or shrink either set; only opening or closing Set 2 changes the window size. The outer window may differ by a few pixels across display scaling because Windows owns the title bar and border metrics, but the usable client layout is fixed.
+The main window uses fixed client sizes for one-set and two-set layouts. The current progress layout uses one-set client `606 x 292`, two-set client `1200 x 292`, `RunSetControl` `594 x 284`, content column `410`, action column `184`, and set gap `12`. User resize and maximize are disabled, and run actions should not stretch or shrink either set; only opening or closing Set 2 changes the window size. The outer window may differ by a few pixels across display scaling because Windows owns the title bar and border metrics, but the usable client layout is fixed.
+
+Each run set has a compact Skip picker between Run and Offset. The closed picker stays short to preserve the action column, while its popup shows readable `Skip:` and `Start:` detail lines. Skip choices are rebuilt from the selected runnable and reset to `No Skip` when the runnable changes. Skip is locked while running.
+
+The live status area includes current action metadata, a six-chip action timeline, and a countdown progress bar for waits. The countdown/status timer should stay off while all run sets are idle.
+
+Future layout work on another development platform should keep the current Windows profile as the baseline. If another DPI, screen, or font environment needs different dimensions, add an explicit layout profile instead of overwriting the current constants.
 
 ### Offset
 

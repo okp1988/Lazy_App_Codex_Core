@@ -40,12 +40,12 @@ namespace Lazy_App_Codex_Core
         private readonly ScriptRunner _runner = new ScriptRunner();
         private readonly AdbShellController _adbController = new AdbShellController();
 
-        private const int SingleSetClientWidth = 484;
-        private const int DualSetClientWidth = 968;
-        private const int ClientHeight = 224;
-        private const int Slot1ContentColumnWidth = 322;
-        private const int Slot2ContentColumnWidth = 322;
-        private const int ActionColumnWidth = 150;
+        private const int SingleSetClientWidth = RunSetControl.FixedWidth + 12;
+        private const int DualSetClientWidth = (RunSetControl.FixedWidth * 2) + RunSetGapWidth + 12;
+        private const int ClientHeight = RunSetControl.FixedHeight + 8;
+        private const int Slot1ContentColumnWidth = RunSetControl.ContentColumnWidth;
+        private const int Slot2ContentColumnWidth = RunSetControl.ContentColumnWidth;
+        private const int ActionColumnWidth = RunSetControl.ActionColumnWidth;
         private const int RunSetGapWidth = 12;
 
         private ConfigLibrary _library = new ConfigLibrary();
@@ -104,7 +104,6 @@ namespace Lazy_App_Codex_Core
                 _configRepository.Settings.HotkeyBackupStop);
             _clockTimer.Interval = 1000;
             _clockTimer.Tick += (_, _) => UpdateLiveStatusLabels();
-            _clockTimer.Start();
             _adbRetryTimer.Interval = 30000;
             _adbRetryTimer.Tick += async (_, _) => await EnsureAdbTrackMonitorAsync("retry timer");
             _statusToolTip.SetToolTip(statusDot, "Global hotkey status has not been checked yet.");
@@ -133,6 +132,7 @@ namespace Lazy_App_Codex_Core
             _slot1 = new RunSlot(
                 1,
                 set1Control.ScriptBox,
+                set1Control.SkipBox,
                 set1Control.OffsetBox,
                 set1Control.TagFilter,
                 set1Control.DeviceBox,
@@ -143,7 +143,9 @@ namespace Lazy_App_Codex_Core
                 set1Control.CycleLabel,
                 set1Control.NextActionLabel,
                 set1Control.NextAtLabel,
-                set1Control.EstimatedEndLabel)
+                set1Control.EstimatedEndLabel,
+                set1Control.CountdownBar,
+                set1Control.TimelineLabels)
             {
                 ContentPanel = set1Control,
                 ActionPanel = set1Control
@@ -154,6 +156,7 @@ namespace Lazy_App_Codex_Core
             _slot2 = new RunSlot(
                 2,
                 set2Control.ScriptBox,
+                set2Control.SkipBox,
                 set2Control.OffsetBox,
                 set2Control.TagFilter,
                 set2Control.DeviceBox,
@@ -164,7 +167,9 @@ namespace Lazy_App_Codex_Core
                 set2Control.CycleLabel,
                 set2Control.NextActionLabel,
                 set2Control.NextAtLabel,
-                set2Control.EstimatedEndLabel)
+                set2Control.EstimatedEndLabel,
+                set2Control.CountdownBar,
+                set2Control.TimelineLabels)
             {
                 ContentPanel = set2Control,
                 ActionPanel = set2Control
@@ -187,12 +192,18 @@ namespace Lazy_App_Codex_Core
 
         private void WireRunSlot(RunSlot slot)
         {
-            slot.ScriptBox.SelectionChanged += (_, _) => ApplySelectedDefaultOffset(slot);
+            slot.ScriptBox.SelectionChanged += (_, _) => HandleRunTargetChanged(slot);
             slot.TagFilter.SelectedIndexChanged += (_, _) => SlotTagFilterChanged(slot);
             slot.DeviceBox.SelectedIndexChanged += (_, _) => SlotDeviceChanged(slot);
             slot.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
             slot.DeviceBox.DrawItem += ddlDevice_DrawItem;
             slot.RunButton.Click += async (_, _) => await ToggleRunAsync(slot);
+        }
+
+        private void HandleRunTargetChanged(RunSlot slot)
+        {
+            ApplySelectedDefaultOffset(slot);
+            RefreshSkipOptions(slot);
         }
 
         protected override void WndProc(ref Message m)
@@ -381,6 +392,7 @@ namespace Lazy_App_Codex_Core
 
             if (string.IsNullOrWhiteSpace(selectedId))
             {
+                RefreshSkipOptions(slot);
                 return;
             }
 
@@ -392,6 +404,228 @@ namespace Lazy_App_Codex_Core
                     break;
                 }
             }
+
+            RefreshSkipOptions(slot);
+        }
+
+        private void RefreshSkipOptions(RunSlot slot)
+        {
+            RunTarget? target = slot.ScriptBox.SelectedItem as RunTarget;
+            var options = BuildSkipOptions(target);
+            slot.SkipTargetKey = GetRunTargetKey(target);
+
+            slot.SkipBox.SetItems(options);
+            SelectNoSkip(slot);
+
+            UpdateSkipPickerEnabled(slot);
+        }
+
+        private void EnsureSkipOptionsForCurrentTarget(RunSlot slot, RunTarget target)
+        {
+            string targetKey = GetRunTargetKey(target);
+            if (!string.Equals(slot.SkipTargetKey, targetKey, StringComparison.Ordinal))
+            {
+                RefreshSkipOptions(slot);
+            }
+        }
+
+        private static string GetRunTargetKey(RunTarget? target)
+        {
+            return target == null ? "" : $"{target.Kind}:{target.Id}";
+        }
+
+        private List<SkipOption> BuildSkipOptions(RunTarget? target)
+        {
+            var preview = BuildLoopPreview(target);
+            var options = new List<SkipOption> { new SkipOption(0, "No Skip", BuildDefaultSkipDetail(target, preview)) };
+            if (preview.Count <= 1)
+            {
+                return options;
+            }
+
+            for (int skip = 1; skip < preview.Count; skip++)
+            {
+                var next = preview[skip];
+                string label = $"Skip {skip} -> {next.Index}/{next.Total}";
+                string skipSummary = BuildLoopSummary(preview, skip, 2);
+                string startSummary = $"{next.Index}/{next.Total} {next.Label}";
+                string detail = $"Skip: {skipSummary}{Environment.NewLine}Start: {startSummary}";
+                options.Add(new SkipOption(skip, label, detail));
+            }
+
+            return options;
+        }
+
+        private static string BuildDefaultSkipDetail(RunTarget? target, IReadOnlyList<RunLoopPreviewItem> preview)
+        {
+            if (target == null)
+            {
+                return "Skip: Select a run target";
+            }
+
+            if (target.Kind is "script" or "sequence" && preview.Count == 0)
+            {
+                return "Skip: Disabled for infinite run";
+            }
+
+            if (preview.Count == 0)
+            {
+                return "Skip: No available loops";
+            }
+
+            if (preview.Count == 1)
+            {
+                return "Skip: Only one loop";
+            }
+
+            return $"Skip: No Skip - run all {preview.Count} loops";
+        }
+
+        private static string BuildLoopSummary(IReadOnlyList<RunLoopPreviewItem> preview, int count, int maxRanges)
+        {
+            if (preview.Count == 0 || count <= 0)
+            {
+                return "no loops";
+            }
+
+            count = Math.Min(count, preview.Count);
+            var ranges = new List<string>();
+            int rangeStart = preview[0].Index;
+            int rangeEnd = rangeStart;
+            string rangeLabel = preview[0].Label;
+
+            for (int index = 1; index < count; index++)
+            {
+                var item = preview[index];
+                if (item.Label.Equals(rangeLabel, StringComparison.Ordinal))
+                {
+                    rangeEnd = item.Index;
+                    continue;
+                }
+
+                ranges.Add(FormatLoopRange(rangeStart, rangeEnd, rangeLabel));
+                rangeStart = item.Index;
+                rangeEnd = item.Index;
+                rangeLabel = item.Label;
+            }
+
+            ranges.Add(FormatLoopRange(rangeStart, rangeEnd, rangeLabel));
+            if (ranges.Count == 1)
+            {
+                string noun = count == 1 ? "loop" : "loops";
+                return $"{count} {noun} {rangeLabel}";
+            }
+
+            int visibleCount = Math.Max(1, maxRanges);
+            if (ranges.Count > visibleCount)
+            {
+                ranges = ranges.Take(visibleCount).ToList();
+                ranges.Add("...");
+            }
+
+            return string.Join(", ", ranges);
+        }
+
+        private static string FormatLoopRange(int start, int end, string label)
+        {
+            string range = start == end ? start.ToString() : $"{start}-{end}";
+            return $"{range} {label}";
+        }
+
+        private List<RunLoopPreviewItem> BuildLoopPreview(RunTarget? target)
+        {
+            var preview = new List<RunLoopPreviewItem>();
+            if (target == null)
+            {
+                return preview;
+            }
+
+            if (target.Kind == "script")
+            {
+                var script = _library.FindScriptById(target.Id);
+                if (script == null || script.Duration <= 0)
+                {
+                    return preview;
+                }
+
+                for (int index = 1; index <= script.Duration; index++)
+                {
+                    preview.Add(new RunLoopPreviewItem(index, script.Duration, script.Name));
+                }
+
+                return preview;
+            }
+
+            if (target.Kind == "sequence")
+            {
+                var sequence = _library.FindSequenceById(target.Id);
+                if (sequence == null || sequence.Duration <= 0)
+                {
+                    return preview;
+                }
+
+                for (int index = 1; index <= sequence.Duration; index++)
+                {
+                    preview.Add(new RunLoopPreviewItem(index, sequence.Duration, sequence.Name));
+                }
+
+                return preview;
+            }
+
+            var runPlan = _library.FindRunPlanById(target.Id);
+            if (runPlan == null)
+            {
+                return preview;
+            }
+
+            int total = ScriptRunner.GetRunPlanCycleCount(runPlan);
+            int indexInPlan = 0;
+            foreach (var item in runPlan.Items)
+            {
+                string label = item.Type == "sequence"
+                    ? _library.FindSequenceById(item.TargetId)?.Name ?? item.TargetId
+                    : _library.FindScriptById(item.TargetId)?.Name ?? item.TargetId;
+                for (int repeat = 1; repeat <= Math.Max(1, item.Repeat); repeat++)
+                {
+                    indexInPlan++;
+                    preview.Add(new RunLoopPreviewItem(indexInPlan, total, label));
+                }
+            }
+
+            return preview;
+        }
+
+        private void UpdateSkipPickerEnabled(RunSlot slot)
+        {
+            slot.SkipBox.Enabled = !slot.IsRunning && slot.SkipBox.ItemCount > 1;
+        }
+
+        private void ResetSkipSelection(RunSlot slot)
+        {
+            SelectNoSkip(slot);
+        }
+
+        private static void SelectNoSkip(RunSlot slot)
+        {
+            if (slot.SkipBox.ItemCount == 0)
+            {
+                if (slot.SkipBox.SelectedIndex != -1)
+                {
+                    slot.SkipBox.SelectedIndex = -1;
+                }
+
+                return;
+            }
+
+            if (slot.SkipBox.SelectedIndex != 0)
+            {
+                slot.SkipBox.SelectedIndex = 0;
+            }
+        }
+
+        private static int GetSelectedSkipCycles(RunSlot slot)
+        {
+            return slot.SkipBox.SelectedItem is SkipOption option ? option.SkipCycles : 0;
         }
 
         private static bool MatchesSelectedTag(string itemTag, string selectedTag)
@@ -457,6 +691,15 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
+            EnsureSkipOptionsForCurrentTarget(slot, target);
+            int skipCycles = GetSelectedSkipCycles(slot);
+            if (skipCycles > 0 && !TryValidateSkip(target, skipCycles, out string skipError))
+            {
+                MessageBox.Show(skipError, "Skip Not Available", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                RefreshSkipOptions(slot);
+                return;
+            }
+
             string? selectedDeviceSerial = GetSelectedReadyDeviceSerial(slot);
             if (selectedDeviceSerial == null)
             {
@@ -475,7 +718,7 @@ namespace Lazy_App_Codex_Core
             SetRunningState(slot, true);
             UpdateWindowTitle();
 
-            slot.RunTask = RunSelectedTargetAsync(slot, target, script, sequence, runPlan, selectedDeviceSerial, slot.RunCts.Token);
+            slot.RunTask = RunSelectedTargetAsync(slot, target, script, sequence, runPlan, selectedDeviceSerial, new RunExecutionOptions { SkipCycles = skipCycles }, slot.RunCts.Token);
             try
             {
                 await slot.RunTask;
@@ -495,6 +738,7 @@ namespace Lazy_App_Codex_Core
                 slot.RunCts?.Dispose();
                 slot.RunCts = null;
                 SetRunningState(slot, false);
+                ResetSkipSelection(slot);
                 UpdateWindowTitle();
             }
         }
@@ -532,13 +776,13 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, RunPlanModel? runPlan, string deviceSerial, CancellationToken token)
+        private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, RunPlanModel? runPlan, string deviceSerial, RunExecutionOptions options, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(slot, target.Name);
             WriteLog($"SET {slot.Number} OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
             if (script != null)
             {
-                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, status => UpdateLiveStatus(slot, status), IsAdbActionEnabled);
+                await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, status => UpdateLiveStatus(slot, status), IsAdbActionEnabled, options);
             }
             else if (sequence != null)
             {
@@ -552,7 +796,8 @@ namespace Lazy_App_Codex_Core
                     deviceSerial,
                     token,
                     status => UpdateLiveStatus(slot, status),
-                    IsAdbActionEnabled);
+                    IsAdbActionEnabled,
+                    options);
             }
             else if (runPlan != null)
             {
@@ -565,8 +810,28 @@ namespace Lazy_App_Codex_Core
                     deviceSerial,
                     token,
                     status => UpdateLiveStatus(slot, status),
-                    IsAdbActionEnabled);
+                    IsAdbActionEnabled,
+                    options);
             }
+        }
+
+        private bool TryValidateSkip(RunTarget target, int skipCycles, out string error)
+        {
+            var preview = BuildLoopPreview(target);
+            if (preview.Count == 0)
+            {
+                error = "Skip is disabled for infinite runs.";
+                return false;
+            }
+
+            if (skipCycles >= preview.Count)
+            {
+                error = "The last loop cannot be skipped because there would be nothing left to run.";
+                return false;
+            }
+
+            error = "";
+            return true;
         }
 
         private bool TryGetRunPlanValidationError(RunPlanModel runPlan, out string error)
@@ -730,10 +995,12 @@ namespace Lazy_App_Codex_Core
             slot.OffsetBox.Enabled = !isRunning;
             slot.TagFilter.Enabled = !isRunning;
             slot.DeviceBox.Enabled = !isRunning && slot.DeviceBox.Items.Count > 0;
+            UpdateSkipPickerEnabled(slot);
             slot.RunButton.Text = isRunning ? "Stop" : "Run";
             btnConfig.Enabled = !AnySlotRunning;
             btnWirelessAdb.Enabled = !AnySlotRunning;
             UpdateTaskbarOverlayIcon();
+            UpdateClockTimerState();
 
             if (isRunning)
             {
@@ -745,6 +1012,19 @@ namespace Lazy_App_Codex_Core
             }
 
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
+        }
+
+        private void UpdateClockTimerState()
+        {
+            bool shouldRun = !_closing && AnySlotRunning;
+            if (shouldRun && !_clockTimer.Enabled)
+            {
+                _clockTimer.Start();
+            }
+            else if (!shouldRun && _clockTimer.Enabled)
+            {
+                _clockTimer.Stop();
+            }
         }
 
         private void UpdateLiveStatus(RunSlot slot, LiveRunStatus status)
@@ -909,21 +1189,98 @@ namespace Lazy_App_Codex_Core
         {
             if (slot.LiveStatus.Idle)
             {
-                slot.CurrentActionLabel.Text = "--";
-                slot.StepLabel.Text = "--";
-                slot.CycleLabel.Text = "--";
-                slot.NextActionLabel.Text = "--";
-                slot.NextAtLabel.Text = "--";
-                slot.EstimatedEndLabel.Text = "--";
+                SetLabelText(slot.CurrentActionLabel, "--");
+                SetLabelText(slot.StepLabel, "--");
+                SetLabelText(slot.CycleLabel, "--");
+                SetLabelText(slot.NextActionLabel, "--");
+                SetLabelText(slot.NextAtLabel, "--");
+                SetLabelText(slot.EstimatedEndLabel, "--");
+                SetTimeline(slot, Array.Empty<string>());
+                slot.CountdownBar.SetState(0D, "Waiting --", false);
                 return;
             }
 
-            slot.CurrentActionLabel.Text = slot.LiveStatus.CurrentAction;
-            slot.StepLabel.Text = slot.LiveStatus.CurrentStep;
-            slot.CycleLabel.Text = slot.LiveStatus.CurrentCycle;
-            slot.NextActionLabel.Text = slot.LiveStatus.NextAction;
-            slot.NextAtLabel.Text = FormatStatusTime(slot.LiveStatus.NextActionAt);
-            slot.EstimatedEndLabel.Text = FormatStatusTime(slot.LiveStatus.EstimatedEnd);
+            SetLabelText(slot.CurrentActionLabel, slot.LiveStatus.CurrentAction);
+            SetLabelText(slot.StepLabel, slot.LiveStatus.CurrentStep);
+            SetLabelText(slot.CycleLabel, slot.LiveStatus.CurrentCycle);
+            SetLabelText(slot.NextActionLabel, slot.LiveStatus.NextAction);
+            SetLabelText(slot.NextAtLabel, FormatStatusTime(slot.LiveStatus.NextActionAt));
+            SetLabelText(slot.EstimatedEndLabel, FormatStatusTime(slot.LiveStatus.EstimatedEnd));
+            SetTimeline(slot, slot.LiveStatus.Timeline);
+            UpdateCountdownBar(slot);
+        }
+
+        private static void SetLabelText(Label label, string text)
+        {
+            if (!string.Equals(label.Text, text, StringComparison.Ordinal))
+            {
+                label.Text = text;
+            }
+        }
+
+        private static void SetTimeline(RunSlot slot, IReadOnlyList<string> timeline)
+        {
+            for (int index = 0; index < slot.TimelineLabels.Count; index++)
+            {
+                Label label = slot.TimelineLabels[index];
+                if (index >= timeline.Count || string.IsNullOrWhiteSpace(timeline[index]))
+                {
+                    SetControlVisible(label, false);
+                    continue;
+                }
+
+                SetControlVisible(label, true);
+                SetLabelText(label, timeline[index]);
+                bool active = index == 0 && !slot.LiveStatus.Idle;
+                SetControlBackColor(label, active ? Color.FromArgb(82, 168, 109) : Color.FromArgb(234, 237, 241));
+                SetControlForeColor(label, active ? Color.White : Color.FromArgb(52, 58, 64));
+            }
+        }
+
+        private static void SetControlVisible(Control control, bool visible)
+        {
+            if (control.Visible != visible)
+            {
+                control.Visible = visible;
+            }
+        }
+
+        private static void SetControlBackColor(Control control, Color color)
+        {
+            if (control.BackColor != color)
+            {
+                control.BackColor = color;
+            }
+        }
+
+        private static void SetControlForeColor(Control control, Color color)
+        {
+            if (control.ForeColor != color)
+            {
+                control.ForeColor = color;
+            }
+        }
+
+        private static void UpdateCountdownBar(RunSlot slot)
+        {
+            var status = slot.LiveStatus;
+            if (status.CountdownEndsAt == null || status.CountdownSeconds <= 0)
+            {
+                slot.CountdownBar.SetState(0D, "No wait", false);
+                return;
+            }
+
+            TimeSpan remaining = status.CountdownEndsAt.Value - DateTime.Now;
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            double progress = status.CountdownSeconds <= 0
+                ? 0D
+                : remaining.TotalSeconds / status.CountdownSeconds;
+            string next = string.IsNullOrWhiteSpace(status.NextAction) ? "--" : status.NextAction;
+            slot.CountdownBar.SetState(progress, $"{FormatDuration(remaining)} until {next}", remaining > TimeSpan.Zero);
         }
 
         private void ShowRunError(RunSlot slot, Exception ex)
@@ -1466,6 +1823,12 @@ namespace Lazy_App_Codex_Core
 
         private void ApplyAdbDeviceStatus(AdbDeviceStatus status)
         {
+            bool statusChanged = !AdbDeviceStatusesEqual(_adbDeviceStatus, status);
+            if (!statusChanged)
+            {
+                return;
+            }
+
             if (_adbDeviceStatus.State != status.State || _adbDeviceStatus.DeviceCount != status.DeviceCount || _adbDeviceStatus.Tooltip != status.Tooltip)
             {
                 LogAdbStatus($"Status changed: {_adbDeviceStatus.State}/{_adbDeviceStatus.DeviceCount} -> {status.State}/{status.DeviceCount}. {status.Tooltip}");
@@ -1521,6 +1884,15 @@ namespace Lazy_App_Codex_Core
 
         private void UpdateDeviceDropdownForSlot(RunSlot slot, RunSlot otherSlot, List<AdbTrackedDevice> readyDevices)
         {
+            if (!IsSlotDeviceSelectionActive(slot))
+            {
+                slot.SelectedDeviceSerial = null;
+                ApplyDeviceDropdownItems(slot, Array.Empty<DeviceDisplayItem>(), null);
+                UpdateDeviceDropdownEnabledState(slot, readyDevices.Count);
+                slot.DeviceLossStopRequested = false;
+                return;
+            }
+
             string? previousSelection = slot.SelectedDeviceSerial;
             bool selectedDeviceRemoved = previousSelection != null &&
                 !readyDevices.Any(device => device.Serial.Equals(previousSelection, StringComparison.OrdinalIgnoreCase));
@@ -1538,58 +1910,35 @@ namespace Lazy_App_Codex_Core
                 slot.SelectedDeviceSerial = null;
             }
 
-            if (desiredSelection == null && readyDevices.Count > 0)
+            if (desiredSelection == null && readyDevices.Count > 0 && !slot.IsRunning)
             {
                 desiredSelection = readyDevices
                     .FirstOrDefault(device => !SerialEquals(device.Serial, otherSelection))
                     ?.Serial;
             }
 
-            _updatingDeviceDropdown = true;
-            try
+            var items = new List<DeviceDisplayItem>();
+            foreach (var device in readyDevices)
             {
-                slot.DeviceBox.BeginUpdate();
-                slot.DeviceBox.Items.Clear();
-                foreach (var device in readyDevices)
+                if (!SerialEquals(device.Serial, desiredSelection) && SerialEquals(device.Serial, otherSelection))
                 {
-                    if (!SerialEquals(device.Serial, desiredSelection) && SerialEquals(device.Serial, otherSelection))
-                    {
-                        continue;
-                    }
-
-                    string key = AdbShellController.GetDeviceKey(device.Serial);
-                    _deviceMetadata.TryGetValue(key, out var metadata);
-                    _detectedDeviceMetadata.TryGetValue(key, out var detected);
-                    slot.DeviceBox.Items.Add(new DeviceDisplayItem(device.Serial, GetDeviceDisplayName(device.Serial), HasDeviceMetadataMismatch(metadata, detected)));
+                    continue;
                 }
 
-                slot.DeviceBox.SelectedIndex = -1;
-                if (desiredSelection != null)
-                {
-                    for (int index = 0; index < slot.DeviceBox.Items.Count; index++)
-                    {
-                        if (slot.DeviceBox.Items[index] is DeviceDisplayItem item &&
-                            item.Serial.Equals(desiredSelection, StringComparison.OrdinalIgnoreCase))
-                        {
-                            slot.DeviceBox.SelectedIndex = index;
-                            slot.SelectedDeviceSerial = item.Serial;
-                            break;
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                slot.DeviceBox.EndUpdate();
-                _updatingDeviceDropdown = false;
+                string key = AdbShellController.GetDeviceKey(device.Serial);
+                _deviceMetadata.TryGetValue(key, out var metadata);
+                _detectedDeviceMetadata.TryGetValue(key, out var detected);
+                items.Add(new DeviceDisplayItem(device.Serial, GetDeviceDisplayName(device.Serial), HasDeviceMetadataMismatch(metadata, detected)));
             }
 
-            slot.DeviceBox.Enabled = !slot.IsRunning && slot.DeviceBox.Items.Count > 0;
-            _statusToolTip.SetToolTip(
-                slot.DeviceBox,
-                readyDevices.Count == 0
-                    ? "No ready ADB device is connected."
-                    : $"Select the ADB device to run Set {slot.Number} commands on.");
+            if (desiredSelection != null && !items.Any(item => item.Serial.Equals(desiredSelection, StringComparison.OrdinalIgnoreCase)))
+            {
+                desiredSelection = null;
+            }
+
+            slot.SelectedDeviceSerial = desiredSelection;
+            ApplyDeviceDropdownItems(slot, items, desiredSelection);
+            UpdateDeviceDropdownEnabledState(slot, readyDevices.Count);
 
             if (selectedDeviceRemoved && slot.IsRunning && !slot.DeviceLossStopRequested)
             {
@@ -1601,6 +1950,79 @@ namespace Lazy_App_Codex_Core
             else if (!slot.IsRunning)
             {
                 slot.DeviceLossStopRequested = false;
+            }
+        }
+
+        private void ApplyDeviceDropdownItems(RunSlot slot, IReadOnlyList<DeviceDisplayItem> items, string? desiredSelection)
+        {
+            string signature = BuildDeviceItemsSignature(items);
+            bool itemsChanged = !string.Equals(slot.DeviceItemsSignature, signature, StringComparison.Ordinal);
+            bool selectionChanged = !SerialEqualsOrBothBlank(GetSelectedComboDeviceSerial(slot.DeviceBox), desiredSelection);
+            if (!itemsChanged && !selectionChanged)
+            {
+                return;
+            }
+
+            _updatingDeviceDropdown = true;
+            try
+            {
+                slot.DeviceBox.BeginUpdate();
+                if (itemsChanged)
+                {
+                    slot.DeviceBox.Items.Clear();
+                    foreach (var item in items)
+                    {
+                        slot.DeviceBox.Items.Add(item);
+                    }
+
+                    slot.DeviceItemsSignature = signature;
+                }
+
+                SelectDeviceItem(slot.DeviceBox, desiredSelection);
+            }
+            finally
+            {
+                slot.DeviceBox.EndUpdate();
+                _updatingDeviceDropdown = false;
+            }
+        }
+
+        private void UpdateDeviceDropdownEnabledState(RunSlot slot, int readyDeviceCount)
+        {
+            slot.DeviceBox.Enabled = IsSlotDeviceSelectionActive(slot) && !slot.IsRunning && slot.DeviceBox.Items.Count > 0;
+            _statusToolTip.SetToolTip(
+                slot.DeviceBox,
+                readyDeviceCount == 0
+                    ? "No ready ADB device is connected."
+                    : slot.DeviceBox.Items.Count == 0
+                        ? "No selectable ADB device is available for this set."
+                    : $"Select the ADB device to run Set {slot.Number} commands on.");
+        }
+
+        private static void SelectDeviceItem(ComboBox combo, string? desiredSelection)
+        {
+            if (string.IsNullOrWhiteSpace(desiredSelection))
+            {
+                if (combo.SelectedIndex != -1)
+                {
+                    combo.SelectedIndex = -1;
+                }
+
+                return;
+            }
+
+            for (int index = 0; index < combo.Items.Count; index++)
+            {
+                if (combo.Items[index] is DeviceDisplayItem item &&
+                    item.Serial.Equals(desiredSelection, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (combo.SelectedIndex != index)
+                    {
+                        combo.SelectedIndex = index;
+                    }
+
+                    return;
+                }
             }
         }
 
@@ -1633,11 +2055,63 @@ namespace Lazy_App_Codex_Core
                     : null;
         }
 
+        private static bool AdbDeviceStatusesEqual(AdbDeviceStatus left, AdbDeviceStatus right)
+        {
+            if (left.State != right.State ||
+                left.DeviceCount != right.DeviceCount ||
+                !string.Equals(left.Tooltip, right.Tooltip, StringComparison.Ordinal) ||
+                left.Devices.Count != right.Devices.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < left.Devices.Count; index++)
+            {
+                var leftDevice = left.Devices[index];
+                var rightDevice = right.Devices[index];
+                if (!leftDevice.Serial.Equals(rightDevice.Serial, StringComparison.OrdinalIgnoreCase) ||
+                    !leftDevice.State.Equals(rightDevice.State, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static bool SerialEquals(string? left, string? right)
         {
             return !string.IsNullOrWhiteSpace(left) &&
                 !string.IsNullOrWhiteSpace(right) &&
                 left.Equals(right, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SerialEqualsOrBothBlank(string? left, string? right)
+        {
+            return SerialEquals(left, right) ||
+                (string.IsNullOrWhiteSpace(left) && string.IsNullOrWhiteSpace(right));
+        }
+
+        private static string? GetSelectedComboDeviceSerial(ComboBox combo)
+        {
+            return (combo.SelectedItem as DeviceDisplayItem)?.Serial;
+        }
+
+        private static string BuildDeviceItemsSignature(IReadOnlyList<DeviceDisplayItem> items)
+        {
+            var builder = new System.Text.StringBuilder();
+            foreach (var item in items)
+            {
+                builder
+                    .Append(item.Serial)
+                    .Append('\t')
+                    .Append(item.DisplayName)
+                    .Append('\t')
+                    .Append(item.MetadataMismatch)
+                    .Append('\n');
+            }
+
+            return builder.ToString();
         }
 
         private string GetDeviceDisplayName(string serial)
@@ -1860,6 +2334,7 @@ namespace Lazy_App_Codex_Core
             public RunSlot(
                 int number,
                 SearchableDropdown scriptBox,
+                SkipPickerControl skipBox,
                 ComboBox offsetBox,
                 ComboBox tagFilter,
                 ComboBox deviceBox,
@@ -1870,10 +2345,13 @@ namespace Lazy_App_Codex_Core
                 Label cycleLabel,
                 Label nextActionLabel,
                 Label nextAtLabel,
-                Label estimatedEndLabel)
+                Label estimatedEndLabel,
+                CountdownProgressControl countdownBar,
+                IReadOnlyList<Label> timelineLabels)
             {
                 Number = number;
                 ScriptBox = scriptBox;
+                SkipBox = skipBox;
                 OffsetBox = offsetBox;
                 TagFilter = tagFilter;
                 DeviceBox = deviceBox;
@@ -1885,10 +2363,13 @@ namespace Lazy_App_Codex_Core
                 NextActionLabel = nextActionLabel;
                 NextAtLabel = nextAtLabel;
                 EstimatedEndLabel = estimatedEndLabel;
+                CountdownBar = countdownBar;
+                TimelineLabels = timelineLabels;
             }
 
             public int Number { get; }
             public SearchableDropdown ScriptBox { get; }
+            public SkipPickerControl SkipBox { get; }
             public ComboBox OffsetBox { get; }
             public ComboBox TagFilter { get; }
             public ComboBox DeviceBox { get; }
@@ -1900,6 +2381,8 @@ namespace Lazy_App_Codex_Core
             public Label NextActionLabel { get; }
             public Label NextAtLabel { get; }
             public Label EstimatedEndLabel { get; }
+            public CountdownProgressControl CountdownBar { get; }
+            public IReadOnlyList<Label> TimelineLabels { get; }
             public Control ContentPanel { get; init; } = null!;
             public Control ActionPanel { get; init; } = null!;
             public CancellationTokenSource? RunCts { get; set; }
@@ -1907,6 +2390,8 @@ namespace Lazy_App_Codex_Core
             public bool IsRunning { get; set; }
             public bool DeviceLossStopRequested { get; set; }
             public string? SelectedDeviceSerial { get; set; }
+            public string DeviceItemsSignature { get; set; } = "";
+            public string SkipTargetKey { get; set; } = "";
             public LiveRunStatus LiveStatus { get; set; } = new LiveRunStatus { Idle = true };
         }
 
@@ -1922,6 +2407,16 @@ namespace Lazy_App_Codex_Core
                 };
             }
         }
+
+        private sealed record SkipOption(int SkipCycles, string Label, string Detail = "") : ISkipPickerOption
+        {
+            public override string ToString()
+            {
+                return Label;
+            }
+        }
+
+        private sealed record RunLoopPreviewItem(int Index, int Total, string Label);
 
         private sealed record DeviceDisplayItem(string Serial, string DisplayName, bool MetadataMismatch)
         {

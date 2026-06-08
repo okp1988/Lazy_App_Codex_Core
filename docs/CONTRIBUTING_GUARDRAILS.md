@@ -21,7 +21,9 @@
 - Optional secondary Set 2 hotkeys through `hotkeyBackupStart` and `hotkeyBackupStop`; register them only while Set 2 is open.
 - Two independent run sets, with Set 2 opened by `Alt+1` and no duplicate Config or Pair / Connect buttons.
 - Fixed one-set and two-set client sizes with user resize and maximize disabled; Run/Stop must not resize or stretch run-set controls.
-- The compact main-window layout fixes usable client area instead of outer window chrome: one-set client `484 x 224`, two-set client `968 x 224`, `RunSetControl` `472 x 216`, content column `322`, action column `150`, and set gap `12`. Preserve this profile when adjusting laptop design unless an explicit alternate profile is added.
+- The compact progress main-window layout fixes usable client area instead of outer window chrome: one-set client `606 x 292`, two-set client `1200 x 292`, `RunSetControl` `594 x 284`, content column `410`, action column `184`, and set gap `12`. Preserve this profile when adjusting laptop or next-platform design unless an explicit alternate profile is added.
+- The main Skip picker is a custom `SkipPickerControl` between Run and Offset. It must reset to `No Skip` when the selected runnable changes, stay disabled while running, keep the closed field compact, and keep the detailed explanation in the popup rather than a separate main-window label.
+- The countdown progress bar and six-chip timeline are part of the main run-set layout and should remain visible without resizing the window during Run/Stop.
 - Device dropdown exclusion between visible/running run sets so both sets cannot target the same ADB serial.
 - Script and Sequence `emin` minimum cycle enforcement.
 - Run Plan item repeat overriding only the referenced target's saved loop count.
@@ -41,7 +43,8 @@
 - Keep `RunSetControl` designer-safe: explicit controls in `RunSetControl.Designer.cs`; fixed layout and data population in `RunSetControl.cs`.
 - Keep `AutoScaleMode.None` for `Form1` and `RunSetControl` unless there is a deliberate, tested replacement for the fixed-size main-window behavior.
 - Keep `Form1` sizing client-area based by setting `ClientSize` and deriving the fixed outer size with `SizeFromClientSize(...)`; do not go back to pinning only outer `Size`, because 100% and 125% display scaling can leave different usable content heights.
-- Keep the RunSetControl action column as six fixed `34px` control rows plus a `12px` bottom spacer row. Extra vertical room must go to the spacer, not to the Pair / Connect button.
+- Keep the RunSetControl action column as seven fixed `34px` control rows plus an explicit bottom spacer row. Extra vertical room must go to the spacer, not to the Pair / Connect button.
+- When moving development to another platform or display context, compare screenshots against the current PC layout before and after. If spacing differs, add a guarded layout profile keyed by DPI/screen/font context instead of overwriting the baseline constants.
 - Keep `ConfigEditorForm` button rows from clipping by using explicit `TableLayoutPanel` row heights and docked buttons.
 - Leave bottom padding in scrollable/editor panels.
 - Validate Run against ADB status before executing commands.
@@ -130,6 +133,11 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Hidden Sequences are absent from main picker and present for Run Plan references.
 - Script and Sequence Enforce Min rejects values above max cycle time and stretches randomized cycles up to the configured minimum.
 - Run Plans execute repeated alternating items in exact configured order, use each item repeat as the item loop count, and keep each target's `emin`, `imin`, and `imax`.
+- Skip dropdown resets to `No Skip` when Script/Sequence/Run Plan selection changes.
+- Skip dropdown is disabled while running, re-enabled after stop/finish when applicable, and infinite direct Scripts/Sequences expose only `No Skip`.
+- Skip popup shows short options plus readable `Skip:` and `Start:` detail lines without stretching the main action column.
+- Direct Script/Sequence skip starts at loop `skip + 1`; Run Plan skip consumes the flattened item-repeat order.
+- Countdown progress bar updates during waits and the six-chip timeline shows current/upcoming actions.
 - Track Touch starts only when the selected ADB device is ready and stops when that device is lost.
 - Open/rebuild in Visual Studio 2026 does not remove RunSetControl status rows, blank the Offset dropdown, shrink controls unexpectedly, or reintroduce large PC whitespace.
 - Laptop layout tuning keeps the PC layout visually intact when retested on the PC, allowing only small outer-window differences from Windows DPI/title-bar metrics.

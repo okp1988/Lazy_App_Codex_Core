@@ -16,10 +16,11 @@ Responsibilities:
 - Build the Script/Sequence/Run Plan target list.
 - Apply tag filtering.
 - Apply default offsets.
+- Build and reset pre-run Skip options.
 - Register and unregister primary Set 1 and secondary Set 2 global hotkeys.
 - Route Run, Stop, Escape, and hotkey actions.
 - Own independent run-slot cancellation state for Set 1 and Set 2.
-- Own live run status labels for each visible run set.
+- Own live run status labels, action timeline, and countdown progress for each visible run set.
 - Own fixed one-set/two-set client-area sizing with user resize and maximize disabled.
 - Own taskbar overlay icons for hotkey registration status plus Set 1/Set 2 run identifiers.
 - Own ADB status monitor state.
@@ -68,6 +69,14 @@ Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server r
 
 Custom main Script/Sequence/Run Plan picker. The popup owns search text and clears it on close. The main field displays only the selected item. When opened, the popup highlights the current selected item if it is present in the current filtered list.
 
+### `SkipPickerControl.cs`
+
+Custom main Skip picker. The closed field stays compact in the action column, while the popup shows short skip choices and readable detail lines for `Skip:` and `Start:`. Hover previews details without changing the selected row, and clicking commits the skip value.
+
+### `CountdownProgressControl.cs`
+
+Custom countdown/progress bar used by each run set. It draws the current wait progress and caption without resizing the fixed main-window layout.
+
 ### `ScriptConfigRespository.cs`
 
 Configuration repository. It loads, migrates, normalizes, and saves `config.json`.
@@ -89,7 +98,7 @@ In-memory config models:
 
 ### `ScriptRunner.cs`
 
-Runtime planner and executor. It expands Scripts, Sequences, and Run Plans into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, updates live status, and respects cancellation.
+Runtime planner and executor. It expands Scripts, Sequences, and Run Plans into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, applies pre-run skip options for finite runs, updates live status/timeline/countdown data, and respects cancellation.
 
 ### `AdbShellController.cs`
 
@@ -165,12 +174,13 @@ flowchart TD
 flowchart TD
     A["Run requested"] --> B["Refresh ADB status"]
     B --> C["Validate selected target and selected device"]
-    C --> D{"Selected ready device?"}
-    D -->|no| E["Show ADB warning and do not run"]
-    D -->|yes| F["Create CancellationTokenSource"]
-    F --> G["Disable editable UI"]
-    G --> H["Run Script, Sequence, or Run Plan"]
-    H --> I["Update live status each step"]
-    I --> J["Complete or cancel"]
-    J --> K["Re-enable UI and reset title"]
+    C --> D["Validate Skip and selected device"]
+    D --> E{"Selected ready device?"}
+    E -->|no| F["Show ADB warning and do not run"]
+    E -->|yes| G["Create CancellationTokenSource"]
+    G --> H["Disable editable UI"]
+    H --> I["Run Script, Sequence, or Run Plan"]
+    I --> J["Update live status, timeline, and countdown"]
+    J --> K["Complete or cancel"]
+    K --> L["Re-enable UI, reset Skip, and reset title"]
 ```

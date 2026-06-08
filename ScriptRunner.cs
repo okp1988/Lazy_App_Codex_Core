@@ -8,7 +8,16 @@ namespace Lazy_App_Codex_Core
         public string NextAction { get; set; } = "--";
         public DateTime? NextActionAt { get; set; }
         public DateTime? EstimatedEnd { get; set; }
+        public DateTime? CountdownStartedAt { get; set; }
+        public DateTime? CountdownEndsAt { get; set; }
+        public int CountdownSeconds { get; set; }
+        public IReadOnlyList<string> Timeline { get; set; } = Array.Empty<string>();
         public bool Idle { get; set; }
+    }
+
+    public sealed class RunExecutionOptions
+    {
+        public int SkipCycles { get; init; }
     }
 
     public class ScriptRunner
@@ -22,7 +31,8 @@ namespace Lazy_App_Codex_Core
             string deviceSerial,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
-            bool isAdbEnabled)
+            bool isAdbEnabled,
+            RunExecutionOptions? options = null)
         {
             var adb = new AdbShellController(deviceSerial: deviceSerial);
             if (script.Duration <= 0)
@@ -35,7 +45,7 @@ namespace Lazy_App_Codex_Core
                 }
             }
 
-            await RunScriptForCyclesAsync(script, script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+            await RunScriptForCyclesAsync(script, script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled, GetStartLoop(options));
         }
 
         public async Task RunSequenceAsync(
@@ -47,7 +57,8 @@ namespace Lazy_App_Codex_Core
             string deviceSerial,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
-            bool isAdbEnabled)
+            bool isAdbEnabled,
+            RunExecutionOptions? options = null)
         {
             var adb = new AdbShellController(deviceSerial: deviceSerial);
             if (sequence.Duration <= 0)
@@ -60,7 +71,7 @@ namespace Lazy_App_Codex_Core
                 }
             }
 
-            for (long loop = 1; loop <= sequence.Duration; loop++)
+            for (long loop = GetStartLoop(options); loop <= sequence.Duration; loop++)
             {
                 await RunSequenceLoopAsync(sequence, library, loop, sequence.Duration, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
             }
@@ -75,7 +86,8 @@ namespace Lazy_App_Codex_Core
             string deviceSerial,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
-            bool isAdbEnabled)
+            bool isAdbEnabled,
+            RunExecutionOptions? options = null)
         {
             if (runPlan.Items.Count == 0)
             {
@@ -83,6 +95,9 @@ namespace Lazy_App_Codex_Core
             }
 
             var adb = new AdbShellController(deviceSerial: deviceSerial);
+            int totalPlanCycles = GetRunPlanCycleCount(runPlan);
+            int skipRemaining = Math.Max(0, options?.SkipCycles ?? 0);
+            int globalLoop = 0;
             foreach (var item in runPlan.Items)
             {
                 token.ThrowIfCancellationRequested();
@@ -91,25 +106,47 @@ namespace Lazy_App_Codex_Core
                 {
                     var sequence = library.FindSequenceById(item.TargetId)
                         ?? throw new InvalidOperationException($"Run plan \"{runPlan.Name}\" references missing sequence \"{item.TargetId}\".");
-                    var offset = sequenceOffsetResolver(sequence);
-                    await RunSequenceForCyclesAsync(
-                        sequence,
-                        library,
-                        cycles,
-                        offset.value,
-                        offset.axis,
-                        script => sequenceScriptOffsetResolver(sequence, script),
-                        adb,
-                        token,
-                        onStatus,
-                        isAdbEnabled);
+                    for (int repeat = 1; repeat <= cycles; repeat++)
+                    {
+                        globalLoop++;
+                        if (skipRemaining > 0)
+                        {
+                            skipRemaining--;
+                            continue;
+                        }
+
+                        var offset = sequenceOffsetResolver(sequence);
+                        await RunSequenceLoopAsync(
+                            sequence,
+                            library,
+                            globalLoop,
+                            totalPlanCycles,
+                            offset.value,
+                            offset.axis,
+                            script => sequenceScriptOffsetResolver(sequence, script),
+                            adb,
+                            token,
+                            onStatus,
+                            isAdbEnabled);
+                    }
+
                     continue;
                 }
 
                 var script = library.FindScriptById(item.TargetId)
                     ?? throw new InvalidOperationException($"Run plan \"{runPlan.Name}\" references missing script \"{item.TargetId}\".");
-                var scriptOffset = scriptOffsetResolver(script);
-                await RunScriptForCyclesAsync(script, cycles, scriptOffset.value, scriptOffset.axis, adb, token, onStatus, isAdbEnabled);
+                for (int repeat = 1; repeat <= cycles; repeat++)
+                {
+                    globalLoop++;
+                    if (skipRemaining > 0)
+                    {
+                        skipRemaining--;
+                        continue;
+                    }
+
+                    var scriptOffset = scriptOffsetResolver(script);
+                    await RunLoopAsync(script, globalLoop, totalPlanCycles, scriptOffset.value, scriptOffset.axis, adb, token, onStatus, isAdbEnabled);
+                }
             }
         }
 
@@ -121,10 +158,11 @@ namespace Lazy_App_Codex_Core
             AdbShellController adb,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
-            bool isAdbEnabled)
+            bool isAdbEnabled,
+            int startLoop = 1)
         {
             int cycles = Math.Max(1, cycleCount);
-            for (long loop = 1; loop <= cycles; loop++)
+            for (long loop = Math.Max(1, startLoop); loop <= cycles; loop++)
             {
                 await RunLoopAsync(script, loop, cycles, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
             }
@@ -140,10 +178,11 @@ namespace Lazy_App_Codex_Core
             AdbShellController adb,
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
-            bool isAdbEnabled)
+            bool isAdbEnabled,
+            int startLoop = 1)
         {
             int cycles = Math.Max(1, cycleCount);
-            for (long loop = 1; loop <= cycles; loop++)
+            for (long loop = Math.Max(1, startLoop); loop <= cycles; loop++)
             {
                 await RunSequenceLoopAsync(sequence, library, loop, cycles, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
             }
@@ -163,6 +202,7 @@ namespace Lazy_App_Codex_Core
             bool isAdbEnabled)
         {
             var plannedSteps = BuildSequencePlan(sequence, library, selectedOffset, selectedOffsetAxis, scriptOffsetResolver);
+            AttachPlan(plannedSteps);
             int intervalSleep = sequence.Interval_Max > 0 ? RandomBetween(sequence.Interval_Min, sequence.Interval_Max) : 0;
             intervalSleep = EnforceCycleMinimum(plannedSteps, intervalSleep, sequence.Interval_Min, sequence.Interval_Max, sequence.Enforce_Min);
             DateTime estimatedEnd = DateTime.Now.AddSeconds(plannedSteps.Sum(step => step.SleepSeconds) + intervalSleep);
@@ -176,14 +216,19 @@ namespace Lazy_App_Codex_Core
 
             if (intervalSleep > 0)
             {
+                DateTime now = DateTime.Now;
                 onStatus(new LiveRunStatus
                 {
                     CurrentAction = "--",
                     CurrentStep = "--",
                     CurrentCycle = loopTotal <= 0 ? $"{loop} / ∞" : $"{loop} / {loopTotal}",
                     NextAction = plannedSteps.FirstOrDefault()?.ShortName ?? "--",
-                    NextActionAt = DateTime.Now.AddSeconds(intervalSleep),
-                    EstimatedEnd = estimatedEnd
+                    NextActionAt = now.AddSeconds(intervalSleep),
+                    EstimatedEnd = estimatedEnd,
+                    CountdownStartedAt = now,
+                    CountdownEndsAt = now.AddSeconds(intervalSleep),
+                    CountdownSeconds = intervalSleep,
+                    Timeline = BuildTimeline(plannedSteps, 0, "WAIT")
                 });
                 await Task.Delay(intervalSleep * 1000, token);
             }
@@ -250,6 +295,7 @@ namespace Lazy_App_Codex_Core
                 plannedSteps.Add(GenerateStep(script.Config[stepIndex], stepOffset, selectedOffsetAxis));
             }
 
+            AttachPlan(plannedSteps);
             int intervalSleep = script.Interval_Max > 0 ? RandomBetween(script.Interval_Min, script.Interval_Max) : 0;
             intervalSleep = EnforceCycleMinimum(plannedSteps, intervalSleep, script.Interval_Min, script.Interval_Max, script.Enforce_Min);
             int totalSeconds = plannedSteps.Sum(step => step.SleepSeconds) + intervalSleep;
@@ -264,14 +310,19 @@ namespace Lazy_App_Codex_Core
 
             if (intervalSleep > 0)
             {
+                DateTime now = DateTime.Now;
                 onStatus(new LiveRunStatus
                 {
                     CurrentAction = "--",
                     CurrentStep = $"--",
                     CurrentCycle = loopTotal <= 0 ? $"{loop} / ∞" : $"{loop} / {loopTotal}",
                     NextAction = plannedSteps.FirstOrDefault()?.ShortName ?? "--",
-                    NextActionAt = DateTime.Now.AddSeconds(intervalSleep),
-                    EstimatedEnd = estimatedEnd
+                    NextActionAt = now.AddSeconds(intervalSleep),
+                    EstimatedEnd = estimatedEnd,
+                    CountdownStartedAt = now,
+                    CountdownEndsAt = now.AddSeconds(intervalSleep),
+                    CountdownSeconds = intervalSleep,
+                    Timeline = BuildTimeline(plannedSteps, 0, "WAIT")
                 });
                 await Task.Delay(intervalSleep * 1000, token);
             }
@@ -354,14 +405,19 @@ namespace Lazy_App_Codex_Core
             string nextAction = "--")
         {
             token.ThrowIfCancellationRequested();
+            DateTime now = DateTime.Now;
             onStatus(new LiveRunStatus
             {
                 CurrentAction = plannedStep.ShortName,
                 CurrentStep = $"{stepNumber} / {stepTotal} ({Math.Max(0, stepTotal - stepNumber)})",
                 CurrentCycle = cycleTotal <= 0 ? $"{cycle} / ∞" : $"{cycle} / {cycleTotal}",
                 NextAction = nextAction,
-                NextActionAt = plannedStep.SleepSeconds > 0 ? DateTime.Now.AddSeconds(plannedStep.SleepSeconds) : null,
-                EstimatedEnd = plannedStep.EstimatedEnd
+                NextActionAt = plannedStep.SleepSeconds > 0 ? now.AddSeconds(plannedStep.SleepSeconds) : null,
+                EstimatedEnd = plannedStep.EstimatedEnd,
+                CountdownStartedAt = plannedStep.SleepSeconds > 0 ? now : null,
+                CountdownEndsAt = plannedStep.SleepSeconds > 0 ? now.AddSeconds(plannedStep.SleepSeconds) : null,
+                CountdownSeconds = plannedStep.SleepSeconds,
+                Timeline = BuildTimeline(plannedStep.Plan, stepNumber - 1)
             });
 
             if (!string.IsNullOrWhiteSpace(plannedStep.AdbArgs) && isAdbEnabled)
@@ -475,6 +531,40 @@ namespace Lazy_App_Codex_Core
             };
         }
 
+        private static int GetStartLoop(RunExecutionOptions? options)
+        {
+            return Math.Max(1, (options?.SkipCycles ?? 0) + 1);
+        }
+
+        public static int GetRunPlanCycleCount(RunPlanModel runPlan)
+        {
+            return runPlan.Items.Sum(item => Math.Max(1, item.Repeat));
+        }
+
+        private static void AttachPlan(List<PlannedStep> plannedSteps)
+        {
+            foreach (var step in plannedSteps)
+            {
+                step.Plan = plannedSteps;
+            }
+        }
+
+        private static IReadOnlyList<string> BuildTimeline(IReadOnlyList<PlannedStep> plannedSteps, int currentIndex, string? prefix = null)
+        {
+            var timeline = new List<string>();
+            if (!string.IsNullOrWhiteSpace(prefix))
+            {
+                timeline.Add(prefix);
+            }
+
+            for (int index = Math.Max(0, currentIndex); index < plannedSteps.Count && timeline.Count < 6; index++)
+            {
+                timeline.Add(plannedSteps[index].ShortName);
+            }
+
+            return timeline;
+        }
+
         private static string NormalizeAction(string action)
         {
             return action.Trim().ToLowerInvariant() switch
@@ -508,6 +598,7 @@ namespace Lazy_App_Codex_Core
             public int SleepMin { get; private set; }
             public int SleepMax { get; private set; }
             public DateTime? EstimatedEnd { get; set; }
+            public IReadOnlyList<PlannedStep> Plan { get; set; } = Array.Empty<PlannedStep>();
 
             public void AddSleep(int seconds, int min, int max)
             {
