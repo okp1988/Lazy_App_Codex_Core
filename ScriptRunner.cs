@@ -405,6 +405,11 @@ namespace Lazy_App_Codex_Core
             string nextAction = "--")
         {
             token.ThrowIfCancellationRequested();
+            if (!string.IsNullOrWhiteSpace(plannedStep.AdbArgs) && isAdbEnabled)
+            {
+                await RunAdbCommandAsync(adb, plannedStep.AdbArgs, plannedStep.AdbAction, token);
+            }
+
             DateTime now = DateTime.Now;
             onStatus(new LiveRunStatus
             {
@@ -419,11 +424,6 @@ namespace Lazy_App_Codex_Core
                 CountdownSeconds = plannedStep.SleepSeconds,
                 Timeline = BuildTimeline(plannedStep.Plan, stepNumber - 1)
             });
-
-            if (!string.IsNullOrWhiteSpace(plannedStep.AdbArgs) && isAdbEnabled)
-            {
-                await RunAdbCommandAsync(adb, plannedStep.AdbArgs, plannedStep.AdbAction, token);
-            }
 
             if (plannedStep.SleepSeconds > 0)
             {

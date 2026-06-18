@@ -1276,11 +1276,18 @@ namespace Lazy_App_Codex_Core
                 remaining = TimeSpan.Zero;
             }
 
+            int displayRemainingSeconds = GetDisplayRemainingSeconds(remaining);
+            int countdownSeconds = Math.Max(0, status.CountdownSeconds);
             double progress = status.CountdownSeconds <= 0
                 ? 0D
-                : remaining.TotalSeconds / status.CountdownSeconds;
+                : Math.Min(displayRemainingSeconds, countdownSeconds) / (double)countdownSeconds;
             string next = string.IsNullOrWhiteSpace(status.NextAction) ? "--" : status.NextAction;
-            slot.CountdownBar.SetState(progress, $"{FormatDuration(remaining)} until {next}", remaining > TimeSpan.Zero);
+            slot.CountdownBar.SetState(
+                progress,
+                $"{FormatDuration(remaining, roundUp: true)} until {next}",
+                displayRemainingSeconds > 0,
+                Math.Min(displayRemainingSeconds, countdownSeconds),
+                countdownSeconds);
         }
 
         private void ShowRunError(RunSlot slot, Exception ex)
@@ -2283,17 +2290,31 @@ namespace Lazy_App_Codex_Core
                 remaining = TimeSpan.Zero;
             }
 
-            return $"{time.Value:HH:mm:ss} ({FormatDuration(remaining)})";
+            return $"{time.Value:HH:mm:ss} ({FormatDuration(remaining, roundUp: true)})";
         }
 
-        private static string FormatDuration(TimeSpan duration)
+        private static string FormatDuration(TimeSpan duration, bool roundUp = false)
         {
-            if (duration.TotalHours >= 1)
+            TimeSpan displayDuration = TimeSpan.FromSeconds(roundUp
+                ? GetDisplayRemainingSeconds(duration)
+                : Math.Max(0, (int)duration.TotalSeconds));
+
+            if (displayDuration.TotalHours >= 1)
             {
-                return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+                return $"{(int)displayDuration.TotalHours:D2}:{displayDuration.Minutes:D2}:{displayDuration.Seconds:D2}";
             }
 
-            return $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+            return $"{displayDuration.Minutes:D2}:{displayDuration.Seconds:D2}";
+        }
+
+        private static int GetDisplayRemainingSeconds(TimeSpan duration)
+        {
+            if (duration <= TimeSpan.Zero)
+            {
+                return 0;
+            }
+
+            return Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds));
         }
 
         private static string ShortenError(string message)
