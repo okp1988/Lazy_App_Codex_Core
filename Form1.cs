@@ -72,7 +72,6 @@ namespace Lazy_App_Codex_Core
         private readonly Icon _baseIcon;
         private readonly Dictionary<string, Icon> _taskbarStatusIcons = new Dictionary<string, Icon>(StringComparer.Ordinal);
         private ITaskbarList3? _taskbarList;
-        private readonly List<string> _debugLog = new List<string>();
 
         private static bool IsAdbActionEnabled = true;
 
@@ -277,9 +276,8 @@ namespace Lazy_App_Codex_Core
                 }
 
                 _hotkeys.UnregisterAll(Handle);
-                UpdateHotkeyStatus(HotkeyRegistrationProfile.None);
+                UpdateHotkeyStatus();
                 _lastHotkeyRegistrationSucceeded = null;
-                WriteLog("GLOBAL HOTKEY DROPPED WHILE MINIMIZED.");
                 return;
             }
 
@@ -293,16 +291,10 @@ namespace Lazy_App_Codex_Core
         {
             HotkeyRegistrationProfile profile = _hotkeys.Register(Handle, _slot2Visible);
             bool success = profile != HotkeyRegistrationProfile.None;
-            UpdateHotkeyStatus(profile);
-
-            if (success && _lastHotkeyRegistrationSucceeded != true)
-            {
-                WriteLog($"GLOBAL HOTKEY REGISTERED (Set 1: {_hotkeys.StartHotkeyText}/{_hotkeys.StopHotkeyText}; Set 2: {_hotkeys.BackupStartHotkeyText}/{_hotkeys.BackupStopHotkeyText}).");
-            }
+            UpdateHotkeyStatus();
 
             if (!success && _lastHotkeyRegistrationSucceeded != false)
             {
-                WriteLog($"GLOBAL HOTKEY NOT REGISTERED (Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}).");
                 AppLogger.LogWarning($"Global hotkey was not registered (Primary Start: {_hotkeys.StartHotkeyText}, Primary Stop: {_hotkeys.StopHotkeyText}; Backup Start: {_hotkeys.BackupStartHotkeyText}, Backup Stop: {_hotkeys.BackupStopHotkeyText}).");
             }
 
@@ -706,15 +698,12 @@ namespace Lazy_App_Codex_Core
                 string message = _adbDeviceStatus.DeviceCount > 1
                     ? "Select a device before run."
                     : _adbDeviceStatus.Tooltip;
-                LogAdbStatus($"Set {slot.Number} run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={(string.IsNullOrWhiteSpace(slot.SelectedDeviceSerial) ? "(none)" : slot.SelectedDeviceSerial)}, message={message}");
+                LogAdbWarning($"Set {slot.Number} run blocked: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={(string.IsNullOrWhiteSpace(slot.SelectedDeviceSerial) ? "(none)" : slot.SelectedDeviceSerial)}, message={message}");
                 MessageBox.Show(message, "ADB Not Ready", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            LogAdbStatus($"Set {slot.Number} run allowed: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}, selected={selectedDeviceSerial}.");
-
             slot.RunCts = new CancellationTokenSource();
-            _debugLog.Clear();
             SetRunningState(slot, true);
             UpdateWindowTitle();
 
@@ -730,7 +719,6 @@ namespace Lazy_App_Codex_Core
             {
                 AppLogger.LogError("Run failed.", ex);
                 ShowRunError(slot, ex);
-                WriteLog("ERROR: " + ex.Message);
             }
             finally
             {
@@ -745,16 +733,13 @@ namespace Lazy_App_Codex_Core
 
         private async Task RefreshAdbStatusForRunAsync()
         {
-            LogAdbStatus($"Run refresh requested. Cached={_adbDeviceStatus.State}, tracker={FormatTrackerState()}.");
             if (_adbDeviceStatus.State == AdbDeviceState.NoDevice)
             {
-                LogAdbStatus($"Run using cached blocking background status immediately: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
                 return;
             }
 
             if (_adbDeviceStatus.State is AdbDeviceState.OneDevice or AdbDeviceState.MultipleDevices && _adbTrackProcess != null && !_adbTrackProcess.HasExited)
             {
-                LogAdbStatus($"Run using cached background status: {_adbDeviceStatus.State}, devices={_adbDeviceStatus.DeviceCount}.");
                 return;
             }
 
@@ -766,12 +751,11 @@ namespace Lazy_App_Codex_Core
             try
             {
                 var status = await WaitForTrackDevicesStatusAsync(3500);
-                LogAdbStatus($"Run track-devices result: {status.State}, devices={status.DeviceCount}, message={status.Tooltip}");
                 ApplyAdbDeviceStatusOnUi(status);
             }
             catch (Exception ex)
             {
-                LogAdbStatus("Run track-devices check failed: " + ex.Message);
+                LogAdbWarning("Run track-devices check failed: " + ex.Message);
                 ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB track-devices check failed: " + ex.Message));
             }
         }
@@ -779,7 +763,6 @@ namespace Lazy_App_Codex_Core
         private async Task RunSelectedTargetAsync(RunSlot slot, RunTarget target, ScriptModel? script, SequenceModel? sequence, RunPlanModel? runPlan, string deviceSerial, RunExecutionOptions options, CancellationToken token)
         {
             var (offsetValue, offsetAxis) = GetSelectedOffset(slot, target.Name);
-            WriteLog($"SET {slot.Number} OFFSET SELECTED {FormatOffset(offsetValue, offsetAxis)}");
             if (script != null)
             {
                 await _runner.RunScriptAsync(script, offsetValue, offsetAxis, deviceSerial, token, status => UpdateLiveStatus(slot, status), IsAdbActionEnabled, options);
@@ -1037,7 +1020,6 @@ namespace Lazy_App_Codex_Core
 
             slot.LiveStatus = status;
             UpdateLiveStatusLabels();
-            WriteLog($"SET {slot.Number}: {status.CurrentAction}");
         }
 
         private void SetTaskbarOverlayIcon(Icon? overlayIcon, string description)
@@ -1312,22 +1294,7 @@ namespace Lazy_App_Codex_Core
             MessageBox.Show(ex.Message, "Lazy App Run Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
-        public void WriteLog(string text)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke((Action)(() => WriteLog(text)));
-                return;
-            }
-
-            _debugLog.Add(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + ": " + text);
-            if (_debugLog.Count > 500)
-            {
-                _debugLog.RemoveRange(0, _debugLog.Count - 500);
-            }
-        }
-
-        private void UpdateHotkeyStatus(HotkeyRegistrationProfile profile)
+        private void UpdateHotkeyStatus()
         {
             _statusDotColor = (_hotkeys.PrimaryProfileRegistered, _hotkeys.BackupProfileRegistered) switch
             {
@@ -1364,7 +1331,6 @@ namespace Lazy_App_Codex_Core
             _lastHotkeyRegistrationSucceeded = null;
             RegisterHotkeysForWindowState();
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
-            WriteLog("CONFIG UPDATED.");
         }
 
         private async void btnWirelessAdb_Click(object sender, EventArgs e)
@@ -1374,7 +1340,6 @@ namespace Lazy_App_Codex_Core
             if (dialog.ConfigChanged)
             {
                 LoadConfig();
-                WriteLog("WIRELESS ADB DEVICE UPDATED.");
             }
 
             await EnsureAdbTrackMonitorAsync(dialog.ServerRestarted ? "wireless adb server restart" : "wireless adb");
@@ -1399,7 +1364,6 @@ namespace Lazy_App_Codex_Core
             }
 
             slot.SelectedDeviceSerial = (slot.DeviceBox.SelectedItem as DeviceDisplayItem)?.Serial;
-            LogAdbStatus($"Set {slot.Number} selected device changed: " + (slot.SelectedDeviceSerial ?? "(none)"));
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
         }
 
@@ -1414,7 +1378,6 @@ namespace Lazy_App_Codex_Core
         {
             if (_slot2Visible && _slot2.IsRunning)
             {
-                WriteLog("STOP SET 2 BEFORE HIDING.");
                 return;
             }
 
@@ -1562,29 +1525,25 @@ namespace Lazy_App_Codex_Core
         {
             if (_adbMonitorStarting || (_adbTrackProcess != null && !_adbTrackProcess.HasExited))
             {
-                LogAdbStatus($"Ensure skipped from {trigger}. starting={_adbMonitorStarting}, tracker={FormatTrackerState()}, cached={_adbDeviceStatus.State}.");
                 return;
             }
 
             _adbMonitorStarting = true;
-            LogAdbStatus($"Ensure started from {trigger}. cached={_adbDeviceStatus.State}.");
             try
             {
                 using var cts = new CancellationTokenSource(3500);
                 bool serverRunning = await _adbController.IsServerRunningAsync(cts.Token);
-                LogAdbStatus($"Port 5037 check from {trigger}: serverRunning={serverRunning}.");
                 if (!serverRunning)
                 {
                     ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running."));
                     return;
                 }
 
-                LogAdbStatus($"Starting track-devices from {trigger}.");
                 StartTrackDevicesProcess();
             }
             catch (Exception ex)
             {
-                LogAdbStatus($"Ensure failed from {trigger}: {ex.Message}");
+                LogAdbWarning($"Ensure failed from {trigger}: {ex.Message}");
                 ApplyAdbDeviceStatusOnUi(new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status check failed: " + ex.Message));
             }
             finally
@@ -1625,7 +1584,7 @@ namespace Lazy_App_Codex_Core
 
                     if (e.Data == null)
                     {
-                        LogAdbStatus("track-devices stdout closed. Marking ADB server as not running.");
+                        LogAdbWarning("track-devices stdout closed. Marking ADB server as not running.");
                         var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running.");
                         _adbTrackFirstStatus?.TrySetResult(status);
                         ApplyAdbDeviceStatusOnUi(status);
@@ -1635,7 +1594,6 @@ namespace Lazy_App_Codex_Core
                     string line = e.Data.Trim();
                     if (line.Length == 0)
                     {
-                        LogAdbStatus("track-devices block: " + (lines.Count == 0 ? "(no devices)" : string.Join(" | ", lines)));
                         ApplyTrackedDeviceLines(lines);
                         lines.Clear();
                         return;
@@ -1649,20 +1607,17 @@ namespace Lazy_App_Codex_Core
 
                     if (line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase))
                     {
-                        LogAdbStatus("track-devices header received.");
                         lines.Clear();
                         return;
                     }
 
                     if (line.Length == 0)
                     {
-                        LogAdbStatus("track-devices block: (no devices)");
                         ApplyTrackedDeviceLines(lines);
                         lines.Clear();
                         return;
                     }
 
-                    LogAdbStatus("track-devices line: " + line);
                     lines.Add(line);
                     ApplyTrackedDeviceLines(lines);
                 };
@@ -1673,7 +1628,7 @@ namespace Lazy_App_Codex_Core
                         return;
                     }
 
-                    LogAdbStatus("track-devices stderr: " + e.Data);
+                    LogAdbWarning("track-devices stderr: " + e.Data);
                 };
                 process.Exited += (_, _) =>
                 {
@@ -1689,7 +1644,7 @@ namespace Lazy_App_Codex_Core
                             exitDetail = "";
                         }
 
-                        LogAdbStatus("adb track-devices exited." + exitDetail + " Marking ADB server as not running.");
+                        LogAdbWarning("adb track-devices exited." + exitDetail + " Marking ADB server as not running.");
                         var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB server is not running.");
                         _adbTrackFirstStatus?.TrySetResult(status);
                         ApplyAdbDeviceStatusOnUi(status);
@@ -1699,7 +1654,6 @@ namespace Lazy_App_Codex_Core
                 if (process.Start())
                 {
                     _adbTrackProcess = process;
-                    LogAdbStatus($"Started adb track-devices. pid={process.Id}.");
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
                     var initialStatus = new AdbDeviceStatus(AdbDeviceState.NoDevice, 0, "ADB server is running, but no ready device is connected.");
@@ -1708,7 +1662,7 @@ namespace Lazy_App_Codex_Core
                 else
                 {
                     process.Dispose();
-                    LogAdbStatus("adb track-devices did not start.");
+                    LogAdbWarning("adb track-devices did not start.");
                     var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "Could not start adb track-devices.");
                     _adbTrackFirstStatus?.TrySetResult(status);
                     ApplyAdbDeviceStatusOnUi(status);
@@ -1716,7 +1670,7 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
-                LogAdbStatus("Could not start adb track-devices: " + ex.Message);
+                LogAdbWarning("Could not start adb track-devices: " + ex.Message);
                 var status = new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "Could not start adb track-devices: " + ex.Message);
                 _adbTrackFirstStatus?.TrySetResult(status);
                 ApplyAdbDeviceStatusOnUi(status);
@@ -1836,11 +1790,6 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
-            if (_adbDeviceStatus.State != status.State || _adbDeviceStatus.DeviceCount != status.DeviceCount || _adbDeviceStatus.Tooltip != status.Tooltip)
-            {
-                LogAdbStatus($"Status changed: {_adbDeviceStatus.State}/{_adbDeviceStatus.DeviceCount} -> {status.State}/{status.DeviceCount}. {status.Tooltip}");
-            }
-
             _adbDeviceStatus = status;
             UpdateDeviceDropdown(status);
             _adbStatusDotColor = status.State switch
@@ -1951,7 +1900,7 @@ namespace Lazy_App_Codex_Core
             {
                 slot.DeviceLossStopRequested = true;
                 string removedDevice = GetDeviceDisplayName(previousSelection ?? "");
-                LogAdbStatus($"Set {slot.Number} selected device removed while running: {previousSelection}. Stopping run.");
+                LogAdbWarning($"Set {slot.Number} selected device removed while running: {previousSelection}. Stopping run.");
                 _ = StopRunForMissingDeviceAsync(slot, removedDevice);
             }
             else if (!slot.IsRunning)
@@ -2193,7 +2142,7 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
-                LogAdbStatus($"Device info sync failed for {serial}: {ex.Message}");
+                LogAdbWarning($"Device info sync failed for {serial}: {ex.Message}");
             }
             finally
             {
@@ -2212,7 +2161,7 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
-                LogAdbStatus("Failed to save device metadata: " + ex.Message);
+                LogAdbWarning("Failed to save device metadata: " + ex.Message);
             }
         }
 
@@ -2255,26 +2204,9 @@ namespace Lazy_App_Codex_Core
             return clone;
         }
 
-        private string FormatTrackerState()
+        private static void LogAdbWarning(string message)
         {
-            if (_adbTrackProcess == null)
-            {
-                return "none";
-            }
-
-            try
-            {
-                return _adbTrackProcess.HasExited ? $"exited pid={_adbTrackProcess.Id}" : $"running pid={_adbTrackProcess.Id}";
-            }
-            catch
-            {
-                return "unknown";
-            }
-        }
-
-        private static void LogAdbStatus(string message)
-        {
-            AppLogger.LogInfo("[ADB] " + message);
+            AppLogger.LogWarning("[ADB] " + message);
         }
 
         private static string FormatStatusTime(DateTime? time)
