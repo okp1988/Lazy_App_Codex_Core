@@ -31,6 +31,7 @@ namespace Lazy_App_Codex_Core
             Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
 
             BuildLayout();
+            AcceptButton = _tryConnectButton;
             LoadDevices();
             UpdateActionState();
         }

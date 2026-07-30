@@ -128,6 +128,7 @@ namespace Lazy_App_Codex_Core
         private Dictionary<string, TouchCoordinateMapper> _touchMappers = new(StringComparer.OrdinalIgnoreCase);
         private TouchCoordinateMapper? _activeTouchMapper;
         private string _activeTouchDevice = "";
+        private TrackTouchForm? _trackTouchWindow;
 
         public ConfigEditorForm(ScriptConfigRepository repository, Func<AdbDeviceStatus>? getAdbStatus = null, Func<string?>? getSelectedDeviceSerial = null)
         {
@@ -250,7 +251,7 @@ namespace Lazy_App_Codex_Core
             ConfigureButton(_removeButton, "Remove", (_, _) => RemoveEntry());
             ConfigureButton(_moveUpButton, "Move Up", (_, _) => MoveEntry(-1));
             ConfigureButton(_moveDownButton, "Move Down", (_, _) => MoveEntry(1));
-            ConfigureButton(_trackTouchButton, "Track Touch", (_, _) => ToggleTrackTouch(), 100);
+            ConfigureButton(_trackTouchButton, "Track Touch", (_, _) => OpenTrackTouchWindow(), 100);
             foreach (Button button in new[] { _addButton, _cloneButton, _removeButton, _moveUpButton, _moveDownButton, _trackTouchButton })
             {
                 button.Dock = DockStyle.Fill;
@@ -2637,6 +2638,48 @@ namespace Lazy_App_Codex_Core
             StartTrackTouch(selectedSerial!);
         }
 
+        private void OpenTrackTouchWindow()
+        {
+            if (_trackTouchWindow is { IsDisposed: false })
+            {
+                _trackTouchWindow.Show();
+                _trackTouchWindow.Activate();
+                return;
+            }
+
+            var adbStatus = _getAdbStatus?.Invoke();
+            string? selectedSerial = _getSelectedDeviceSerial?.Invoke();
+            bool selectedDeviceReady = !string.IsNullOrWhiteSpace(selectedSerial) &&
+                adbStatus?.Devices.Any(device =>
+                    device.IsReady &&
+                    device.Serial.Equals(selectedSerial, StringComparison.OrdinalIgnoreCase)) == true;
+            if (!selectedDeviceReady)
+            {
+                ShowValidation(adbStatus?.Tooltip ?? "Select a ready ADB device before tracking touch.");
+                return;
+            }
+
+            string serial = selectedSerial!;
+            _trackTouchWindow = new TrackTouchForm(
+                _adbController.AdbPath,
+                serial,
+                () => _getAdbStatus?.Invoke() ?? new AdbDeviceStatus(AdbDeviceState.NoServer, 0, "ADB status unavailable."),
+                GetTrackTouchDeviceDisplayName);
+            _trackTouchWindow.FormClosed += (_, _) => _trackTouchWindow = null;
+            _trackTouchWindow.Show(this);
+        }
+
+        private string GetTrackTouchDeviceDisplayName(string serial)
+        {
+            string key = AdbShellController.GetDeviceKey(serial);
+            if (_workingDevices.TryGetValue(key, out var device) && !string.IsNullOrWhiteSpace(device.Name))
+            {
+                return device.Name;
+            }
+
+            return key;
+        }
+
         private async void StartTrackTouch(string deviceSerial)
         {
             try
@@ -2926,13 +2969,15 @@ namespace Lazy_App_Codex_Core
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            StopTrackTouch(null);
             if (!_savedAndClosing && !ConfirmCloseSaveDiscardCancel())
             {
                 e.Cancel = true;
                 return;
             }
 
+            _trackTouchWindow?.Close();
+            _trackTouchStateTimer.Stop();
+            StopTrackTouch(null);
             base.OnFormClosing(e);
         }
 
@@ -3353,6 +3398,7 @@ namespace Lazy_App_Codex_Core
                 "drag" => "drag",
                 "left" => "left",
                 "right" => "right",
+                "delay" => "delay",
                 _ => "left"
             };
         }
@@ -3375,7 +3421,7 @@ namespace Lazy_App_Codex_Core
         private static DataGridViewComboBoxColumn CreateActionColumn()
         {
             var column = new DataGridViewComboBoxColumn { Name = "act", HeaderText = "Act", Width = 70, FlatStyle = FlatStyle.Flat };
-            column.Items.AddRange("left", "right", "drag");
+            column.Items.AddRange("left", "right", "drag", "delay");
             return column;
         }
 

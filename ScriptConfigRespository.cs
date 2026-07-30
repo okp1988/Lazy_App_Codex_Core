@@ -682,6 +682,8 @@ namespace Lazy_App_Codex_Core
                 "rightdrag" => "drag",
                 "updrag" => "drag",
                 "downdrag" => "drag",
+                "delay" => "delay",
+                "wait" => "delay",
                 _ => "left"
             };
         }

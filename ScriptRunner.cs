@@ -242,6 +242,7 @@ namespace Lazy_App_Codex_Core
             Func<ScriptModel, (int value, string axis)> scriptOffsetResolver)
         {
             var plannedSteps = new List<PlannedStep>();
+            bool hasNonDelayStep = false;
             for (int itemIndex = 0; itemIndex < sequence.Items.Count; itemIndex++)
             {
                 var item = sequence.Items[itemIndex];
@@ -256,19 +257,18 @@ namespace Lazy_App_Codex_Core
                     for (int repeat = 1; repeat <= Math.Max(1, item.Repeat); repeat++)
                     {
                         var scriptOffset = scriptOffsetResolver(script);
-                        for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
-                        {
-                            int stepOffset = stepIndex == 0 ? scriptOffset.value : 0;
-                            plannedSteps.Add(GenerateStep(script.Config[stepIndex], stepOffset, scriptOffset.axis));
-                        }
+                        AppendScriptSteps(plannedSteps, script.Config, scriptOffset.value, scriptOffset.axis);
+                        hasNonDelayStep |= script.Config.Any(step => NormalizeAction(step.Act) != "delay");
                     }
 
                     AddDelayToLastStep(plannedSteps, item.Interval_Min, item.Interval_Max);
                 }
                 else
                 {
-                    int actionOffset = plannedSteps.Count == 0 ? selectedOffset : 0;
+                    string action = NormalizeAction(item.Action.Act);
+                    int actionOffset = !hasNonDelayStep && action == "left" ? selectedOffset : 0;
                     plannedSteps.Add(GenerateStep(item.Action, actionOffset, selectedOffsetAxis));
+                    hasNonDelayStep |= action != "delay";
                 }
             }
 
@@ -289,11 +289,7 @@ namespace Lazy_App_Codex_Core
             token.ThrowIfCancellationRequested();
 
             var plannedSteps = new List<PlannedStep>();
-            for (int stepIndex = 0; stepIndex < script.Config.Count; stepIndex++)
-            {
-                int stepOffset = stepIndex == 0 ? selectedOffset : 0;
-                plannedSteps.Add(GenerateStep(script.Config[stepIndex], stepOffset, selectedOffsetAxis));
-            }
+            AppendScriptSteps(plannedSteps, script.Config, selectedOffset, selectedOffsetAxis);
 
             AttachPlan(plannedSteps);
             int intervalSleep = script.Interval_Max > 0 ? RandomBetween(script.Interval_Min, script.Interval_Max) : 0;
@@ -348,6 +344,11 @@ namespace Lazy_App_Codex_Core
             int randSleep = sleepMax > 0 ? RandomBetween(sleepMin, sleepMax) : 0;
             string action = NormalizeAction(step.Act);
 
+            if (action == "delay")
+            {
+                return new PlannedStep("DELAY", "", "", randSleep, sleepMin, sleepMax);
+            }
+
             if (action == "left")
             {
                 var p = MouseHelper.WithRandom(step.ScrX, step.ScrY, step.RandX, step.RandY);
@@ -380,6 +381,21 @@ namespace Lazy_App_Codex_Core
             }
 
             return new PlannedStep("--", "", "", randSleep, sleepMin, sleepMax);
+        }
+
+        private void AppendScriptSteps(List<PlannedStep> plannedSteps, IReadOnlyList<StepAction> steps, int selectedOffset, string selectedOffsetAxis)
+        {
+            bool offsetApplied = false;
+            foreach (var step in steps)
+            {
+                string action = NormalizeAction(step.Act);
+                int stepOffset = !offsetApplied && action == "left" ? selectedOffset : 0;
+                plannedSteps.Add(GenerateStep(step, stepOffset, selectedOffsetAxis));
+                if (action == "left")
+                {
+                    offsetApplied = true;
+                }
+            }
         }
 
         private static (int x, int y) GetDragEndPoint(StepAction step)
@@ -527,6 +543,7 @@ namespace Lazy_App_Codex_Core
                 "left" => "LEFT",
                 "right" => "BACK",
                 "drag" => "DRAG",
+                "delay" => "DELAY",
                 _ => "--"
             };
         }
@@ -575,6 +592,7 @@ namespace Lazy_App_Codex_Core
                 "drag" => "drag",
                 "left" => "left",
                 "right" => "right",
+                "delay" => "delay",
                 _ => "left"
             };
         }
