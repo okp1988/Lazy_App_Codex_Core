@@ -12,6 +12,7 @@
 - Optional Script and Sequence `emin` enforces a minimum cycle time and must not exceed the displayed max cycle time.
 - Run Plan item repeat counts override the referenced target's saved loop count only for that item.
 - ADB OFF mode skips ADB commands but still updates status and waits through configured sleeps.
+- Delay is a no-ADB planned action whose `t` range supplies a randomized cancellable wait.
 - Skip is a pre-run UI option only. It is disabled while running and reset after completion or cancellation.
 - Skip is disabled for infinite direct Scripts/Sequences. The last finite loop is never offered as a skip option.
 
@@ -21,7 +22,7 @@ For a Script:
 
 1. If finite Skip is selected, start at loop `skip + 1`.
 2. Expand action groups into steps.
-3. Apply selected UI offset only to the first planned left-click step.
+3. Apply selected UI offset only to the first planned left-click step; leading Delay steps do not consume it.
 4. Execute each planned step.
 5. Sleep for each step's randomized sleep.
 6. Sleep for the Script interval after each loop when interval max is positive.
@@ -66,18 +67,20 @@ Runtime status updates include:
 - Countdown start/end timestamps and countdown length for waits.
 - A six-chip action timeline used by the main window.
 
+Delay appears as `DELAY` in the current/next action and timeline surfaces, and its `t` wait drives the normal countdown fields.
+
 The main form updates countdown display once per second only while at least one run set is active. While idle, the timer is stopped.
 
 ## Cycle Enforcement
 
-When `emin` is greater than zero, the runner computes the whole cycle plan before execution. If the randomized plan is shorter than `emin`, it re-randomizes the lowest flexible wait upward, including step sleeps, Sequence item delays folded into their item, and the cycle interval. This repeats until the plan reaches `emin` or max cycle time.
+When `emin` is greater than zero, the runner computes the whole cycle plan before execution. If the randomized plan is shorter than `emin`, it re-randomizes the lowest flexible wait upward, including Delay steps, action sleeps, Sequence item delays folded into their item, and the cycle interval. This repeats until the plan reaches `emin` or max cycle time.
 
 If `emin` equals max cycle time, the runner skips extra random attempts and uses every flexible wait at its maximum value.
 
 ## Offset Application
 
 - Only left-click steps consume offsets.
-- Drag and back actions do not consume offsets.
+- Delay, drag, and back actions do not consume offsets.
 - The selected main offset is applied to the first left-click step in a Script run.
 - For Sequence Script items, offset lookup uses the script item's own Script name.
 - Direct Sequence action items use the selected Sequence/main offset context.
@@ -85,6 +88,15 @@ If `emin` equals max cycle time, the runner skips extra random attempts and uses
 - For Run Plan Sequence items, the Sequence default offset wins when enabled; otherwise the run set's selected offset is used.
 - A Run Plan can switch offsets per item, so different Sequence defaults are preserved inside the same plan.
 - A per-step `offset` or `o` value of `x` or `y` overrides the selected axis.
+
+## Delay Behavior
+
+- `delay` performs no ADB command.
+- `wait` is accepted from stored configuration and normalizes to `delay`.
+- The step `t` minimum/maximum controls the randomized delay in seconds.
+- Delay is cancellable through the same run-slot token as action and interval waits.
+- A leading Delay does not consume the selected offset; the first following applicable left-click receives it.
+- Delay participates in cycle totals, `emin` enforcement, live countdowns, and the action timeline.
 
 ## Drag Behavior
 
@@ -155,16 +167,17 @@ The main Pair / Connect button opens a Wireless ADB window with:
 - Numeric-only Port field.
 - Numeric-only Pair Code field when Pair is selected.
 - Try button that runs the selected Pair or Connect action.
+- Enter invokes the Try button.
 - Restart button that runs `adb kill-server` followed by `adb start-server`.
 
 Selecting a saved Wi-Fi device fills the IP field. Selecting Manual Input clears IP and Port. A successful Connect updates `settings.devices[ip].lastSerial` and `lastSeen`, then the main ADB monitor refreshes. Pair success is displayed but does not mark the device connected. Restart Server success is displayed and also refreshes the main ADB monitor.
 
 ## Required ADB Logging
 
-ADB monitor and run gating changes should log decision points with:
+ADB monitor and run gating changes use the existing `LogAdbWarning(...)` helper, which prefixes `[ADB]` and writes through `AppLogger.LogWarning`:
 
 ```text
-AppLogger.LogInfo("[ADB] ...")
+LogAdbWarning("...")
 ```
 
 Important decision points:
@@ -178,18 +191,20 @@ Important decision points:
 
 ## Track Touch
 
-The Config Editor owns a shared Script/Sequence `Track Touch` toggle.
+The Config Editor opens one owned Track Touch window from the Scripts and Sequences tabs when a ready ADB device is available.
 
 Rules:
 
-- It is enabled only while the selected ADB device is ready.
-- It reads display size.
-- It reads touch ABS ranges per `/dev/input/event*` device.
-- It starts one long-running `adb shell getevent -l` process.
-- It maps coordinates using the same event device that emitted the touch line.
-- It parses `ABS_MT_POSITION_X` and `ABS_MT_POSITION_Y`.
-- It also supports `ABS_X` and `ABS_Y`.
-- It displays scaled screen coordinates only.
-- If mapping fails, it warns instead of displaying raw values as screen coordinates.
-- The active button must have a strong visible ON style.
-- The process must stop on toggle-off, loss of selected ADB device readiness, or editor close.
+- The Device dropdown lists all currently ready devices by saved friendly name while retaining the full ADB serial internally.
+- The initially selected main-window device is selected when the window opens.
+- Changing Device stops the previous tracking process, resets live gesture state, and starts tracking the new selection. Point history remains visible and records the device name for each entry.
+- It prefers `wm size` Override size when present, otherwise Physical size, then uses the controller fallback.
+- It reads touch ABS ranges per `/dev/input/event*` device with `adb shell getevent -lp`.
+- It starts one long-running `adb shell getevent -l` process for the selected device.
+- It maps coordinates only when the event line comes from an input device with a known matching range.
+- It parses `ABS_MT_POSITION_X`/`ABS_MT_POSITION_Y` and supports `ABS_X`/`ABS_Y`.
+- Live coordinates and gesture state continue to update for both points and drags, with raw coordinate/range/device diagnostics shown below.
+- Only completed point gestures are appended to history; drags are shown live but are not recorded.
+- Double-clicking a history row copies its X/Y values into the test fields.
+- Test Tap sends the entered coordinates through `adb shell input tap` to the selected ready device.
+- Tracking stops on selected-device loss, device switch, Track Touch close, or Config Editor close. Device loss leaves the window available for selecting another ready device.

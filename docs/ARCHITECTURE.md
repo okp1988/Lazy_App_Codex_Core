@@ -59,11 +59,15 @@ Hand-built config editor for:
 
 The editor works in memory while open. It writes `config.json` only on explicit save, confirmed close-save, or restore. Pressing `Esc` calls the same close flow as the Close button.
 
-It also owns the shared Script/Sequence `Track Touch` toggle.
+It opens one owned `TrackTouchForm` from the Scripts and Sequences tabs when a ready ADB device is available and supplies current device status plus saved friendly-name lookup.
+
+### `TrackTouchForm.cs`
+
+Dedicated touch-coordinate tracker and tap tester. It lists ready devices by friendly name while binding the full serial, stops/restarts its `getevent` process when device selection changes, maps raw events from the matching input-device range into effective screen coordinates, shows live point/drag positions and diagnostics, records point-only history, and sends user-entered or history-selected coordinates through Test Tap. The tracker is stopped on device loss, device switch, or window/editor close.
 
 ### `WirelessAdbConnectForm.cs`
 
-Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server restart flows. It uses saved `settings.devices` entries for friendly device choices, supports Manual Input, validates IPv4 address segments and numeric ports/pairing codes, runs `adb pair` or `adb connect`, can restart the ADB server with `adb kill-server` plus `adb start-server`, updates saved Wi-Fi device `lastSerial`/`lastSeen` after a successful Connect, and closes on `Esc`.
+Hand-built Wireless ADB helper window for manual Pair, Connect, and ADB server restart flows. It uses saved `settings.devices` entries for friendly device choices, supports Manual Input, validates IPv4 address segments and numeric ports/pairing codes, runs `adb pair` or `adb connect`, can restart the ADB server with `adb kill-server` plus `adb start-server`, updates saved Wi-Fi device `lastSerial`/`lastSeen` after a successful Connect, invokes Try on Enter, and closes on `Esc`.
 
 ### `SearchableDropdown.cs`
 
@@ -98,7 +102,7 @@ In-memory config models:
 
 ### `ScriptRunner.cs`
 
-Runtime planner and executor. It expands Scripts, Sequences, and Run Plans into planned ADB commands, applies random sleeps, enforces optional minimum cycle time, applies offsets, applies pre-run skip options for finite runs, updates live status/timeline/countdown data, and respects cancellation.
+Runtime planner and executor. It expands Scripts, Sequences, and Run Plans into planned ADB commands or Delay steps, applies random sleeps, enforces optional minimum cycle time, applies offsets to the first applicable left-click without letting a leading Delay consume them, applies pre-run skip options for finite runs, updates live status/timeline/countdown data, and respects cancellation.
 
 ### `AdbShellController.cs`
 

@@ -48,13 +48,16 @@ An Action Group contains one or more steps and a repeat count. The group expands
 
 ### Step
 
-A Step is one device action plus optional randomization, sleep timing, second drag coordinate, and per-step offset axis override.
+A Step is one device action or delay plus optional randomization, sleep timing, second drag coordinate, and per-step offset axis override.
 
 Supported editor actions:
 
 - `left`
 - `right`
 - `drag`
+- `delay`
+
+`delay` performs no ADB command and uses the step `t` range as a randomized cancellable wait. If Delay is the first step, it does not consume the selected offset; the first following applicable left-click still receives it.
 
 Supported runtime aliases must remain backward compatible:
 
@@ -65,6 +68,7 @@ Supported runtime aliases must remain backward compatible:
 - `rightdrag`
 - `updrag`
 - `downdrag`
+- `wait` (normalizes to `delay`)
 
 ### Sequence
 
@@ -125,6 +129,14 @@ Devices are discovered from `adb track-devices` ready rows. The main Device drop
 Wi-Fi device keys use the IP address without the port for friendlier naming, while ADB commands still use the full current serial. New device metadata can be synced from Android properties, and users can rename saved devices in the Config Editor Devices tab.
 
 The main window also provides a Pair / Connect Wireless ADB helper. It supports Pair and Connect actions, ADB server restart, Manual Input, saved device IP prefill, fixed-separator IPv4 entry, numeric-only ports and pairing codes, and updates a Wi-Fi device's last serial after a successful Connect.
+
+Enter invokes Try in the Pair / Connect helper, while Escape closes it.
+
+### Track Touch
+
+The Config Editor opens a dedicated Track Touch window from the Scripts and Sequences tabs. The window lists all currently ready devices by saved friendly name while retaining the full serial for ADB. Switching the selected device stops the old `getevent` process before starting the new tracker.
+
+Track Touch maps raw touch events from their matching `/dev/input/event*` range into the effective Android display size. It shows live point and drag coordinates plus raw/range diagnostics. Only completed point gestures are appended to history; drags remain live-only. History records device name and time, supports copying a point into the X/Y test fields by double-click, and the Test Tap action sends those coordinates to the selected device.
 
 ## Non-Goals
 

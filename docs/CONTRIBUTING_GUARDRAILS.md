@@ -138,6 +138,9 @@ dotnet run --project Lazy_App_Codex_Core.csproj
 - Skip popup shows short options plus readable `Skip:` and `Start:` detail lines without stretching the main action column.
 - Direct Script/Sequence skip starts at loop `skip + 1`; Run Plan skip consumes the flattened item-repeat order.
 - Countdown progress bar updates during waits and the six-chip timeline shows current/upcoming actions.
-- Track Touch starts only when the selected ADB device is ready and stops when that device is lost.
+- Track Touch opens only when a ready ADB device is available, lists ready devices by saved friendly name, safely restarts tracking when Device changes, updates live point/drag coordinates, records only completed point gestures in history, and sends Test Tap to the selected device.
+- Track Touch stops its `getevent` process on device loss, device switch, Track Touch close, and Config Editor close.
+- A leading Delay waits for its configured `t` range without consuming the selected offset; the first following applicable left-click receives that offset.
+- Pair / Connect Enter invokes Try, while Esc closes the helper.
 - Open/rebuild in Visual Studio 2026 does not remove RunSetControl status rows, blank the Offset dropdown, shrink controls unexpectedly, or reintroduce large PC whitespace.
 - Laptop layout tuning keeps the PC layout visually intact when retested on the PC, allowing only small outer-window differences from Windows DPI/title-bar metrics.

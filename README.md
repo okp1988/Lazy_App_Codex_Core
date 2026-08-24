@@ -50,12 +50,12 @@ adb kill-server
 - The first small status dot reports global hotkey registration: gold means both primary and secondary hotkeys registered, green means primary only, blue means secondary only, and red means no hotkey is registered. The taskbar overlay repeats this hotkey state with a small status dot, and shows one or two run-set identifiers depending on whether Set 2 is open. The second small status dot reports ADB status through a background `adb track-devices` monitor: dark gray means no ADB server, red means server running with no ready device, green means one ready device, and yellow means more than one ready device.
 - `Alt+1` opens or closes Set 2, a second independent run control set. Set 1 uses primary hotkeys. Set 2 uses secondary/backup hotkeys only while Set 2 is open and omits Config and Pair / Connect because those actions are shared. The main window uses fixed one-set and two-set client sizes so 100% and 125% display scaling keep the same usable app layout; users cannot resize or maximize it, and Run/Stop actions must not resize either run set. `Alt+2` opens Config, and `Alt+3` opens Pair / Connect.
 - Each run set has its own Device dropdown listing currently ready devices from `adb track-devices`. A device selected in one visible or running set is not selectable in the other set. One ready device is auto-selected when available; Wi-Fi devices are shown without the port, but ADB commands still use the full serial internally.
-- The Pair / Connect button opens the Wireless ADB window for manual `adb pair`, `adb connect`, or ADB server restart. Its Action dropdown contains Pair and Connect, its Device dropdown starts with Manual Input, selecting a saved Wi-Fi device fills the IP address, choosing Manual Input clears IP and Port, and the Port and Pair Code fields accept numbers only. The IP control uses fixed dot separators and validates each IPv4 segment from 0 through 255. The Try button runs the selected Pair or Connect action, and Restart restarts the ADB server.
+- The Pair / Connect button opens the Wireless ADB window for manual `adb pair`, `adb connect`, or ADB server restart. Its Action dropdown contains Pair and Connect, its Device dropdown starts with Manual Input, selecting a saved Wi-Fi device fills the IP address, choosing Manual Input clears IP and Port, and the Port and Pair Code fields accept numbers only. The IP control uses fixed dot separators and validates each IPv4 segment from 0 through 255. The Try button runs the selected Pair or Connect action, Enter invokes Try, and Restart restarts the ADB server.
 - Offset options are:
 
 ```text
-No offset, Y offset up 3 steps, Y offset up 2 steps, Y offset up 1 step,
-Y offset down 1 step, Y offset down 2 steps, Y offset down 3 steps,
+No offset, Y offset up 6 steps through Y offset up 1 step,
+Y offset down 1 step through Y offset down 6 steps,
 X offset left 3 steps, X offset left 2 steps, X offset left 1 step,
 X offset right 1 step, X offset right 2 steps, X offset right 3 steps
 ```
@@ -79,7 +79,9 @@ The Devices tab stores friendly names under `settings.devices`. New connected de
 
 Successful Wireless ADB Connect updates the saved Wi-Fi device `lastSerial` with the current `IP:Port` and refreshes `lastSeen`, then the main ADB monitor refreshes. Pairing only authorizes the computer; connecting still requires the current wireless debugging connect port.
 
-The Scripts and Sequences tabs share a `Track Touch` toggle. It is enabled only when the selected ADB device is ready. While enabled, the editor reads touch ranges per `/dev/input/event*` device, runs `adb shell getevent -l` in the background for the selected device, scales raw touch events from the matching event device into screen coordinates, and shows the latest screen coordinate in the status line. The button turns bright green while active. If the app cannot match a touch range, it warns instead of showing raw values as screen coordinates. The process stops when toggled off, when the selected device is no longer ready, or when the config editor closes.
+The Scripts and Sequences tabs share a `Track Touch` button that opens a dedicated tracking window when a ready ADB device is available. The window's Device dropdown lists all currently ready devices using their saved friendly names while keeping the full ADB serial internally. Changing the selection stops the previous tracker and starts one for the new device.
+
+Track Touch reads the effective display size plus touch ranges per `/dev/input/event*`, runs `adb shell getevent -l`, and maps events only with the matching input device. It shows live screen coordinates for point and drag gestures together with raw/range diagnostics. Completed point gestures are added to history; drags update the live position but are not recorded. History includes device name and time, and double-clicking a row copies its X/Y values into the test fields. Entering X/Y values and pressing `Test Tap` sends an ADB tap to the selected device. Tracking stops on device loss, device switch, or window/editor close.
 
 ## Scripts
 
@@ -94,6 +96,8 @@ A Script has:
 - Enforce Min (`emin`)
 - Optional default offset
 - Action groups saved under `config`
+
+Action rows support `left`, `right`, `drag`, and `delay`. Delay performs no ADB action and waits for the randomized Min/Max seconds stored in `t`. A leading Delay does not consume the selected offset, so the first following applicable left-click still receives it.
 
 Enforce Min is a per-cycle minimum time in seconds. It must be less than or equal to the displayed max cycle time. When a cycle plan randomizes below Enforce Min, the runner re-randomizes the lowest flexible waits upward until the planned cycle reaches the enforced time. If Enforce Min equals the max cycle time, all flexible waits use their maximum values.
 
@@ -190,3 +194,4 @@ Action aliases:
 - `leftclick` = `left`
 - `rightclick` / `back` = `right`
 - `updrag`, `downdrag`, `leftdrag`, `rightdrag` = `drag`
+- `wait` = `delay`

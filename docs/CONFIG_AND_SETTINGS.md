@@ -147,6 +147,8 @@ Compact script output uses:
 - `t`: sleep range `[sleepMin, sleepMax]`
 - `o`: offset axis override
 
+Supported editor actions are `left`, `right`, `drag`, and `delay`. For `delay`, no ADB command is sent and `t` is the randomized delay range in seconds. A leading Delay does not consume the selected offset; the first following applicable left-click still receives it.
+
 Script fields:
 
 - `id`
@@ -248,6 +250,8 @@ Action aliases:
 - `right` maps to `rightclick` or back behavior.
 - `back` maps to right/back behavior.
 - Directional drag names remain usable.
+- `delay` is the canonical no-ADB wait action.
+- `wait` is accepted as a legacy/read alias and normalizes to `delay`.
 - Unknown actions should be logged and skipped, not converted to device touches.
 
 ## Cycle Enforcement
