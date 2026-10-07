@@ -195,9 +195,7 @@ namespace Lazy_App_Codex_Core
             remainingPanel.Dock = DockStyle.Fill;
             remainingPanel.Margin = Padding.Empty;
             remainingPanel.Size = new Size(ActionColumnWidth, ActionRowHeight);
-            lblRemaining.SetBounds(0, 0, 70, ActionRowHeight);
             lblRemaining.TextAlign = ContentAlignment.MiddleLeft;
-            numRemaining.SetBounds(72, 6, 62, 23);
             numRemaining.Minimum = 0;
             numRemaining.Maximum = 99;
             numRemaining.TextAlign = HorizontalAlignment.Right;
@@ -205,6 +203,29 @@ namespace Lazy_App_Codex_Core
             chkInfinite.TextAlign = ContentAlignment.MiddleLeft;
             controlToolTip.SetToolTip(numRemaining, "Remaining cycles (maximum 99)");
             controlToolTip.SetToolTip(chkInfinite, "Run indefinitely (Scripts and Sequences only)");
+            remainingPanel.Layout += (_, _) => LayoutRemainingControls();
+            remainingPanel.HandleCreated += (_, _) => LayoutRemainingControls();
+            remainingPanel.DpiChangedAfterParent += (_, _) => LayoutRemainingControls();
+            lblRemaining.FontChanged += (_, _) => LayoutRemainingControls();
+            LayoutRemainingControls();
+        }
+
+        private void LayoutRemainingControls()
+        {
+            // Preserve the baseline unless the current font needs a wider label.
+            // Keep the number box's right edge and Infinity position fixed.
+            int labelWidth = Math.Max(70, lblRemaining.GetPreferredSize(Size.Empty).Width);
+            int countLeft = labelWidth + 2;
+            remainingPanel.SuspendLayout();
+            try
+            {
+                lblRemaining.SetBounds(0, 0, labelWidth, ActionRowHeight);
+                numRemaining.SetBounds(countLeft, 6, Math.Max(1, 134 - countLeft), 23);
+            }
+            finally
+            {
+                remainingPanel.ResumeLayout(false);
+            }
         }
 
         private static void ConfigureCombo(ComboBox combo, int rowTop, int itemHeight, int height, Padding margin, int? dropDownWidth = null)

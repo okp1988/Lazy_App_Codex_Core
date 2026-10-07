@@ -6,9 +6,14 @@
 
 ## Latest Clarification
 
-- User reports the Remaining-control layout is OK and asks why its text is not vertically centered. Source inspection confirms a standard WinForms NumericUpDown with horizontal right alignment. Its internal text editor uses framework-managed bounds/font metrics and has no vertical TextAlign setting; centering the outer control does not provide vertical text alignment. The user subsequently approved trying an internal-editor centering change without changing the outer layout.
+- User works on two development devices and confirms that the supplied screenshot shows the Remaining label clipped in both run sets on the current device. Preserve the established fixed window sizes and the layout on the other device while correcting this row.
 
 ## Last Completed Work
+
+### Remaining Label Width Across Devices — Implemented (2026-10-07)
+
+- RunSetControl.cs now measures the Remaining label's preferred width with its current font. The baseline 70-pixel label and 62-pixel number box remain where the text fits; otherwise the label widens and the number box gives up the required width, preserving its right edge and the Infinity checkbox position. Recalculate on row layout, handle creation, font changes, and parent DPI changes. Both run sets share the adjustment; fixed client sizes, designer values, and numeric editor centering are preserved.
+- Verification: primary `dotnet build Lazy_App_Codex_Core.sln --no-restore` passed with zero warnings/errors; final scoped source review and `git diff --check` passed. No app launch, live GUI/device check, or visual confirmation on either development device was performed. Implementation is closed without a manual-test acknowledgement task.
 
 ### Remaining Text Vertical Centering — Implemented (2026-10-07)
 
