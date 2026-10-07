@@ -4,7 +4,7 @@
 
 This is the approved project reference and implementation/verification history consolidated on 2026-10-07. Global working rules take priority; project constraints are maintained in [AGENTS.md](../AGENTS.md). This record requires explicit approval for updates. [Discussion](DISCUSSION.md) contains active work and [External Folders](EXTERNAL_FOLDERS.md) records external roots.
 
-Implementation completion, build results, review findings, and manual-test evidence are recorded separately. Completed work does not stay in Discussion waiting for acknowledgement; silence is not a passed test result. Known limitations below are reference findings, not new approved bug-fix tasks.
+Implementation completion, build results, review findings, and manual-test evidence are recorded separately. Completed work does not stay in Discussion waiting for acknowledgement; silence is not a passed test result. Known limitations below are reference findings, not new approved bug-fix tasks. The user-invoked documentation checkpoint and discussion cleanup on 2026-10-07 reconcile later completed work below; current behavior sections also serve the requirements role without adding another Markdown file.
 
 ## 2026-10-07 — Markdown Rules And Consolidation
 
@@ -43,25 +43,29 @@ CI is defined in `.github/workflows/build.yml`, using `windows-latest`, `actions
 
 | Source | Responsibility |
 | --- | --- |
-| `Program.cs` | Logging startup, global exception handlers, WinForms initialization, main window. |
-| `Form1.cs` | Config reload, runnable/tag/offset/skip selection, two run slots, hotkeys, live status, taskbar overlay, fixed client sizing, ADB monitor/device readiness, opening Config and Pair / Connect. |
+| `Program.cs` | Isolated `--check-layout` branch before normal logging/config startup; otherwise logging, exception handlers, WinForms initialization, main window. |
+| `Form1.cs` | Config reload, runnable/tag/offset/Remaining selection, two independent run slots and captured run state, hotkeys, live status, taskbar overlay, fixed client sizing, ADB monitor/device readiness, opening Config and Pair / Connect. |
 | `Form1.Designer.cs` | Designer shell containing `mainLayout`; repeated run UI belongs to RunSetControl. |
 | `RunSetControl.cs` / `.Designer.cs` / `.resx` | Shared run-set control; explicit designer controls plus runtime layout, sizing, and dropdown population. Set 2 hides shared Config, Pair / Connect, and status controls. |
 | `ConfigEditorForm.cs` | Staged Settings, Devices, Offset, Scripts, Sequences, and Run Plans editing; save/backup/restore and owned Track Touch window. |
 | `TrackTouchForm.cs` | Friendly-device touch tracker, mapped live coordinates and diagnostics, completed-point history, coordinate test tap, tracker lifecycle. |
 | `WirelessAdbConnectForm.cs` | Manual Pair, Connect, and Restart Server, input validation, command output, saved Wi-Fi serial updates, Enter-to-Try and Escape close. |
 | `SearchableDropdown.cs` | Main runnable picker; popup search and selected-item highlighting. |
-| `SkipPickerControl.cs` | Compact Skip field and popup detail; hover previews, click commits. |
+| `SkipPickerControl.cs` | Retained unused legacy Skip field/popup source; removal was not authorized. |
+| `CenteredNumericUpDown.cs` | Vertically centers the Remaining native text editor while preserving outer size and spinner behavior. |
+| `RunSetLayout.cs` | Shared single-/dual-panel composition, gap, and client sizes for Form1 and diagnostic fixtures. |
+| `LayoutCheckRunner.cs` / `tools/check-layout.ps1` | Isolated main-panel geometry/text-fit diagnostics and primary-Debug launcher/report display. |
+| `AdbDeviceSnapshotReader.cs` | Complete byte-framed tracker snapshots, including empty snapshots; avoids per-row transient device-loss updates. |
 | `CountdownProgressControl.cs` | Fixed-size wait progress and caption. |
 | `ScriptConfigRespository.cs` | Config loading, migration, normalization, and saving. The filename intentionally retains the existing `Respository` spelling. |
 | `ScriptModel.cs` | ConfigLibrary, ScriptModel, ActionGroup, SequenceModel/SequenceItem, RunPlanModel/RunPlanItem, and StepAction. |
-| `ScriptRunner.cs` | Cycle planning, expansion, randomized timing, Delay, offsets, finite Skip, ADB command execution, cancellation, and live progress. |
+| `ScriptRunner.cs` | Cycle planning, expansion, randomized timing, Delay, offsets, runtime cycle count/Infinity, internal Plan tail skipping, completed-cycle callbacks, ADB execution, cancellation, and live progress. |
 | `AdbShellController.cs` | ADB command wrapper and captured Pair/Connect/Kill/Start Server helpers; physical pixel coordinates. |
 | `HotKeyManager.cs` | Parsing, independent primary/secondary registration, unregistration, and WM_HOTKEY routing. |
 | `OffsetDisplayOption.cs` / `MouseHelper.cs` | Offset choices and coordinate randomization. |
 | `AppLogger.cs` | Daily logs at `AppContext.BaseDirectory\logs`; startup deletes logs older than seven days. |
 
-Runtime flow: working-directory `config.json` loads into ConfigLibrary; Form1 builds/filter/selects runnable targets and validates the selected ready device; ScriptRunner expands and plans a cycle, enforces timing, then sends ADB commands and live progress to the selected run slot. Completion or cancellation restores editable controls, resets Skip, and resets the title. Each slot owns its own task and cancellation token.
+Runtime flow: working-directory `config.json` loads into ConfigLibrary; Form1 builds/filter/selects runnable targets and validates the selected ready device; each Start captures the run's target/library, offsets, device, timing, and options. ScriptRunner expands/plans cycles, enforces timing, sends ADB commands/live status, and reports completed cycles. Completion/cancellation restores editable controls and the title; manual Stop retains Remaining, while normal finite completion reloads its configured default. Each slot owns its own task and cancellation token.
 
 ## Main Window And UI Reference
 
@@ -71,15 +75,32 @@ Runtime flow: working-directory `config.json` loads into ConfigLibrary; Form1 bu
 - Runnable picker search belongs to its popup, clears on close, and highlights the current item when it is still present. The closed field displays the selected item only.
 - Main client size is `606 x 292` for one set and `1200 x 292` for two. RunSetControl is `594 x 284`, with content width `410`, action width `184`, and set gap `12`. Outer size derives from `SizeFromClientSize(...)` so DPI-dependent chrome does not squeeze usable content.
 - Resize/maximize are disabled. Run/Stop does not change size; only Set 2 visibility changes the client size. Form1 and RunSetControl use `AutoScaleMode.None` for this fixed profile.
-- The action column uses seven fixed `34px` rows: Run, Skip, Offset, Tag, Device, Config, Pair / Connect, followed by an explicit spacer. Extra height goes to the spacer.
+- The action column uses seven fixed `34px` rows: Run, Remaining / Infinity, Offset, Tag, Device, Config, Pair / Connect, followed by an explicit spacer. Extra height goes to the spacer.
 - Visual Studio 2026 previously rewrote scaling metadata, combo item heights, helper-created status rows, and offset items. Explicit controls stay in the designer; stable pixel layout and runtime item population stay in RunSetControl.cs after `InitializeComponent()`.
-- Skip details live in the popup as separate `Skip:` and `Start:` lines, with a larger bottom explanation area. There is no separate inline main-window skip detail label.
+- Remaining supports typing and native up/down buttons. Its label uses a baseline width of 70 pixels, widening only when its current font requires it; the number field gives up that width while retaining its right edge at 134 and Infinity at X=140. Layout/font/handle/parent-DPI changes recalculate this row. CenteredNumericUpDown vertically centers the native editor without changing the outer control, right alignment, or spinner/input behavior. There is no active Skip popup or inline skip explanation.
 - Alternate DPI/font/screen layouts need an explicit guarded profile preserving the existing baseline. Comparisons use user-provided screenshots or separately approved capture.
 - Config button rows need explicit TableLayoutPanel heights, docked buttons, and bottom padding to avoid clipping.
 - Each run slot shows action, step, cycle, next action/time, estimated end, a six-chip timeline, and countdown progress. The main clock timer runs only while a slot is active; ADB/device errors appear in the affected status panel.
 - Offset choices are No Offset, Y up/down one through six steps, and X left/right one through three steps.
 
 Hotkey status is separate from ADB status: gold means primary and secondary registered, green primary only, blue secondary only, and red none. The taskbar overlay mirrors hotkey state and shows one or two run-set identifiers. Primary/backup registration failures do not disable the other successful group. Matching start/stop hotkeys use one registration and toggle that set. Minimize unregisters hotkeys; restore/activation registers them, with UI/warning logging.
+
+### Layout Check Mode And Coverage
+
+- The approved checker is an opt-in `--check-layout` branch in the existing executable before AppLogger initialization. It creates/disposes hidden neutral native-control fixtures without constructing Form1, showing/activating the normal app, capturing the desktop, loading live config, registering hotkeys, calling ADB, or changing global display/settings. It adds no package/test project, alternate build output, or CI integration.
+- RunSetLayout shares production composition/client sizes with the fixtures; the fixture's font, padding, and window settings mirror Form1 but do not test full Form1 behavior. Each case checks idle/running/infinite fixtures: labels/buttons, native number digits/centering/spinner, Remaining/Infinity separation, control containment, selector/dropdown/countdown text heights, six timeline chips and their separation. Variable-value/long-name horizontal ellipsis is allowed, but fixed captions and all label heights are checked.
+- Eight labelled synthetic font/geometry cases cover nominal 96/120 DPI, resolutions 1920 x 1200 / 1920 x 1080, and one-/two-panel modes. Native-host cases cover both panel modes on each actual monitor and report effective DeviceDpi/font/working area. Synthetic font enlargement is not genuine Windows 125% rendering; synthetic resolution fit uses the client envelope, not simulated taskbar/chrome.
+- Unique report JSON files are written under `AppContext.BaseDirectory/layout-check`; the wrapper uses the established `bin/Debug/net8.0-windows` executable output. Reports include runtime/Windows versions and the main assembly's SHA256 build identity so different runs can be compared against the same build.
+- User-provided profiles: laptop displays 1920 x 1200 and 1920 x 1080 at 125% Scale; PC displays the same resolutions at 100% Scale; Windows Text Size is 100% on both. The user reported both UIs working after the fetched-version rebuild. That report is distinct from automated coverage and does not establish all visual/input behavior.
+- The checker automates assertions once invoked; it is not automatically attached to every build or launched on both machines. Native laptop coverage needs the same checker to run on that host, not manual inspection of every control. Automatic build-trigger/two-machine orchestration remains an unconfirmed, unimplemented discussion proposal (D-001); it is not an ongoing instruction or approval.
+- Recorded limitations: no shown-window pixel comparison, laptop-native 125% evidence, popup/Config/Pair/Track Touch coverage, input testing, or real monitor DPI-transition checks. The PowerShell wrapper was blocked by script execution policy, which was not changed; direct executable diagnostics succeeded. Commands below are reference only and do not grant new launch/test permission:
+
+```powershell
+# From the project root after an approved primary build:
+.\tools\check-layout.ps1 -SkipBuild
+# If scripts are blocked, do not change policy automatically; the executable supports:
+Start-Process '.\bin\Debug\net8.0-windows\Lazy App.exe' -ArgumentList '--check-layout' -WindowStyle Hidden -Wait
+```
 
 ## Configuration And Compatibility
 
@@ -149,15 +170,26 @@ Compatibility also includes `i`, `steps`, nested `steps` with `repeat`/`rep`, `p
 - Optional `emin` applies to one Script/Sequence cycle and must not exceed its displayed maximum. The runner plans the full cycle before execution and re-randomizes the lowest flexible wait upward until the minimum or maximum is reached. Flexible waits include Delay, action sleeps, folded Sequence item delays, and interval. When `emin` equals the maximum, every flexible wait uses its maximum.
 - Drag uses the supplied start and explicit end point, with a fixed ADB swipe duration. Without an explicit endpoint it currently uses the start point; directional derivation is not implemented.
 
-Finite Skip is selected before Run, locked during execution, reset to No Skip on target change and completion/cancellation. Infinite direct Scripts/Sequences expose only No Skip; the final finite cycle cannot be skipped. Direct Skip starts at `skip + 1`. Run Plan Skip consumes flattened item repeats globally: `A A A A A B B B` with skip 3 starts at the fourth A, and skip 5 starts at the first B.
+### Remaining Count, Infinity, And Run Isolation
+
+- Remaining is runtime state, not a saved-config rewrite. Explicit Script/Sequence/Plan selection, including reselecting the same target, loads its configured count. Ordinary Start/Stop and automatic refresh preserving the same kind/stable ID retain it; app-restart persistence was not requested.
+- Finite manual input is 1–99. Saved defaults above 99 are capped in the runtime UI only; saved data is unchanged. Normal finite completion reaches transient zero, automatically stops, then reloads the configured default (subject to the same cap). Manual Stop does not reload it.
+- Decrement once per fully completed cycle, including its waits. An interrupted cycle is not deducted and restarts on the next Start. Count/Infinity are disabled during running, but the displayed finite count still updates programmatically; editing returns after Stop.
+- Saved non-positive Script/Sequence duration means Infinity and automatically checks the checkbox; positive configured counts uncheck it. The user may check before Start. Infinity does not decrement; unchecking it from zero restores the last positive value or 1. Run Plans have no requested infinite mode.
+- Plan counts mean the sum of individual target repeats, not whole-plan repetitions. Input maximum is `min(total, 99)`; an empty/zero-cycle Plan has no runnable positive count. Execute the final N cycles in configured flattened order using internal skip = total minus Remaining. Plan 26 with total 20 and Remaining 5 skips 15 and runs cycles 16–20; after one completion Remaining 4 resumes cycles 17–20 after Stop/Start. Increasing/decreasing Remaining selects a longer/shorter tail without wrapping.
+- Config and Pair / Connect stay enabled during runs, with existing modal ownership/focus unchanged. Dialogs use separate repositories; active runs retain captured targets/library, offsets, device serial, timing, and run-control options. Stopped slots read saved changes without rebuilding active slots; hotkey remapping waits until both slots stop.
+- Only Restart Server is disabled while either slot runs, with an execution-time guard as well as button availability. Restart affects the server globally and would otherwise trigger device-loss/error cancellation.
+- Each slot has independent count, target, token/task, and device state. Preserve action/interval/emin timing, offsets, cancellation, ADB OFF, saved configuration, and stable-ID restoration outside these confirmed changes.
 
 ## ADB, Devices, And Wireless Helper
 
-ADB status colors: dark gray no server, red server with no ready device, green one ready device, yellow multiple ready devices. A ready row has ADB state `device`. Each visible/running set excludes the other's selected serial; hidden stopped Set 2 reserves no device. One available device is auto-selected. Friendly names come from settings; Wi-Fi display omits port while commands retain the full serial.
+ADB status colors: dark gray no server/unavailable tracker, red server with no ready device, green one ready device, yellow multiple ready devices. Dark gray alone does not prove the server stopped. A ready row has ADB state `device`. Each visible/running set excludes the other's selected serial; hidden stopped Set 2 reserves no device. `No Device` permits an empty panel, including Set 1 while Set 2 runs S26. Fresh idle selection may auto-select an available unreserved device, but deliberate empty/disconnected selections persist. If X13 disappears from Set 1, clear/stop only that affected slot; keep S26 selected/running in Set 2 without transferring it. Snapshot reservations, coordinated exclusions/list reconciliation, and a reserved-device selection guard prevent duplicate assignments. Friendly names come from settings; Wi-Fi display omits port while commands retain the full serial.
 
-Monitoring starts with localhost port 5037. Only an already-listening server starts `adb track-devices`. With no server, the app retries every 30 seconds and refreshes on Run/Config and Wireless helper close/restart. Config opening is not blocked by status checks. Run refreshes status before target validation, trusts cached no-device status, and only dark gray attempts a fresh monitor check. A running slot cancels and notifies if its selected device disappears. If tracking starts but no initial block arrives before Run timeout, status is red rather than dark gray.
+Monitoring starts with localhost port 5037. Only an already-listening server starts `adb track-devices`; the local TCP probe is bounded by 600ms. When the server/monitor is unavailable (NoServer), the existing recovery timer retries every 10 seconds; Run/Config and Wireless helper close/restart can request recovery sooner. This is not a regular device-list polling interval: healthy device changes stream continuously, and a healthy status stops the retry timer even for a valid empty list. Config opening is not blocked by status checks. Run refreshes status before target validation and trusts cached no-device status only with a healthy monitor; an unhealthy monitor attempts recovery regardless of the old cached state. A running slot cancels and notifies if its selected device disappears. If a healthy tracker starts but no initial block arrives before Run timeout, status is red rather than dark gray.
 
-Status is driven by track-devices output blocks, stdout close, stderr/exit, and the no-server timer; no separate health poller or background wireless reconnect/port scan. Monitor/gating decisions use `LogAdbWarning(...)`, prefix `[ADB]`, and `AppLogger.LogWarning`, including trigger, process/port state, output blocks, exit, and allow/block decisions.
+Tracker reuse requires both a live process and an active stdout reader task that is not marked stopped. Reader EOF/error or process exit marks the monitor unavailable on the UI thread so existing recovery paths can replace the app-owned tracker even if its process remains alive. Stopped/replaced tracker callbacks are rejected, and the initial-status wait uses current status rather than an older first-snapshot result; terminal failure must not be overwritten by stale success. This does not restart the ADB server, reconnect the phone, or prove that every stalled-but-still-active stream is detected.
+
+Status is driven by complete track-devices output snapshots (including empty snapshots), stdout close/reader error, process exit, and the existing NoServer recovery timer; stderr is diagnostic logging, not by itself a status transition. The byte-framed AdbDeviceSnapshotReader avoids applying partial per-row device lists. No parser-format change, separate health poller, or background wireless reconnect/port scan was added. Monitor/gating decisions use `LogAdbWarning(...)`, prefix `[ADB]`, and `AppLogger.LogWarning`, including trigger/start/reuse/recovery, process/reader state, port result, complete snapshot rows/ready count/state, stdout EOF/error byte counts, stderr/exit, and allow/block decisions. A shorter retry interval is expected to have low cost from source inspection, but persistent tracker failures may cause repeated process starts/logging; overhead has not been measured.
 
 Manual command reference:
 
@@ -170,7 +202,7 @@ adb start-server
 adb kill-server
 ```
 
-Pair authorizes the computer; Connect uses the phone's current connect port, which may change. The helper has Pair/Connect actions, Manual Input at device index 0, saved Wi-Fi IP prefill, fixed dot-separated IPv4 segments (0–255), numeric Port and Pair Code, Try, and Restart Server. Pair Code is shown for Pair. Manual Input clears IP/Port. Enter invokes Try for the selected action; Escape closes. Restart runs kill-server then start-server. Results show captured output; successful Connect updates lastSerial/lastSeen and main ADB status, while Pair success alone does not mark connected. Display/status text uses Title Case except user-entered values.
+Pair authorizes the computer; Connect uses the phone's current connect port, which may change. The helper has Pair/Connect actions, Manual Input at device index 0, saved Wi-Fi IP prefill, fixed dot-separated IPv4 segments (0–255), numeric Port and Pair Code, Try, and Restart Server. Pair Code is shown for Pair. Manual Input clears IP/Port. Enter invokes Try for the selected action; Escape closes. Restart runs kill-server then start-server and is blocked while either main run slot is active; Pair/Connect remain available. Results show captured output; successful Connect updates lastSerial/lastSeen and main ADB status, while Pair success alone does not mark connected. Display/status text uses Title Case except user-entered values.
 
 ## Track Touch Reference
 
@@ -196,6 +228,46 @@ The dated 2026-06-08 review reported the following findings. Read-only source in
 
 ## Historical Implementation And Verification Evidence
 
+### 2026-10-07 — Remaining Count And Independent Run State (D-002)
+
+- Implemented the confirmed Remaining/Infinity, Plan final-N cycles, explicit-reselection/default reload, finite-completion reload, manual-stop retention, completed-cycle deduction, saved-config preservation, accessible Config/Pair, frozen active runs, Restart Server guard, No Device selection, and complete tracker snapshot requirements recorded above.
+- Connected source: Form1.cs (`RefreshRemainingCount`, `OnRunCycleCompleted`, Start cleanup/captured options, config/device refresh), RunSetControl.cs / Designer, SearchableDropdown.cs (`SelectionCommitted` including same-item selection), ScriptRunner.cs (`RunExecutionOptions` / completed-cycle callbacks / Plan skip), WirelessAdbConnectForm.cs, and AdbDeviceSnapshotReader.cs. Retained SkipPickerControl source was not deleted.
+- Independent regression review identified simultaneous idle auto-assignment collisions and stale device lists; coordinated exclusions, list reconciliation, and reserved-device selection guards were added and re-reviewed with no remaining concrete in-scope issues.
+- Recorded checks at implementation: primary `dotnet build Lazy_App_Codex_Core.sln --no-restore` passed with zero warnings/errors; `git diff --check` passed with line-ending notices only. Source review covered persistence/completion/cancellation, Plan tails, active-run snapshots, device assignment/framing, and Restart Server restrictions. No GUI/device test, runtime automation suite, or acceptance was performed/inferred. Status: Implemented; limitations are not acknowledgement tasks.
+
+### 2026-10-07 — Remaining Editor Centering And Label Width (D-003, D-004)
+
+- D-003: CenteredNumericUpDown.cs and the Remaining Designer type center the native editor after layout/font changes with recursion guards. Outer dimensions, right alignment, typing/spinner controls, count/Infinity logic, and unrelated UI were preserved. Primary build and diff check passed; independent source review found no concrete regressions. No live visual/input/DPI-transition test was performed at that stage.
+- D-004: RunSetControl measures Remaining's preferred label width after layout/handle/font/parent-DPI changes, preserving the baseline where it fits, numeric right edge, Infinity position, designer values, and fixed client sizes. Primary build/scoped review/diff check passed with zero build warnings/errors. No app launch or device-specific visual confirmation was performed at that stage. Both changes are Implemented, not awaiting acknowledgement.
+
+### 2026-10-07 — Fetched-Version Rebuild And User Report (D-005)
+
+- User fetched another GitHub version and overwrote prior Discussion Markdown, then requested a rebuild first. The current checkout/notes were preserved; no old notes, source/config changes, or Git mutations were restored.
+- Both `dotnet build Lazy_App_Codex_Core.sln --no-restore` and `dotnet build Lazy_App_Codex_Core.sln --no-restore -t:Rebuild` passed in the primary Debug output with zero warnings/errors. The app was not launched for those commands. The user subsequently reported both PC/laptop UIs working; this is user-reported layout evidence, not all-behavior acceptance or an automated laptop-native result.
+
+### 2026-10-07 — Main-Panel Layout Checker (D-006)
+
+- Implemented the bounded, opt-in checker and shared unchanged composition in Program.cs, LayoutCheckRunner.cs, RunSetLayout.cs, Form1.cs, and tools/check-layout.ps1. No dependency/test project, CI/Git changes, alternate build output, remote setup, global settings change, or live config/log/ADB operation was made.
+- Independent impact review established that RunSetControl can be instantiated without normal Form1 startup. Post-change review found gaps for ellipsized-label heights, fixed-caption widths, native dropdown/countdown text heights, and fixture font disposal; checker-only corrections were applied. Re-review found no blocking issues or normal-startup/UI behavior regressions.
+- Recorded final primary build: zero warnings/errors; `git diff --check` passed. Direct hidden diagnostic execution exited 0 in about two seconds, passing all 12 cases / 5,694 assertions: four native cases (two local monitors, both panel modes) at effective 96 DPI, plus eight labelled synthetic cases at nominal 96/120 DPI. This is geometry/text-fit evidence, not shown-window pixel or input testing.
+- Final report: `bin/Debug/net8.0-windows/layout-check/report-20261007-045139-814-af1b39275bc34b58ab7126921bb4ff1b.json`; assembly SHA256 `6F29A51F26AD06B14294810ED99753A8588B225AE9A6FF6658FD4E6DBB838AD2`. PowerShell parsing had zero errors, but wrapper execution was blocked by script policy and remains unverified; no policy was bypassed or changed. Laptop-native 125%, other windows/popups, input, shown pixels, and monitor DPI transitions remain unverified. Status: Implemented, with these separate limitations.
+
+### 2026-10-07 — Wireless Monitor Recovery And 10-Second Retry (D-008)
+
+- User reported the phone absent from the opened Device dropdown for about one minute after Wireless Debugging reconnect; closing/reopening Lazy App made it appear. The ADB status dot color is unknown. This was an absent row, not merely deliberate No Device selection retention; independent-slot reservations still remain valid behavior.
+- Source investigation and independent impact review established a dead-reader/live-process recovery gap: reader EOF/parser failure could mark NoServer while Ensure kept reusing the still-live process. Available logs did not establish this as the original incident's cause, and the reconnect was not reproduced.
+- Separately approved diagnostic before the fix: `C:\adb\adb.exe -H 127.0.0.1 -P 5037 track-devices` against the already-running local server for 5,039ms. Stdout was exactly four bytes `30-30-30-30` (`0000`), with no newline/stderr. The user confirmed the device list genuinely was empty, so the frame was expected/correct. The newline-framing hypothesis was withdrawn. Only that temporary tracker was started/stopped; no capture file, app/server restart, connection change, or phone input was performed. This diagnostic was not a post-fix test.
+- User approved the narrow recovery/logging fix. Connected Form1.cs paths: `_adbTrackReaderTask` / `_adbTrackReaderStopped`, `IsAdbTrackMonitorHealthy`, `EnsureAdbTrackMonitorAsync`, `RefreshAdbStatusForRunAsync`, `ReadTrackDeviceSnapshotsAsync`, `MarkTrackProcessStopped`, `ApplyTrackedStatus`, `WaitForTrackDevicesStatusAsync`, and `StopTrackDevicesProcess`. Reuse/recovery now accounts for reader health, safely detaches old tracker ownership, rejects stale callbacks, and logs relevant monitor/snapshot/failure state. Complete/empty snapshots, healthy cached NoDevice rejection, independent run slots, intentional empty selections, UI/config/dependencies and parser format were preserved. No new polling, automatic reconnect, or ADB server restart was added.
+- Independent regression review found an older first-snapshot task result could overwrite a newer terminal failure and stop recovery. The wait now rechecks monitor health and returns current status; final independent source re-review reported no remaining actionable in-scope issues. Primary `dotnet build Lazy_App_Codex_Core.sln --no-restore` after the correction passed with 0 warnings / 0 errors; `git diff --check` passed.
+- User subsequently approved changing only the existing retry interval from 30 to 10 seconds. `_adbRetryTimer.Interval` is 10000; normal streamed updates, timer gating and recovery logic were unchanged. The same primary build passed with 0 warnings / 0 errors, and source-value/diff checks passed. No separate independent review was run for this one-line interval adjustment.
+- Status: Implemented. No post-fix app launch, automated/runtime test, layout checker, or live ADB/device test was run, and no manual success/acceptance was inferred. Original incident cause/reproduction and real reconnect recovery remain unverified; these limitations are not acknowledgement tasks. Earlier unrelated dirty changes were preserved.
+
+### 2026-10-07 — Documentation Checkpoint And Discussion Cleanup
+
+- User invoked cleanup-discussion and doc-checkpoint. Requirements/reference and historical evidence for D-002–D-006 were saved and re-read before completed Discussion entries were removed. AGENTS current-state descriptions were reconciled, and External Folders recorded the skill-definition subpaths. No new Markdown file or structure migration was introduced.
+- Verification: independent documentation re-review found no remaining concrete inconsistencies; seven local Markdown links and the four-file inventory passed; `git diff --check` passed with line-ending notices only. Application/checker source hashes remained unchanged during cleanup, and existing unrelated/source edits were preserved. No build, application/checker test execution, GUI/device interaction, network operation, or Git mutation was performed for this documentation task. D-001 remains proposed/deferred in Discussion for the user's Keep/Remove decision; no unfinished item was silently dropped or manual-test acknowledgement task added.
+- Later same-day invocation transferred D-008 and its approved 10-second retry follow-up into the current ADB reference/history above, then removed the completed Discussion entry only after saving/re-reading it. AGENTS recovery/cache/status/logging descriptions were reconciled; External Folders was unchanged because existing entries already cover the tooling paths. Seven local links, the four-file inventory, source comparison across 29 files, and diff checks passed. Independent documentation review confirmed complete transfer and preserved D-001; its timeout wording correction was applied so red fallback requires a still-healthy tracker. No new build/runtime/device check or source change was made by this checkpoint; original incident/live-test limitations and proposed/deferred D-001 were preserved.
+
 ### 2026-06-08 — Main Window Review
 
 The original dated review covered fixed client layout, seven-row action column/spacer, compact Skip popup/details, infinite/final-loop skip exclusions, flattened Run Plan Skip, countdown/timeline, and normal system arrows for Offset/Tag/Device. Reported verification at that time: `dotnet build Lazy_App_Codex_Core.sln --no-restore` succeeded with zero warnings/errors; `git diff --check` had no errors, with a normal CRLF warning. That dated result does not validate later changes.
@@ -210,7 +282,7 @@ The earlier documentation handoff updated seven living documents and left the da
 
 These checks are available when the user requests testing or reports a bug. They are not an active acknowledgement queue or permission for Codex to launch/control the application or devices.
 
-- Main UI: fixed one/two-set layout, Run/Stop size stability, hotkey/taskbar colors, Alt+1/2/3 and Escape, runtime Offset item population after designer rewrites, readable Skip popup, countdown/timeline while active.
-- Run/config: independent cancellation and selected devices, no-device gating/loss notification, correct finite Skip, exact Run Plan order/repeats, min/max/emin timing, leading Delay offset, staged save/close/restore behavior, stable IDs, hidden references, tags plus blank entries.
+- Main UI: fixed one/two-set layout, Run/Stop size stability, hotkey/taskbar colors, Alt+1/2/3 and Escape, runtime Offset population after designer rewrites, readable/centered Remaining and Infinity, countdown/timeline while active. The bounded checker covers only the documented geometry/text-fit subset when execution is separately approved.
+- Run/config: Remaining/Infinity defaults/reselection/manual-stop/completion, fully completed versus interrupted cycles, Plan final-N order and count caps, independent cancellation/devices including empty Set 1, config edits isolated from active runs, no-device gating/loss notification, exact Plan order/repeats, min/max/emin timing, leading Delay offset, staged save/close/restore, stable IDs, hidden references, tags plus blank entries.
 - Wireless/devices: Manual Input clearing, saved IP prefill, numeric/IP validation, Pair vs Connect status, Restart Server refresh, Enter-to-Try, names/conflict highlighting, disconnected rename/delete and ready-only Sync.
 - Tracker: matching-event/display mapping on the selected device, friendly names and safe switch, live points/drags, completed-point-only history, double-click/test tap, process stop on switch/loss/close.

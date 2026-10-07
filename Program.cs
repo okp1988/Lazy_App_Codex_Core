@@ -6,8 +6,15 @@ namespace Lazy_App_Codex_Core
         ///  The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
+            if (args.Contains("--check-layout", StringComparer.OrdinalIgnoreCase))
+            {
+                // Diagnostics must not initialize logs or construct the real main window.
+                Environment.ExitCode = LayoutCheckRunner.Run();
+                return;
+            }
+
             AppLogger.Initialize();
             Application.ThreadException += OnThreadException;
             AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
