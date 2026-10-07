@@ -26,7 +26,8 @@ namespace Lazy_App_Codex_Core
         public bool ShowStatusDots { get; }
         public bool ShowSharedButtons { get; }
         public SearchableDropdown ScriptBox => ddlScript;
-        public SkipPickerControl SkipBox => ddlSkip;
+        public NumericUpDown CountBox => numRemaining;
+        public CheckBox InfiniteBox => chkInfinite;
         public ComboBox OffsetBox => ddlOffset;
         public ComboBox TagFilter => ddlTagFilter;
         public ComboBox DeviceBox => ddlDevice;
@@ -77,7 +78,7 @@ namespace Lazy_App_Codex_Core
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, FixedHeight - (ActionRowHeight * 7)));
 
             ConfigureButton(btnRun, ActionRowHeight * 0);
-            ConfigureSkipPicker(ddlSkip, ActionRowHeight * 1);
+            ConfigureRemainingControls();
             ConfigureCombo(ddlOffset, ActionRowHeight * 2, 20, 28, new Padding(0, 3, 0, 3));
             ConfigureCombo(ddlTagFilter, ActionRowHeight * 3, 20, 28, new Padding(0, 3, 0, 3));
             ConfigureCombo(ddlDevice, ActionRowHeight * 4, 18, 26, new Padding(0, 4, 0, 4));
@@ -189,12 +190,21 @@ namespace Lazy_App_Codex_Core
             button.Size = new Size(ActionColumnWidth, 32);
         }
 
-        private static void ConfigureSkipPicker(SkipPickerControl picker, int rowTop)
+        private void ConfigureRemainingControls()
         {
-            picker.Dock = DockStyle.Fill;
-            picker.Location = new Point(0, rowTop + 4);
-            picker.Margin = new Padding(0, 4, 0, 6);
-            picker.Size = new Size(ActionColumnWidth, 24);
+            remainingPanel.Dock = DockStyle.Fill;
+            remainingPanel.Margin = Padding.Empty;
+            remainingPanel.Size = new Size(ActionColumnWidth, ActionRowHeight);
+            lblRemaining.SetBounds(0, 0, 70, ActionRowHeight);
+            lblRemaining.TextAlign = ContentAlignment.MiddleLeft;
+            numRemaining.SetBounds(72, 6, 62, 23);
+            numRemaining.Minimum = 0;
+            numRemaining.Maximum = 99;
+            numRemaining.TextAlign = HorizontalAlignment.Right;
+            chkInfinite.SetBounds(140, 0, 44, ActionRowHeight);
+            chkInfinite.TextAlign = ContentAlignment.MiddleLeft;
+            controlToolTip.SetToolTip(numRemaining, "Remaining cycles (maximum 99)");
+            controlToolTip.SetToolTip(chkInfinite, "Run indefinitely (Scripts and Sequences only)");
         }
 
         private static void ConfigureCombo(ComboBox combo, int rowTop, int itemHeight, int height, Padding margin, int? dropDownWidth = null)

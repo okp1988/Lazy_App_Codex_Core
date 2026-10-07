@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Rule Priority And Markdown Records
+
+- The global working rules in `C:\Users\okp19\.codex\AGENTS.md` take priority over this file. This file supplies project-specific context and constraints; it does not replace global approval, filesystem, build, Git, or computer-control rules.
+- Keep exactly four maintained project Markdown files: `AGENTS.md`, `docs/DISCUSSION.md`, `docs/PROGRESS.md`, and `docs/EXTERNAL_FOLDERS.md`. Creating another Markdown file requires explicit approval to change this convention.
+- Only `docs/DISCUSSION.md` and `docs/EXTERNAL_FOLDERS.md` may be created or updated automatically under the global rules. Updating `AGENTS.md` or `docs/PROGRESS.md` requires an explicit user request or approval.
+- Discussion holds active requests, decisions, approval scope, and actual unfinished work. Progress holds the approved project reference, implementation history, and recorded verification evidence. External Folders records project-used external roots and grants no access permission.
+- Close completed implementation after reporting actual checks and limitations. Do not keep an acknowledgement-only manual-test or retest task in Discussion. The user reports bugs when further work is needed; silence is not evidence of a passed manual test.
+- Command descriptions and app-runtime behavior below are project context, not permission for Codex to launch the app, interact with devices, capture screenshots, restore packages over the network, publish, or change Git state.
+
 ## Project Shape
 
 - This is a single-project Windows Forms app targeting `net8.0-windows` with `UseWindowsForms=true`; the solution contains no separate test project.
@@ -31,7 +40,7 @@
 - Settings are migrated from `hotkeyStartStopToggle` to `hotkeyStart`; do not reintroduce the old setting as the canonical key. Backup hotkeys use `hotkeyBackupStart` and `hotkeyBackupStop`, may be blank, and control Set 2 while Set 2 is open. They are registered independently from the primary Set 1 hotkeys.
 - Offset profiles are named `s<number>` and selected by matching digits in the script name; fallback keys include `offsetX`/`offsetY`, `ox`/`oy`, `x`/`y`, and `s`.
 - Script aliases are meaningful API: `d`, `imin`, `imax`, `i`, `config`, `steps`, nested `steps` with `repeat`/`rep`, `a`, `s`, `s2`, `p`, `p2`, `r`, `t`, and `o` must remain compatible unless intentionally migrated.
-- Runtime action normalization maps `left` to `leftclick`, `right` to `rightclick`, and leaves directional drag names usable; unknown actions are logged and skipped.
+- Runtime normalization accepts `leftclick` as `left`, `rightclick`/`back` as `right`, and `wait` as `delay`. Directional drag names are accepted but currently normalize to generic `drag`; unknown actions currently fall back to `left`. These observed limitations are recorded in `docs/PROGRESS.md` and are not approved fixes in this documentation task.
 - Only left-click steps consume the selected UI offset. A per-step `offset`/`o` value of `x` or `y` overrides the axis selected in the main window.
 - The config editor writes compact script output (`d`, `imin`, `imax`, `emin`, `config`, `a`, `s`, `s2`, `r`, `t`) and exposes `left`, `right`, `drag`, and `delay` in its action grids. A Delay step performs no ADB command and uses `t` as its delay range; legacy `wait` action input normalizes to `delay`.
 - Sequences are first-class config entries. Sequence items may reference scripts by `scriptId` or contain direct actions; sequences must not reference other sequences.
@@ -49,7 +58,7 @@
 - Script and Sequence `emin` is an optional minimum cycle time in seconds. It cannot exceed the displayed max cycle time; runtime computes a cycle plan before execution and re-randomizes the lowest flexible waits upward until the plan reaches `emin`. If `emin` equals max cycle time, all flexible waits use their maximum values.
 - Run Plan item repeat overrides the referenced Script/Sequence saved `Duration` only for that item. Referenced targets keep their own internals: `emin`, `imin`, `imax`, sleeps, Sequence item delays, offsets, ADB OFF behavior, cancellation, and live status updates. A Run Plan can alternate the same target multiple times and must preserve the configured item order exactly.
 - Pre-run skip consumes finite loops before execution. For direct Scripts/Sequences this starts at `skip + 1`; for Run Plans it consumes the flattened item-repeat order globally, for example `A A A A A B B B` with skip 3 starts at the fourth plan cycle. Skip is not configurable while a run is active and is reset after completion or cancellation.
-- Drag steps use `s2`/`scrX2`/`scrY2` when supplied. Without an explicit end point, directional drag aliases derive the end point from `RandX`/`RandY`.
+- Drag steps use `s2`/`scrX2`/`scrY2` when supplied. Without an explicit end point, the current runner uses the start point as the end point; directional endpoint derivation is an observed limitation recorded in `docs/PROGRESS.md`.
 - Delay steps use their `t` minimum/maximum as a randomized cancellable wait and appear as `DELAY` in live status/timeline. A leading Delay does not consume the selected offset; the first following applicable left-click receives it.
 - Global hotkeys are unregistered when the window is minimized and re-registered when restored/activated; this behavior is logged in the UI log and warning log. Secondary hotkeys are included in registration only while Set 2 is open.
 - If active start and stop hotkeys are the same, only one hotkey is registered and it toggles start/stop.
@@ -64,8 +73,8 @@
 - Run the WinForms app locally: `dotnet run --project Lazy_App_Codex_Core.csproj`
 - CI uses `.github/workflows/build.yml` on `windows-latest` with `actions/setup-dotnet@v4` and `dotnet-version: 8.0.x`.
 - Pushes to `main` or `master` replace the single GitHub Release tagged `latest`; the release zip includes publish output plus the repository `config.json`.
-- No automated test command is detectable in this repository; verify changes with `dotnet build` and manual WinForms/ADB checks.
-- Never update Markdown files unless the user explicitly says to update Markdown/docs in that request. If code changes make docs stale, mention it in the final response instead of editing docs proactively.
+- The established primary code build is `dotnet build Lazy_App_Codex_Core.sln --no-restore` when packages are already restored. Follow the global build/lock/restore rules. Documentation-only work does not require a build.
+- No separate automated test project is present. Report actual build/review evidence and any checks not performed; manual WinForms/ADB checks require separate approval and are not acknowledgement tasks in Discussion.
 
 ## Main Window UI Handoff
 
@@ -74,8 +83,8 @@
 - `Form1.Designer.cs` and `RunSetControl.Designer.cs` should stay on `AutoScaleMode.None` for this fixed-size main window. Avoid reintroducing designer `AutoScaleDimensions` churn for the run sets.
 - `RunSetControl` action controls use seven fixed `34px` rows (`Run`, `Skip`, `Offset`, `Tag`, `Device`, `Config`, `Pair / Connect`) plus a spacer row. Do not let `TableLayoutPanel` leftover height stretch the Pair / Connect button; add or adjust the explicit spacer row when bottom whitespace changes.
 - The main content area no longer has a separate skip detail label; skip details live in the `SkipPickerControl` popup. Do not re-add an inline skip explanation unless the popup design changes again.
-- When tuning layout on the next development platform, compare against a PC screenshot before and after. Do not break the compact progress layout while adjusting platform-specific spacing. If another platform needs different dimensions, add a guarded layout profile keyed by DPI/screen/font context, leaving the current client-size constants unchanged.
-- Before committing or pushing, include new UI files `CountdownProgressControl.cs`, `SkipPickerControl.cs`, `RunSetControl.cs`, `RunSetControl.Designer.cs`, `RunSetControl.resx`, and `TrackTouchForm.cs`; otherwise a pull on another machine will not have the current run-set or touch-tracking UI.
+- When tuning layout on the next development platform, use available user-provided PC screenshots or separately approved capture for comparison. Do not break the compact progress layout while adjusting platform-specific spacing. If another platform needs different dimensions, add a guarded layout profile keyed by DPI/screen/font context, leaving the current client-size constants unchanged.
+- Current UI source includes `CountdownProgressControl.cs`, `SkipPickerControl.cs`, `RunSetControl.cs`, `RunSetControl.Designer.cs`, `RunSetControl.resx`, and `TrackTouchForm.cs`. Preserve their dependencies when changing or distributing the UI; this does not authorize commit or push operations.
 
 ## Local Runtime Assumptions
 
@@ -84,7 +93,7 @@
 - If `adb track-devices` starts successfully but does not emit an initial device block before the Run timeout, treat that as red/no ready device rather than dark gray/no server, because the server is known to be running.
 - ADB monitor/run gating changes should use the existing `LogAdbWarning(...)` path, which prefixes messages with `[ADB]` and writes through `AppLogger.LogWarning`: trigger source, tracker process state, port check result, `track-devices` output blocks, process exit, and Run allow/block.
 - Do not add a separate polling/health-check path to cover `track-devices` bugs. `adbStatusDot` should be driven by the `track-devices` process output close, stderr, or exit events plus the no-server retry timer.
-- Wireless ADB setup is manual; README documents `adb pair`, `adb connect`, `adb devices`, `adb disconnect`, `adb start-server`, and `adb kill-server`.
+- Wireless ADB setup is manual; `docs/PROGRESS.md` records `adb pair`, `adb connect`, `adb devices`, `adb disconnect`, `adb start-server`, and `adb kill-server` usage.
 - Pair / Connect is a manual helper for changing wireless debugging ports and restarting the ADB server. Do not add automatic background reconnect loops or port scanning.
 - Pair / Connect uses Try as the form accept action, so Enter must invoke the currently selected Pair or Connect operation while Esc closes the helper.
 - `config.json` in the repo is the file loaded by `Form1` via `new ScriptConfigRepository("config.json")`; changing the working directory changes which config file is used.

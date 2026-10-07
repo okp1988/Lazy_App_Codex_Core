@@ -6,6 +6,11 @@ namespace Lazy_App_Codex_Core
     {
         private readonly ScriptConfigRepository _repository;
         private readonly AdbShellController _adbController;
+        private readonly Func<bool> _canRestartServer;
+        private readonly System.Windows.Forms.Timer _restartAvailabilityTimer = new() { Interval = 500 };
+        private readonly ToolTip _restartToolTip = new();
+        private Control? _restartButtonArea;
+        private bool _busy;
         private readonly ComboBox _actionBox = new();
         private readonly ComboBox _deviceBox = new();
         private readonly IpAddressBox _ipBox = new();
@@ -17,10 +22,11 @@ namespace Lazy_App_Codex_Core
         private readonly Label _statusLabel = new();
         private readonly List<DeviceChoice> _devices = new();
 
-        public WirelessAdbConnectForm(ScriptConfigRepository repository, AdbShellController adbController)
+        public WirelessAdbConnectForm(ScriptConfigRepository repository, AdbShellController adbController, Func<bool>? canRestartServer = null)
         {
             _repository = repository;
             _adbController = adbController;
+            _canRestartServer = canRestartServer ?? (() => true);
 
             Text = "Wireless ADB";
             StartPosition = FormStartPosition.CenterParent;
@@ -34,10 +40,30 @@ namespace Lazy_App_Codex_Core
             AcceptButton = _tryConnectButton;
             LoadDevices();
             UpdateActionState();
+            _restartAvailabilityTimer.Tick += (_, _) => UpdateRestartAvailability();
+            UpdateRestartAvailability();
+            _restartAvailabilityTimer.Start();
         }
 
         public bool ConfigChanged { get; private set; }
         public bool ServerRestarted { get; private set; }
+
+        protected override void OnActivated(EventArgs e)
+        {
+            base.OnActivated(e);
+            UpdateRestartAvailability();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _restartAvailabilityTimer.Dispose();
+                _restartToolTip.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
@@ -114,6 +140,7 @@ namespace Lazy_App_Codex_Core
             layout.SetColumnSpan(_statusLabel, 3);
 
             Controls.Add(layout);
+            _restartButtonArea = layout;
         }
 
         private static void ConfigureCombo(ComboBox combo)
@@ -267,6 +294,13 @@ namespace Lazy_App_Codex_Core
 
         private async Task RestartAdbServerAsync()
         {
+            if (_busy || !_canRestartServer())
+            {
+                UpdateRestartAvailability();
+                ShowValidation("Stop Active Runs Before Restarting ADB.");
+                return;
+            }
+
             SetBusy(true);
             _statusLabel.ForeColor = SystemColors.ControlText;
             _statusLabel.Text = "Restarting ADB Server...";
@@ -341,8 +375,23 @@ namespace Lazy_App_Codex_Core
 
         private void SetBusy(bool busy)
         {
+            _busy = busy;
             _tryConnectButton.Enabled = !busy;
-            _restartServerButton.Enabled = !busy;
+            UpdateRestartAvailability();
+        }
+
+        private void UpdateRestartAvailability()
+        {
+            bool allowed = _canRestartServer();
+            _restartServerButton.Enabled = !_busy && allowed;
+            string reason = allowed ? "Restart ADB Server" : "Stop active runs to restart ADB";
+            _restartServerButton.AccessibleDescription = reason;
+            _restartToolTip.SetToolTip(_restartServerButton, reason);
+            // Disabled controls do not receive hover messages; show the reason on their layout too.
+            if (_restartButtonArea != null)
+            {
+                _restartToolTip.SetToolTip(_restartButtonArea, allowed ? "" : reason);
+            }
         }
 
         private void SaveConnectedDevice(string ip, string serial)

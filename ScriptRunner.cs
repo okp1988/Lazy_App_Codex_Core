@@ -18,6 +18,9 @@ namespace Lazy_App_Codex_Core
     public sealed class RunExecutionOptions
     {
         public int SkipCycles { get; init; }
+        public int? CycleCount { get; init; }
+        public bool? IsInfinite { get; init; }
+        public Action? OnCycleCompleted { get; init; }
     }
 
     public class ScriptRunner
@@ -35,17 +38,18 @@ namespace Lazy_App_Codex_Core
             RunExecutionOptions? options = null)
         {
             var adb = new AdbShellController(deviceSerial: deviceSerial);
-            if (script.Duration <= 0)
+            if (options?.IsInfinite ?? script.Duration <= 0)
             {
                 long loop = 1;
                 while (true)
                 {
                     await RunLoopAsync(script, loop, 0, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+                    NotifyCycleCompleted(token, options?.OnCycleCompleted);
                     loop++;
                 }
             }
 
-            await RunScriptForCyclesAsync(script, script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled, GetStartLoop(options));
+            await RunScriptForCyclesAsync(script, options?.CycleCount ?? script.Duration, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled, GetStartLoop(options), options?.OnCycleCompleted);
         }
 
         public async Task RunSequenceAsync(
@@ -61,20 +65,18 @@ namespace Lazy_App_Codex_Core
             RunExecutionOptions? options = null)
         {
             var adb = new AdbShellController(deviceSerial: deviceSerial);
-            if (sequence.Duration <= 0)
+            if (options?.IsInfinite ?? sequence.Duration <= 0)
             {
                 long loop = 1;
                 while (true)
                 {
                     await RunSequenceLoopAsync(sequence, library, loop, 0, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
+                    NotifyCycleCompleted(token, options?.OnCycleCompleted);
                     loop++;
                 }
             }
 
-            for (long loop = GetStartLoop(options); loop <= sequence.Duration; loop++)
-            {
-                await RunSequenceLoopAsync(sequence, library, loop, sequence.Duration, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
-            }
+            await RunSequenceForCyclesAsync(sequence, library, options?.CycleCount ?? sequence.Duration, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled, GetStartLoop(options), options?.OnCycleCompleted);
         }
 
         public async Task RunPlanAsync(
@@ -128,6 +130,7 @@ namespace Lazy_App_Codex_Core
                             token,
                             onStatus,
                             isAdbEnabled);
+                        NotifyCycleCompleted(token, options?.OnCycleCompleted);
                     }
 
                     continue;
@@ -146,6 +149,7 @@ namespace Lazy_App_Codex_Core
 
                     var scriptOffset = scriptOffsetResolver(script);
                     await RunLoopAsync(script, globalLoop, totalPlanCycles, scriptOffset.value, scriptOffset.axis, adb, token, onStatus, isAdbEnabled);
+                    NotifyCycleCompleted(token, options?.OnCycleCompleted);
                 }
             }
         }
@@ -159,12 +163,14 @@ namespace Lazy_App_Codex_Core
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
             bool isAdbEnabled,
-            int startLoop = 1)
+            int startLoop = 1,
+            Action? onCycleCompleted = null)
         {
-            int cycles = Math.Max(1, cycleCount);
+            int cycles = Math.Max(0, cycleCount);
             for (long loop = Math.Max(1, startLoop); loop <= cycles; loop++)
             {
                 await RunLoopAsync(script, loop, cycles, selectedOffset, selectedOffsetAxis, adb, token, onStatus, isAdbEnabled);
+                NotifyCycleCompleted(token, onCycleCompleted);
             }
         }
 
@@ -179,12 +185,14 @@ namespace Lazy_App_Codex_Core
             CancellationToken token,
             Action<LiveRunStatus> onStatus,
             bool isAdbEnabled,
-            int startLoop = 1)
+            int startLoop = 1,
+            Action? onCycleCompleted = null)
         {
-            int cycles = Math.Max(1, cycleCount);
+            int cycles = Math.Max(0, cycleCount);
             for (long loop = Math.Max(1, startLoop); loop <= cycles; loop++)
             {
                 await RunSequenceLoopAsync(sequence, library, loop, cycles, selectedOffset, selectedOffsetAxis, scriptOffsetResolver, adb, token, onStatus, isAdbEnabled);
+                NotifyCycleCompleted(token, onCycleCompleted);
             }
         }
 
@@ -551,6 +559,12 @@ namespace Lazy_App_Codex_Core
         private static int GetStartLoop(RunExecutionOptions? options)
         {
             return Math.Max(1, (options?.SkipCycles ?? 0) + 1);
+        }
+
+        private static void NotifyCycleCompleted(CancellationToken token, Action? onCycleCompleted)
+        {
+            token.ThrowIfCancellationRequested();
+            onCycleCompleted?.Invoke();
         }
 
         public static int GetRunPlanCycleCount(RunPlanModel runPlan)

@@ -18,6 +18,7 @@ namespace Lazy_App_Codex_Core
 
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             layout = new TableLayoutPanel();
             contentLayout = new TableLayoutPanel();
             selectorLayout = new TableLayoutPanel();
@@ -45,7 +46,11 @@ namespace Lazy_App_Codex_Core
             lblEstimatedEndValue = new Label();
             actionPanel = new TableLayoutPanel();
             btnRun = new Button();
-            ddlSkip = new SkipPickerControl();
+            remainingPanel = new Panel();
+            lblRemaining = new Label();
+            numRemaining = new CenteredNumericUpDown();
+            chkInfinite = new CheckBox();
+            controlToolTip = new ToolTip(components);
             ddlOffset = new ComboBox();
             ddlTagFilter = new ComboBox();
             ddlDevice = new ComboBox();
@@ -56,6 +61,8 @@ namespace Lazy_App_Codex_Core
             selectorLayout.SuspendLayout();
             liveStatusLayout.SuspendLayout();
             actionPanel.SuspendLayout();
+            remainingPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)numRemaining).BeginInit();
             SuspendLayout();
             // 
             // layout
@@ -387,7 +394,7 @@ namespace Lazy_App_Codex_Core
             actionPanel.ColumnCount = 1;
             actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             actionPanel.Controls.Add(btnRun, 0, 0);
-            actionPanel.Controls.Add(ddlSkip, 0, 1);
+            actionPanel.Controls.Add(remainingPanel, 0, 1);
             actionPanel.Controls.Add(ddlOffset, 0, 2);
             actionPanel.Controls.Add(ddlTagFilter, 0, 3);
             actionPanel.Controls.Add(ddlDevice, 0, 4);
@@ -421,15 +428,48 @@ namespace Lazy_App_Codex_Core
             btnRun.Text = "Run";
             btnRun.UseVisualStyleBackColor = true;
             //
-            // ddlSkip
+            // remainingPanel
             //
-            ddlSkip.Dock = DockStyle.Fill;
-            ddlSkip.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            ddlSkip.Location = new Point(0, 38);
-            ddlSkip.Margin = new Padding(0, 4, 0, 6);
-            ddlSkip.Name = "ddlSkip";
-            ddlSkip.Size = new Size(184, 24);
-            ddlSkip.TabIndex = 1;
+            remainingPanel.Controls.Add(lblRemaining);
+            remainingPanel.Controls.Add(numRemaining);
+            remainingPanel.Controls.Add(chkInfinite);
+            remainingPanel.Dock = DockStyle.Fill;
+            remainingPanel.Location = new Point(0, 34);
+            remainingPanel.Margin = new Padding(0);
+            remainingPanel.Name = "remainingPanel";
+            remainingPanel.Size = new Size(184, 34);
+            remainingPanel.TabIndex = 1;
+            //
+            // lblRemaining
+            //
+            lblRemaining.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            lblRemaining.Location = new Point(0, 0);
+            lblRemaining.Name = "lblRemaining";
+            lblRemaining.Size = new Size(70, 34);
+            lblRemaining.Text = "Remaining";
+            lblRemaining.TextAlign = ContentAlignment.MiddleLeft;
+            //
+            // numRemaining
+            //
+            numRemaining.AccessibleName = "Remaining cycle count";
+            numRemaining.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            numRemaining.Location = new Point(72, 6);
+            numRemaining.Maximum = new decimal(new int[] { 99, 0, 0, 0 });
+            numRemaining.Name = "numRemaining";
+            numRemaining.Size = new Size(62, 23);
+            numRemaining.TabIndex = 0;
+            numRemaining.TextAlign = HorizontalAlignment.Right;
+            //
+            // chkInfinite
+            //
+            chkInfinite.AccessibleName = "Run indefinitely";
+            chkInfinite.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            chkInfinite.Location = new Point(140, 0);
+            chkInfinite.Name = "chkInfinite";
+            chkInfinite.Size = new Size(44, 34);
+            chkInfinite.TabIndex = 1;
+            chkInfinite.Text = "∞";
+            chkInfinite.UseVisualStyleBackColor = true;
             // 
             // ddlOffset
             // 
@@ -506,6 +546,8 @@ namespace Lazy_App_Codex_Core
             selectorLayout.ResumeLayout(false);
             liveStatusLayout.ResumeLayout(false);
             actionPanel.ResumeLayout(false);
+            remainingPanel.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)numRemaining).EndInit();
             ResumeLayout(false);
         }
 
@@ -536,7 +578,11 @@ namespace Lazy_App_Codex_Core
         private Label lblEstimatedEndValue;
         private TableLayoutPanel actionPanel;
         private Button btnRun;
-        private SkipPickerControl ddlSkip;
+        private Panel remainingPanel;
+        private Label lblRemaining;
+        private CenteredNumericUpDown numRemaining;
+        private CheckBox chkInfinite;
+        private ToolTip controlToolTip;
         private ComboBox ddlOffset;
         private ComboBox ddlTagFilter;
         private ComboBox ddlDevice;

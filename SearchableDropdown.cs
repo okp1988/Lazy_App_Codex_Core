@@ -105,6 +105,7 @@ namespace Lazy_App_Codex_Core
         }
 
         public event EventHandler? SelectionChanged;
+        public event EventHandler? SelectionCommitted;
 
         public object? SelectedItem
         {
@@ -397,6 +398,7 @@ namespace Lazy_App_Codex_Core
             }
 
             SelectedItem = _listBox.SelectedItem;
+            SelectionCommitted?.Invoke(this, EventArgs.Empty);
             _dropDown.Close();
             ClearSearch();
         }
