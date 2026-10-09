@@ -64,6 +64,7 @@ namespace Lazy_App_Codex_Core
         private bool _closing;
         private bool _refreshingConfig;
         private bool _hotkeyReloadPending;
+        private CompletionTone? _completionTone;
         private readonly string _baseTitle;
         private readonly Icon _baseIcon;
         private readonly Dictionary<string, Icon> _taskbarStatusIcons = new Dictionary<string, Icon>(StringComparer.Ordinal);
@@ -304,7 +305,7 @@ namespace Lazy_App_Codex_Core
             _lastHotkeyRegistrationSucceeded = success;
         }
 
-        private void LoadConfig()
+        private void LoadConfig(bool preserveCurrentOffsets = false)
         {
             if (_refreshingConfig)
             {
@@ -326,7 +327,7 @@ namespace Lazy_App_Codex_Core
                     string selectedKey = GetRunTargetKey(slot.ScriptBox.SelectedItem as RunTarget);
                     string selectedTag = slot.TagFilter.SelectedItem?.ToString() ?? "All";
                     LoadTagFilter(slot, selectedTag);
-                    RebuildRunTargets(slot, selectedKey);
+                    RebuildRunTargets(slot, selectedKey, preserveSameTargetOffset: preserveCurrentOffsets);
                 }
             }
             catch (Exception ex)
@@ -376,7 +377,7 @@ namespace Lazy_App_Codex_Core
             slot.TagFilter.EndUpdate();
         }
 
-        private void RebuildRunTargets(RunSlot slot, string? selectedKey = null)
+        private void RebuildRunTargets(RunSlot slot, string? selectedKey = null, bool preserveSameTargetOffset = false)
         {
             if (slot.IsRunning)
             {
@@ -407,6 +408,7 @@ namespace Lazy_App_Codex_Core
             }
 
             if (slot.ScriptBox.SelectedItem is RunTarget restored &&
+                (!preserveSameTargetOffset || GetRunTargetKey(restored) != selectedKey) &&
                 (restored.Kind == "script" && _library.FindScriptById(restored.Id)?.DefaultOffsetEnabled == true ||
                  restored.Kind == "sequence" && _library.FindSequenceById(restored.Id)?.DefaultOffsetEnabled == true))
             {
@@ -689,7 +691,8 @@ namespace Lazy_App_Codex_Core
                 slot.RunCts = null;
                 slot.RunningDeviceSerial = null;
                 SetRunningState(slot, false);
-                LoadConfig();
+                // Completion refreshes saved data without resetting same-target UI offsets.
+                LoadConfig(preserveCurrentOffsets: completed);
                 if (completed)
                 {
                     RefreshRemainingCount(slot, reset: true);
@@ -703,7 +706,7 @@ namespace Lazy_App_Codex_Core
             {
                 try
                 {
-                    System.Media.SystemSounds.Beep.Play();
+                    (_completionTone ??= new CompletionTone()).Play();
                 }
                 catch (Exception ex)
                 {
@@ -2306,6 +2309,7 @@ namespace Lazy_App_Codex_Core
             _baseIcon.Dispose();
             _slot1.RunCts?.Cancel();
             _slot2.RunCts?.Cancel();
+            _completionTone?.Dispose();
         }
 
         private sealed class RunSlot

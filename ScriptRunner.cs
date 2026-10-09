@@ -251,6 +251,7 @@ namespace Lazy_App_Codex_Core
         {
             var plannedSteps = new List<PlannedStep>();
             bool hasNonDelayStep = false;
+            bool offsetApplied = false;
             for (int itemIndex = 0; itemIndex < sequence.Items.Count; itemIndex++)
             {
                 var item = sequence.Items[itemIndex];
@@ -265,7 +266,9 @@ namespace Lazy_App_Codex_Core
                     for (int repeat = 1; repeat <= Math.Max(1, item.Repeat); repeat++)
                     {
                         var scriptOffset = scriptOffsetResolver(script);
-                        AppendScriptSteps(plannedSteps, script.Config, scriptOffset.value, scriptOffset.axis);
+                        // Referenced scripts/repeats share the sequence cycle's offset allowance.
+                        AppendScriptSteps(plannedSteps, script.Config, offsetApplied ? 0 : scriptOffset.value, scriptOffset.axis);
+                        offsetApplied |= script.Config.Any(step => NormalizeAction(step.Act) == "left");
                         hasNonDelayStep |= script.Config.Any(step => NormalizeAction(step.Act) != "delay");
                     }
 
@@ -274,8 +277,9 @@ namespace Lazy_App_Codex_Core
                 else
                 {
                     string action = NormalizeAction(item.Action.Act);
-                    int actionOffset = !hasNonDelayStep && action == "left" ? selectedOffset : 0;
+                    int actionOffset = !offsetApplied && !hasNonDelayStep && action == "left" ? selectedOffset : 0;
                     plannedSteps.Add(GenerateStep(item.Action, actionOffset, selectedOffsetAxis));
+                    offsetApplied |= action == "left";
                     hasNonDelayStep |= action != "delay";
                 }
             }
