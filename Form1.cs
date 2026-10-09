@@ -671,7 +671,8 @@ namespace Lazy_App_Codex_Core
             try
             {
                 await slot.RunTask;
-                completed = !infinite && slot.CountBox.Value == 0;
+                completed = !infinite && slot.CountBox.Value == 0 && !runCts.IsCancellationRequested &&
+                    !slot.DeviceLossStopRequested && !_closing;
             }
             catch (OperationCanceledException)
             {
@@ -696,6 +697,18 @@ namespace Lazy_App_Codex_Core
 
                 ApplyPendingHotkeys();
                 UpdateWindowTitle();
+            }
+
+            if (completed && !_closing)
+            {
+                try
+                {
+                    System.Media.SystemSounds.Beep.Play();
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.LogWarning("Completion beep failed: " + ex.Message);
+                }
             }
         }
 
@@ -1305,17 +1318,7 @@ namespace Lazy_App_Codex_Core
             }
 
             string? serial = (slot.DeviceBox.SelectedItem as DeviceDisplayItem)?.Serial;
-            var otherSlot = slot == _slot1 ? _slot2 : _slot1;
-            string? reserved = IsSlotDeviceSelectionActive(otherSlot)
-                ? otherSlot.RunningDeviceSerial ?? otherSlot.SelectedDeviceSerial : null;
-            if (SerialEquals(serial, reserved))
-            {
-                UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
-                return;
-            }
-
             slot.SelectedDeviceSerial = string.IsNullOrWhiteSpace(serial) ? null : serial;
-            slot.PreserveEmptyDevice = slot.SelectedDeviceSerial == null;
             UpdateDeviceDropdown(_adbDeviceStatus, queueSync: false);
         }
 
@@ -1799,8 +1802,16 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
+            var previouslyReadySerials = _adbDeviceStatus.Devices
+                .Where(device => device.IsReady)
+                .Select(device => device.Serial)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var newlyReadySerials = status.Devices
+                .Where(device => device.IsReady && !previouslyReadySerials.Contains(device.Serial))
+                .Select(device => device.Serial)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             _adbDeviceStatus = status;
-            UpdateDeviceDropdown(status);
+            UpdateDeviceDropdown(status, newlyReadySerials: newlyReadySerials);
             _adbStatusDotColor = status.State switch
             {
                 AdbDeviceState.NoServer => Color.DarkGray,
@@ -1829,7 +1840,7 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private void UpdateDeviceDropdown(AdbDeviceStatus status, bool queueSync = true)
+        private void UpdateDeviceDropdown(AdbDeviceStatus status, bool queueSync = true, HashSet<string>? newlyReadySerials = null)
         {
             var readyDevices = status.Devices
                 .Where(device => device.IsReady)
@@ -1843,21 +1854,24 @@ namespace Lazy_App_Codex_Core
                 QueueDeviceInfoSync(readyDevices);
             }
 
-            // Freeze reservations before either dropdown can clear a disappeared selection.
-            string? reservation1 = IsSlotDeviceSelectionActive(_slot1) ? _slot1.RunningDeviceSerial ?? _slot1.SelectedDeviceSerial : null;
-            string? reservation2 = IsSlotDeviceSelectionActive(_slot2) ? _slot2.RunningDeviceSerial ?? _slot2.SelectedDeviceSerial : null;
-            UpdateDeviceDropdownForSlot(_slot1, readyDevices, reservation2);
-            UpdateDeviceDropdownForSlot(_slot2, readyDevices, reservation1 ?? _slot1.SelectedDeviceSerial);
-            // A new idle assignment in Set 2 must also be excluded from Set 1's list.
-            string? finalReservation2 = IsSlotDeviceSelectionActive(_slot2)
-                ? _slot2.RunningDeviceSerial ?? _slot2.SelectedDeviceSerial : null;
-            if (!SerialEqualsOrBothBlank(reservation2, finalReservation2))
+            UpdateDeviceDropdownForSlot(_slot1, readyDevices);
+            UpdateDeviceDropdownForSlot(_slot2, readyDevices);
+
+            // Only a new ready-device event may fill one empty panel, never a cached refresh.
+            var arrivingDevice = readyDevices.FirstOrDefault(device => newlyReadySerials?.Contains(device.Serial) == true);
+            if (arrivingDevice != null)
             {
-                UpdateDeviceDropdownForSlot(_slot1, readyDevices, finalReservation2);
+                var emptySlot = new[] { _slot1, _slot2 }.FirstOrDefault(slot =>
+                    IsSlotDeviceSelectionActive(slot) && !slot.IsRunning && slot.SelectedDeviceSerial == null);
+                if (emptySlot != null)
+                {
+                    emptySlot.SelectedDeviceSerial = arrivingDevice.Serial;
+                    UpdateDeviceDropdownForSlot(emptySlot, readyDevices);
+                }
             }
         }
 
-        private void UpdateDeviceDropdownForSlot(RunSlot slot, List<AdbTrackedDevice> readyDevices, string? otherSelection)
+        private void UpdateDeviceDropdownForSlot(RunSlot slot, List<AdbTrackedDevice> readyDevices)
         {
             if (!IsSlotDeviceSelectionActive(slot))
             {
@@ -1875,31 +1889,12 @@ namespace Lazy_App_Codex_Core
             if (selectedDeviceRemoved)
             {
                 slot.SelectedDeviceSerial = null;
-                slot.PreserveEmptyDevice = true;
             }
 
             string? desiredSelection = slot.SelectedDeviceSerial;
-            if (!slot.IsRunning && SerialEquals(desiredSelection, otherSelection))
-            {
-                desiredSelection = null;
-                slot.SelectedDeviceSerial = null;
-            }
-
-            if (desiredSelection == null && readyDevices.Count > 0 && !slot.IsRunning && !slot.PreserveEmptyDevice)
-            {
-                desiredSelection = readyDevices
-                    .FirstOrDefault(device => !SerialEquals(device.Serial, otherSelection))
-                    ?.Serial;
-            }
-
             var items = new List<DeviceDisplayItem> { new DeviceDisplayItem("", "No Device", false) };
             foreach (var device in readyDevices)
             {
-                if (!SerialEquals(device.Serial, desiredSelection) && SerialEquals(device.Serial, otherSelection))
-                {
-                    continue;
-                }
-
                 string key = AdbShellController.GetDeviceKey(device.Serial);
                 _deviceMetadata.TryGetValue(key, out var metadata);
                 _detectedDeviceMetadata.TryGetValue(key, out var detected);
@@ -2383,7 +2378,6 @@ namespace Lazy_App_Codex_Core
             public bool RebuildingTargets { get; set; }
             public int ConfiguredCount { get; set; }
             public int LastFiniteCount { get; set; } = 1;
-            public bool PreserveEmptyDevice { get; set; }
             public string? RunningDeviceSerial { get; set; }
             public LiveRunStatus LiveStatus { get; set; } = new LiveRunStatus { Idle = true };
         }
