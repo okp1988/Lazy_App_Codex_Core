@@ -8,6 +8,8 @@ namespace Lazy_App_Codex_Core
         private static readonly UTF8Encoding Utf8 = new(false, true);
         private readonly Action<string> _onSnapshot;
         private readonly List<byte> _buffer = new();
+        private readonly List<byte> _framePayload = new();
+        private int _frameLength = -1;
         private readonly List<string> _plainRows = new();
         private OutputMode _mode;
         private bool _plainSnapshotStarted;
@@ -57,6 +59,8 @@ namespace Lazy_App_Codex_Core
             }
 
             _buffer.Clear();
+            _framePayload.Clear();
+            _frameLength = -1;
             _plainRows.Clear();
         }
 
@@ -99,16 +103,56 @@ namespace Lazy_App_Codex_Core
 
         private void ReadFrames()
         {
-            while (_buffer.Count >= 4)
+            while (true)
             {
-                int length = ReadLength();
-                if (_buffer.Count < 4 + length)
+                if (_frameLength < 0)
+                {
+                    if (_buffer.Count < 4)
+                    {
+                        return;
+                    }
+
+                    _frameLength = ReadLength();
+                    _buffer.RemoveRange(0, 4);
+                }
+
+                int consumed = 0;
+                while (_framePayload.Count < _frameLength && consumed < _buffer.Count)
+                {
+                    byte value = _buffer[consumed];
+                    if (value == (byte)'\r')
+                    {
+                        // Windows adb stdout expands LF to CRLF, but its header still
+                        // counts LF bytes. Keep a split CR buffered until LF is known.
+                        if (consumed + 1 == _buffer.Count)
+                        {
+                            break;
+                        }
+
+                        if (_buffer[consumed + 1] == (byte)'\n')
+                        {
+                            value = (byte)'\n';
+                            consumed++;
+                        }
+                    }
+
+                    _framePayload.Add(value);
+                    consumed++;
+                }
+
+                if (consumed > 0)
+                {
+                    _buffer.RemoveRange(0, consumed);
+                }
+
+                if (_framePayload.Count < _frameLength)
                 {
                     return;
                 }
 
-                string snapshot = Utf8.GetString(_buffer.GetRange(4, length).ToArray());
-                _buffer.RemoveRange(0, 4 + length);
+                string snapshot = Utf8.GetString(_framePayload.ToArray());
+                _framePayload.Clear();
+                _frameLength = -1;
                 _onSnapshot(snapshot);
             }
         }

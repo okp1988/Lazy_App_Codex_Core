@@ -8,6 +8,13 @@ namespace Lazy_App_Codex_Core
         [STAThread]
         static void Main(string[] args)
         {
+            if (args.Contains("--check-adb-snapshots", StringComparer.OrdinalIgnoreCase))
+            {
+                // Pure parser checks: no normal app, logs/config, UI or ADB startup.
+                Environment.ExitCode = AdbSnapshotCheckRunner.Run();
+                return;
+            }
+
             if (args.Contains("--check-layout", StringComparer.OrdinalIgnoreCase))
             {
                 // Diagnostics must not initialize logs or construct the real main window.
