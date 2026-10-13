@@ -109,6 +109,10 @@ namespace Lazy_App_Codex_Core
         private AppSettings _workingSettings;
         private JObject _workingOffsets;
         private Dictionary<string, DeviceInfo> _workingDevices = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, DeviceInfo> _deviceBaseline = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _deletedDeviceKeys = new(StringComparer.OrdinalIgnoreCase);
+        private bool _deviceSyncInProgress;
+        private bool _deviceNameEdited;
         private ScriptModel? _selectedScript;
         private SequenceModel? _selectedSequence;
         private RunPlanModel? _selectedRunPlan;
@@ -147,6 +151,7 @@ namespace Lazy_App_Codex_Core
                 Devices = CloneDevices(_repository.Settings.Devices)
             };
             _workingDevices = _workingSettings.Devices;
+            _deviceBaseline = CloneDevices(_workingDevices);
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
 
             Text = "Lazy App Config";
@@ -874,6 +879,7 @@ namespace Lazy_App_Codex_Core
         private void LoadCurrentEditor()
         {
             _loading = true;
+            _deviceNameEdited = false;
             ClearEditorValues();
             if (CurrentTab == "settings")
             {
@@ -906,7 +912,7 @@ namespace Lazy_App_Codex_Core
                 _deviceModelBox.Text = device.Model;
                 _deviceLastSerialBox.Text = device.LastSerial;
                 _deviceLastSeenBox.Text = device.LastSeen;
-                _syncDeviceButton.Enabled = IsDeviceKeyConnected(_selectedDeviceKey);
+                _syncDeviceButton.Enabled = !_deviceSyncInProgress && IsDeviceKeyConnected(_selectedDeviceKey);
             }
             else if (_selectedScript != null)
             {
@@ -1472,6 +1478,10 @@ namespace Lazy_App_Codex_Core
 
         private void SaveLibraryToRoot()
         {
+            var savedDevices = (_repository.LoadRawConfig()["settings"]?["devices"]?.ToObject<Dictionary<string, DeviceInfo>>())
+                ?? new Dictionary<string, DeviceInfo>();
+            _workingDevices = DeviceMetadataMerge.Merge(savedDevices, _deviceBaseline, _workingDevices, _deletedDeviceKeys);
+            _workingSettings.Devices = _workingDevices;
             _workingSettings.Tags = NormalizeTags(_workingSettings.Tags);
             EnsureTaggedEntriesUseKnownTags();
             _root["settings"] = new JObject
@@ -2448,6 +2458,7 @@ namespace Lazy_App_Codex_Core
                 return;
             }
 
+            _deletedDeviceKeys.Add(_selectedDeviceKey);
             _workingDevices.Remove(_selectedDeviceKey);
             _selectedDeviceKey = null;
             RefreshEntryList();
@@ -2456,12 +2467,13 @@ namespace Lazy_App_Codex_Core
 
         private async Task SyncSelectedDeviceAsync()
         {
-            if (_selectedDeviceKey == null)
+            string? key = _selectedDeviceKey;
+            if (key == null || _deviceSyncInProgress)
             {
                 return;
             }
 
-            string? serial = GetConnectedSerialForDeviceKey(_selectedDeviceKey);
+            string? serial = GetConnectedSerialForDeviceKey(key);
             if (string.IsNullOrWhiteSpace(serial))
             {
                 ShowValidation("Device is not currently connected to ADB.");
@@ -2470,19 +2482,20 @@ namespace Lazy_App_Codex_Core
 
             try
             {
+                _deviceSyncInProgress = true;
                 _syncDeviceButton.Enabled = false;
                 using var cts = new CancellationTokenSource(7000);
                 DeviceInfo detected = await _adbController.ReadDeviceInfoAsync(serial, cts.Token);
-                if (_workingDevices.TryGetValue(_selectedDeviceKey, out var existing) && !string.IsNullOrWhiteSpace(existing.Name))
+                if (IsDisposed || Disposing || _deletedDeviceKeys.Contains(key)) return;
+                if (_workingDevices.TryGetValue(key, out var existing) && !string.IsNullOrWhiteSpace(existing.Name))
                 {
                     detected.Name = existing.Name;
                 }
 
                 detected.LastSerial = serial;
                 detected.LastSeen = DateTimeOffset.Now.ToString("O");
-                _workingDevices[_selectedDeviceKey] = detected;
-                RefreshEntryList();
-                SelectById(_selectedDeviceKey);
+                _workingDevices[key] = detected;
+                RefreshDeviceEntriesPreservingName();
                 MarkDirty();
                 SetStatus("Device information synced.");
             }
@@ -2492,7 +2505,38 @@ namespace Lazy_App_Codex_Core
             }
             finally
             {
-                _syncDeviceButton.Enabled = _selectedDeviceKey != null && IsDeviceKeyConnected(_selectedDeviceKey);
+                _deviceSyncInProgress = false;
+                if (!IsDisposed && !Disposing)
+                    _syncDeviceButton.Enabled = _selectedDeviceKey != null && IsDeviceKeyConnected(_selectedDeviceKey);
+            }
+        }
+
+        internal void RefreshSavedDevices(IDictionary<string, DeviceInfo> savedDevices)
+        {
+            if (IsDisposed || Disposing || _savedAndClosing) return;
+            _workingDevices = DeviceMetadataMerge.Merge(savedDevices, _deviceBaseline, _workingDevices, _deletedDeviceKeys);
+            _workingSettings.Devices = _workingDevices;
+            _deviceBaseline = CloneDevices(savedDevices);
+            RefreshDeviceEntriesPreservingName();
+        }
+
+        private void RefreshDeviceEntriesPreservingName()
+        {
+            if (CurrentTab != "devices") return;
+            string? key = _selectedDeviceKey;
+            string pendingName = _deviceNameBox.Text;
+            int selectionStart = _deviceNameBox.SelectionStart;
+            int selectionLength = _deviceNameBox.SelectionLength;
+            // Keep even an incomplete/blank name while discovery updates the list.
+            bool editingName = key != null && _deviceNameEdited;
+            RefreshEntryList();
+            if (editingName && string.Equals(key, _selectedDeviceKey, StringComparison.OrdinalIgnoreCase))
+            {
+                _loading = true;
+                _deviceNameBox.Text = pendingName;
+                _deviceNameBox.Select(selectionStart, selectionLength);
+                _deviceNameEdited = true;
+                _loading = false;
             }
         }
 
@@ -2608,6 +2652,8 @@ namespace Lazy_App_Codex_Core
                 Devices = CloneDevices(_repository.Settings.Devices)
             };
             _workingDevices = _workingSettings.Devices;
+            _deviceBaseline = CloneDevices(_workingDevices);
+            _deletedDeviceKeys.Clear();
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
             _dirty = false;
             RefreshEntryList();
@@ -2789,6 +2835,8 @@ namespace Lazy_App_Codex_Core
 
         private void SyncTrackTouchAvailability()
         {
+            if (CurrentTab == "devices")
+                _syncDeviceButton.Enabled = !_deviceSyncInProgress && _selectedDeviceKey != null && IsDeviceKeyConnected(_selectedDeviceKey);
             bool availableTab = CurrentTab is "scripts" or "sequences";
             var adbStatus = _getAdbStatus?.Invoke();
             string? selectedSerial = _getSelectedDeviceSerial?.Invoke();
@@ -3027,7 +3075,11 @@ namespace Lazy_App_Codex_Core
                             break;
                         }
 
-                        textBox.TextChanged += (_, _) => MarkDirty();
+                        textBox.TextChanged += (_, _) =>
+                        {
+                            if (textBox == _deviceNameBox && !_loading) _deviceNameEdited = true;
+                            MarkDirty();
+                        };
                         break;
                     case NumericUpDown numeric:
                         numeric.ValueChanged += (_, _) => MarkDirty();

@@ -43,6 +43,7 @@ namespace Lazy_App_Codex_Core
         private ConfigLibrary _library = new ConfigLibrary();
         private readonly List<RunTarget> _runTargets = new List<RunTarget>();
         private Dictionary<string, DeviceInfo> _deviceMetadata = new(StringComparer.OrdinalIgnoreCase);
+        private ConfigEditorForm? _openConfigEditor;
         private readonly Dictionary<string, DeviceInfo> _detectedDeviceMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _deviceInfoSyncing = new(StringComparer.OrdinalIgnoreCase);
         private RunSlot _slot1 = null!;
@@ -1274,7 +1275,16 @@ namespace Lazy_App_Codex_Core
         {
             _ = EnsureAdbTrackMonitorAsync("config");
             using var editor = new ConfigEditorForm(new ScriptConfigRepository(_configRepository.ConfigPath), () => _adbDeviceStatus, () => _slot1.SelectedDeviceSerial);
-            if (editor.ShowDialog(this) != DialogResult.OK || !editor.ConfigSaved)
+            _openConfigEditor = editor;
+            try
+            {
+                editor.ShowDialog(this);
+            }
+            finally
+            {
+                _openConfigEditor = null;
+            }
+            if (!editor.ConfigSaved)
             {
                 return;
             }
@@ -2125,34 +2135,11 @@ namespace Lazy_App_Codex_Core
                 detected.LastSeen = DateTimeOffset.Now.ToString("O");
                 _detectedDeviceMetadata[key] = detected;
 
-                bool changed = false;
-                if (!_deviceMetadata.TryGetValue(key, out var existing))
-                {
-                    _deviceMetadata[key] = detected;
-                    changed = true;
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(existing.Name))
-                    {
-                        existing.Name = detected.Name;
-                        changed = true;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(existing.Manufacturer))
-                    {
-                        existing.Manufacturer = detected.Manufacturer;
-                        changed = true;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(existing.Model))
-                    {
-                        existing.Model = detected.Model;
-                        changed = true;
-                    }
-                }
-
-                if (changed)
+                // Publish metadata only after saving succeeds, so a failed save remains retryable.
+                if (!_deviceMetadata.TryGetValue(key, out var existing) ||
+                    string.IsNullOrWhiteSpace(existing.Name) ||
+                    string.IsNullOrWhiteSpace(existing.Manufacturer) ||
+                    string.IsNullOrWhiteSpace(existing.Model))
                 {
                     SaveDeviceMetadata(key, detected);
                 }
@@ -2177,7 +2164,6 @@ namespace Lazy_App_Codex_Core
                 var root = _configRepository.LoadRawConfig();
                 var settings = (Newtonsoft.Json.Linq.JObject)root["settings"]!;
                 var devices = settings["devices"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
-                settings["devices"] = devices;
                 var saved = devices[key]?.ToObject<DeviceInfo>() ?? new DeviceInfo();
                 if (string.IsNullOrWhiteSpace(saved.Name)) saved.Name = detected.Name;
                 if (string.IsNullOrWhiteSpace(saved.Manufacturer)) saved.Manufacturer = detected.Manufacturer;
@@ -2185,8 +2171,11 @@ namespace Lazy_App_Codex_Core
                 if (string.IsNullOrWhiteSpace(saved.LastSerial)) saved.LastSerial = detected.LastSerial;
                 if (string.IsNullOrWhiteSpace(saved.LastSeen)) saved.LastSeen = detected.LastSeen;
                 devices[key] = Newtonsoft.Json.Linq.JObject.FromObject(saved);
+                // Assign after editing: assigning an already-parented JToken clones it.
+                settings["devices"] = devices;
                 _configRepository.SaveRawConfig(root);
                 _deviceMetadata = CloneDevices(devices.ToObject<Dictionary<string, DeviceInfo>>());
+                _openConfigEditor?.RefreshSavedDevices(_deviceMetadata);
             }
             catch (Exception ex)
             {

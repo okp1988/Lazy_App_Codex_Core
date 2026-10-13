@@ -399,10 +399,8 @@ namespace Lazy_App_Codex_Core
             var root = _repository.LoadRawConfig();
             var settings = (JObject)root["settings"]!;
             var devices = settings["devices"] as JObject ?? new JObject();
-            settings["devices"] = devices;
 
             var device = devices[ip] as JObject ?? new JObject();
-            devices[ip] = device;
             if (string.IsNullOrWhiteSpace(device["name"]?.ToString()))
             {
                 device["name"] = GetSelectedDeviceName(ip);
@@ -410,6 +408,9 @@ namespace Lazy_App_Codex_Core
 
             device["lastSerial"] = serial;
             device["lastSeen"] = DateTimeOffset.Now.ToString("O");
+            // Attach edited tokens last so JSON cloning includes the new values.
+            devices[ip] = device;
+            settings["devices"] = devices;
             _repository.SaveRawConfig(root);
         }
 
