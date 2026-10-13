@@ -176,6 +176,7 @@ namespace Lazy_App_Codex_Core
             set.TagFilter.Enabled = !running;
             set.DeviceBox.Enabled = !running;
             set.RunButton.Text = running ? "Stop" : "Run";
+            set.ResetButton.Enabled = !running;
             set.ScriptBox.SetItems(new object[] { "Layout sample" });
             set.ScriptBox.SelectedItem = "Layout sample";
             set.CurrentActionLabel.Text = "LEFT";
@@ -235,7 +236,12 @@ namespace Lazy_App_Codex_Core
             Size infinitySize = set.InfiniteBox.GetPreferredSize(Size.Empty);
             Add(result, state, "infinity-fit", infinitySize.Width <= set.InfiniteBox.Width && infinitySize.Height <= set.InfiniteBox.Height,
                 $"required={infinitySize}, available={set.InfiniteBox.Size}");
-            foreach (var button in new[] { set.RunButton, set.ConfigButton, set.WirelessAdbButton }.OfType<Button>())
+            Add(result, state, "run-reset-separation", set.RunButton.Right <= set.ResetButton.Left,
+                $"run={set.RunButton.Bounds}, reset={set.ResetButton.Bounds}");
+            Add(result, state, "reset-enabled-state", set.ResetButton.Enabled == !state.StartsWith("running/", StringComparison.Ordinal),
+                $"enabled={set.ResetButton.Enabled}");
+            Add(result, state, "reset-icon-present", set.ResetButton.Image != null, "Embedded Restore icon");
+            foreach (var button in new[] { set.RunButton, set.ResetButton, set.ConfigButton, set.WirelessAdbButton }.OfType<Button>())
             {
                 Size preferred = button.GetPreferredSize(Size.Empty);
                 Add(result, state, $"button-fit/{button.Name}", preferred.Width <= button.Width && preferred.Height <= button.Height,

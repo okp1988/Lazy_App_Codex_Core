@@ -135,6 +135,7 @@ namespace Lazy_App_Codex_Core
                 set1Control.TagFilter,
                 set1Control.DeviceBox,
                 set1Control.RunButton,
+                set1Control.ResetButton,
                 set1Control.LiveStatusLayout,
                 set1Control.CurrentActionLabel,
                 set1Control.StepLabel,
@@ -160,6 +161,7 @@ namespace Lazy_App_Codex_Core
                 set2Control.TagFilter,
                 set2Control.DeviceBox,
                 set2Control.RunButton,
+                set2Control.ResetButton,
                 set2Control.LiveStatusLayout,
                 set2Control.CurrentActionLabel,
                 set2Control.StepLabel,
@@ -197,6 +199,15 @@ namespace Lazy_App_Codex_Core
             slot.DeviceBox.DrawMode = DrawMode.OwnerDrawFixed;
             slot.DeviceBox.DrawItem += ddlDevice_DrawItem;
             slot.RunButton.Click += async (_, _) => await ToggleRunAsync(slot);
+            slot.ResetButton.Click += (_, _) =>
+            {
+                if (!slot.IsRunning && !slot.RebuildingTargets && !_refreshingConfig && !_closing &&
+                    slot.ScriptBox.SelectedItem is RunTarget)
+                {
+                    ApplySelectedDefaultOffset(slot);
+                    RefreshRemainingCount(slot, reset: true);
+                }
+            };
         }
 
         private void HandleRunTargetChanged(RunSlot slot)
@@ -518,6 +529,7 @@ namespace Lazy_App_Codex_Core
         {
             bool hasTarget = slot.ScriptBox.SelectedItem is RunTarget;
             slot.CountBox.Enabled = !slot.IsRunning && hasTarget && slot.CountBox.Maximum > 0;
+            slot.ResetButton.Enabled = !slot.IsRunning && hasTarget;
             slot.InfiniteBox.Enabled = !slot.IsRunning && slot.ScriptBox.SelectedItem is RunTarget target && target.Kind != "plan";
         }
 
@@ -665,6 +677,8 @@ namespace Lazy_App_Codex_Core
             };
             bool adbEnabled = IsAdbActionEnabled;
             bool completed = false;
+            bool runFailed = false;
+            slot.ManualStopRequested = false;
             SetRunningState(slot, true);
             UpdateWindowTitle();
 
@@ -682,18 +696,23 @@ namespace Lazy_App_Codex_Core
             }
             catch (Exception ex)
             {
+                runFailed = true;
                 AppLogger.LogError("Run failed.", ex);
                 ShowRunError(slot, ex);
             }
             finally
             {
+                // Capture loss/closing eligibility before idle device refresh clears loss flags.
+                bool preserveOffsets = completed || (slot.ManualStopRequested && !runFailed &&
+                    !slot.DeviceLossStopRequested && !_closing);
                 slot.RunTask = null;
                 slot.RunCts?.Dispose();
                 slot.RunCts = null;
                 slot.RunningDeviceSerial = null;
                 SetRunningState(slot, false);
-                // Completion refreshes saved data without resetting same-target UI offsets.
-                LoadConfig(preserveCurrentOffsets: completed);
+                // Manual Stop and finite completion retain valid UI offsets while refreshing saved data.
+                LoadConfig(preserveCurrentOffsets: preserveOffsets);
+                slot.ManualStopRequested = false;
                 if (completed)
                 {
                     RefreshRemainingCount(slot, reset: true);
@@ -905,11 +924,16 @@ namespace Lazy_App_Codex_Core
             }
         }
 
-        private async Task StopRunAsync(RunSlot slot)
+        private async Task StopRunAsync(RunSlot slot, bool manualStop = true)
         {
             if (!slot.IsRunning)
             {
                 return;
+            }
+
+            if (manualStop && !slot.DeviceLossStopRequested && !_closing)
+            {
+                slot.ManualStopRequested = true;
             }
 
             slot.RunCts?.Cancel();
@@ -2012,7 +2036,7 @@ namespace Lazy_App_Codex_Core
 
         private async Task StopRunForMissingDeviceAsync(RunSlot slot, string removedDevice)
         {
-            await StopRunAsync(slot);
+            await StopRunAsync(slot, manualStop: false);
             if (!_closing)
             {
                 MessageBox.Show(
@@ -2312,6 +2336,7 @@ namespace Lazy_App_Codex_Core
                 ComboBox tagFilter,
                 ComboBox deviceBox,
                 Button runButton,
+                Button resetButton,
                 TableLayoutPanel liveStatusLayout,
                 Label currentActionLabel,
                 Label stepLabel,
@@ -2330,6 +2355,7 @@ namespace Lazy_App_Codex_Core
                 TagFilter = tagFilter;
                 DeviceBox = deviceBox;
                 RunButton = runButton;
+                ResetButton = resetButton;
                 LiveStatusLayout = liveStatusLayout;
                 CurrentActionLabel = currentActionLabel;
                 StepLabel = stepLabel;
@@ -2349,6 +2375,7 @@ namespace Lazy_App_Codex_Core
             public ComboBox TagFilter { get; }
             public ComboBox DeviceBox { get; }
             public Button RunButton { get; }
+            public Button ResetButton { get; }
             public TableLayoutPanel LiveStatusLayout { get; }
             public Label CurrentActionLabel { get; }
             public Label StepLabel { get; }
@@ -2364,6 +2391,7 @@ namespace Lazy_App_Codex_Core
             public Task? RunTask { get; set; }
             public bool IsRunning { get; set; }
             public bool DeviceLossStopRequested { get; set; }
+            public bool ManualStopRequested { get; set; }
             public string? SelectedDeviceSerial { get; set; }
             public string DeviceItemsSignature { get; set; } = "";
             public string CountTargetKey { get; set; } = "";

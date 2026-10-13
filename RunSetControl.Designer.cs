@@ -8,6 +8,13 @@ namespace Lazy_App_Codex_Core
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing)
+            {
+                btnReset.Image = null;
+                _restoreIcon?.Dispose();
+                _restoreIcon = null;
+            }
+
             if (disposing && (components != null))
             {
                 components.Dispose();
@@ -45,7 +52,9 @@ namespace Lazy_App_Codex_Core
             lblNextAtValue = new Label();
             lblEstimatedEndValue = new Label();
             actionPanel = new TableLayoutPanel();
+            runButtonPanel = new TableLayoutPanel();
             btnRun = new Button();
+            btnReset = new Button();
             remainingPanel = new Panel();
             lblRemaining = new Label();
             numRemaining = new CenteredNumericUpDown();
@@ -61,6 +70,7 @@ namespace Lazy_App_Codex_Core
             selectorLayout.SuspendLayout();
             liveStatusLayout.SuspendLayout();
             actionPanel.SuspendLayout();
+            runButtonPanel.SuspendLayout();
             remainingPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numRemaining).BeginInit();
             SuspendLayout();
@@ -393,7 +403,7 @@ namespace Lazy_App_Codex_Core
             // 
             actionPanel.ColumnCount = 1;
             actionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            actionPanel.Controls.Add(btnRun, 0, 0);
+            actionPanel.Controls.Add(runButtonPanel, 0, 0);
             actionPanel.Controls.Add(remainingPanel, 0, 1);
             actionPanel.Controls.Add(ddlOffset, 0, 2);
             actionPanel.Controls.Add(ddlTagFilter, 0, 3);
@@ -416,6 +426,32 @@ namespace Lazy_App_Codex_Core
             actionPanel.Size = new Size(184, 284);
             actionPanel.TabIndex = 1;
             // 
+            // runButtonPanel
+            //
+            runButtonPanel.ColumnCount = 2;
+            runButtonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            runButtonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34F));
+            runButtonPanel.Controls.Add(btnRun, 0, 0);
+            runButtonPanel.Controls.Add(btnReset, 1, 0);
+            runButtonPanel.Dock = DockStyle.Fill;
+            runButtonPanel.Margin = new Padding(0);
+            runButtonPanel.Name = "runButtonPanel";
+            runButtonPanel.RowCount = 1;
+            runButtonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            runButtonPanel.Size = new Size(184, 34);
+            runButtonPanel.TabIndex = 0;
+            //
+            // btnReset
+            //
+            btnReset.AccessibleName = "Reset count and offset";
+            btnReset.Dock = DockStyle.Fill;
+            btnReset.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnReset.Margin = new Padding(0, 1, 0, 1);
+            btnReset.Name = "btnReset";
+            btnReset.Size = new Size(34, 32);
+            btnReset.TabIndex = 1;
+            btnReset.UseVisualStyleBackColor = true;
+            //
             // btnRun
             // 
             btnRun.Dock = DockStyle.Fill;
@@ -546,6 +582,7 @@ namespace Lazy_App_Codex_Core
             selectorLayout.ResumeLayout(false);
             liveStatusLayout.ResumeLayout(false);
             actionPanel.ResumeLayout(false);
+            runButtonPanel.ResumeLayout(false);
             remainingPanel.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numRemaining).EndInit();
             ResumeLayout(false);
@@ -577,7 +614,9 @@ namespace Lazy_App_Codex_Core
         private Label lblNextAtValue;
         private Label lblEstimatedEndValue;
         private TableLayoutPanel actionPanel;
+        private TableLayoutPanel runButtonPanel;
         private Button btnRun;
+        private Button btnReset;
         private Panel remainingPanel;
         private Label lblRemaining;
         private CenteredNumericUpDown numRemaining;

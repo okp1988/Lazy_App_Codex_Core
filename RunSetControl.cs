@@ -13,6 +13,7 @@ namespace Lazy_App_Codex_Core
         private readonly FlowLayoutPanel _timelinePanel = new();
         private readonly CountdownProgressControl _countdownBar = new();
         private readonly Label[] _timelineLabels = CreateTimelineLabels();
+        private Bitmap? _restoreIcon;
 
         public RunSetControl(bool showStatusDots, bool showSharedButtons)
         {
@@ -32,6 +33,7 @@ namespace Lazy_App_Codex_Core
         public ComboBox TagFilter => ddlTagFilter;
         public ComboBox DeviceBox => ddlDevice;
         public Button RunButton => btnRun;
+        public Button ResetButton => btnReset;
         public Button? ConfigButton => ShowSharedButtons ? btnConfig : null;
         public Button? WirelessAdbButton => ShowSharedButtons ? btnWirelessAdb : null;
         public Panel? StatusDot => ShowStatusDots ? statusDot : null;
@@ -77,7 +79,25 @@ namespace Lazy_App_Codex_Core
 
             actionPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, FixedHeight - (ActionRowHeight * 7)));
 
-            ConfigureButton(btnRun, ActionRowHeight * 0);
+            runButtonPanel.Dock = DockStyle.Fill;
+            runButtonPanel.Margin = Padding.Empty;
+            runButtonPanel.ColumnStyles[0].SizeType = SizeType.Percent;
+            runButtonPanel.ColumnStyles[0].Width = 100;
+            runButtonPanel.ColumnStyles[1].SizeType = SizeType.Absolute;
+            runButtonPanel.ColumnStyles[1].Width = 34;
+            ConfigureButton(btnRun, 0);
+            btnRun.Margin = new Padding(0, 1, 4, 1);
+            btnRun.Size = new Size(146, 32);
+            ConfigureButton(btnReset, 0);
+            btnReset.Size = new Size(34, 32);
+            btnReset.Text = "";
+            btnReset.Padding = Padding.Empty;
+            btnReset.AccessibleName = "Reset count and offset";
+            btnReset.Enabled = false;
+            _restoreIcon = RestoreIcon.Create();
+            btnReset.Image = _restoreIcon;
+            btnReset.ImageAlign = ContentAlignment.MiddleCenter;
+            controlToolTip.SetToolTip(btnReset, "Reset count and offset");
             ConfigureRemainingControls();
             ConfigureCombo(ddlOffset, ActionRowHeight * 2, 20, 28, new Padding(0, 3, 0, 3));
             ConfigureCombo(ddlTagFilter, ActionRowHeight * 3, 20, 28, new Padding(0, 3, 0, 3));

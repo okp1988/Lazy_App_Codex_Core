@@ -32,6 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\restore.svg" LogicalName="Lazy_App_Codex_Core.Assets.restore.svg" />
     <EmbeddedResource Update="RunSetControl.resx">
       <DependentUpon>RunSetControl.cs</DependentUpon>
     </EmbeddedResource>
