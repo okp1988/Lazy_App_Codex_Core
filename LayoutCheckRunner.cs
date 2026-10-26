@@ -179,6 +179,7 @@ namespace Lazy_App_Codex_Core
             set.ResetButton.Enabled = !running;
             set.ScriptBox.SetItems(new object[] { "Layout sample" });
             set.ScriptBox.SelectedItem = "Layout sample";
+            set.RemarkDisplay.Text = "Selected target remark, line one.\r\nSecond line.\r\nOverflow is available on hover.";
             set.CurrentActionLabel.Text = "LEFT";
             set.StepLabel.Text = "99 / 99";
             set.CycleLabel.Text = "99 / 99";
@@ -241,6 +242,21 @@ namespace Lazy_App_Codex_Core
             Add(result, state, "reset-enabled-state", set.ResetButton.Enabled == !state.StartsWith("running/", StringComparison.Ordinal),
                 $"enabled={set.ResetButton.Enabled}");
             Add(result, state, "reset-icon-present", set.ResetButton.Image != null, "Embedded Restore icon");
+            var remark = set.RemarkDisplay;
+            Add(result, state, "remark-two-lines", remark.ClientSize.Height >= remark.Font.Height * 2,
+                $"client={remark.ClientSize}, font height={remark.Font.Height}");
+            Add(result, state, "remark-plain-two-line-preview", !remark.TabStop && remark.DisplayLineCount <= 2,
+                $"lines={remark.DisplayLineCount}, tab stop={remark.TabStop}");
+            Add(result, state, "remark-overflow-marker", remark.IsTruncated && remark.DisplayText.EndsWith(RemarkTextControl.OverflowMarker, StringComparison.Ordinal),
+                remark.DisplayText);
+            Add(result, state, "remark-full-text-retained", remark.Text.Contains("Overflow is available on hover.", StringComparison.Ordinal) &&
+                remark.AccessibleDescription == remark.Text, "Complete source text retained for tooltip/accessibility");
+            int remarkTop = remark.Parent!.PointToScreen(remark.Location).Y;
+            int remarkBottom = remarkTop + remark.Height;
+            int timelineBottom = set.TimelineLabels.Max(chip => chip.Parent!.PointToScreen(chip.Location).Y + chip.Height);
+            int progressTop = set.CountdownBar.Parent!.PointToScreen(set.CountdownBar.Location).Y;
+            Add(result, state, "remark-timeline-progress-separation", timelineBottom <= remarkTop && remarkBottom <= progressTop,
+                $"timeline bottom={timelineBottom}, remark={remarkTop}..{remarkBottom}, progress top={progressTop}");
             foreach (var button in new[] { set.RunButton, set.ResetButton, set.ConfigButton, set.WirelessAdbButton }.OfType<Button>())
             {
                 Size preferred = button.GetPreferredSize(Size.Empty);

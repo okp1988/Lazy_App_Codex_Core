@@ -5,7 +5,11 @@ namespace Lazy_App_Codex_Core
 {
     public sealed class ConfigEditorForm : Form
     {
-        private const int ScriptInfoPanelHeight = 132;
+        private const int RemarkLabelRowHeight = 24;
+        private const int RemarkTextRowHeight = 44;
+        private const int ScriptInfoPanelHeight = 132 + RemarkLabelRowHeight + RemarkTextRowHeight;
+        private const int SequenceInfoPanelHeight = 188 + RemarkLabelRowHeight + RemarkTextRowHeight;
+        private const int RunPlanInfoPanelHeight = 132 + RemarkLabelRowHeight + RemarkTextRowHeight;
         private const int ScriptStepGridMinimumHeight = 120;
         private const int ScriptTotalRowHeight = 36;
         private static readonly OffsetDisplayOption[] OffsetOptions = OffsetDisplayOption.All;
@@ -35,6 +39,9 @@ namespace Lazy_App_Codex_Core
         private readonly TextBox _scriptNameBox = new();
         private readonly TextBox _sequenceNameBox = new();
         private readonly TextBox _runPlanNameBox = new();
+        private readonly TextBox _scriptRemarkBox = new();
+        private readonly TextBox _sequenceRemarkBox = new();
+        private readonly TextBox _runPlanRemarkBox = new();
         private readonly TextBox _offsetNameBox = new();
         private readonly TextBox _hotkeyStartBox = new();
         private readonly TextBox _hotkeyStopBox = new();
@@ -73,6 +80,8 @@ namespace Lazy_App_Codex_Core
         private readonly ComboBox _sequenceTagBox = new();
         private readonly CheckBox _sequenceHiddenBox = new();
         private readonly ComboBox _runPlanTagBox = new();
+        private readonly CheckBox _runPlanDefaultOffsetEnabledBox = new();
+        private readonly ComboBox _runPlanDefaultOffsetBox = new();
         private readonly ListBox _groupList = new();
         private readonly NumericUpDown _groupRepeatBox = CreateNumberBox(1);
         private readonly DataGridView _stepGrid = new();
@@ -121,6 +130,7 @@ namespace Lazy_App_Codex_Core
         private string? _selectedOffsetKey;
         private int _loadedGroupIndex = -1;
         private bool _dirty;
+        private bool _targetDetailsDirty;
         private bool _loading;
         private bool _savedAndClosing;
         private int _currentTabIndex;
@@ -463,7 +473,7 @@ namespace Lazy_App_Codex_Core
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, ScriptStepGridMinimumHeight));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, ScriptTotalRowHeight));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4, Padding = new Padding(0, 4, 0, 4) };
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 6, Margin = Padding.Empty, Padding = new Padding(0, 4, 0, 4) };
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -498,6 +508,7 @@ namespace Lazy_App_Codex_Core
             info.Controls.Add(_scriptHiddenBox, 0, 3);
             info.Controls.Add(Label("Enforce Min"), 3, 2);
             info.Controls.Add(_enforceMinBox, 3, 3);
+            AddRemarkField(info, _scriptRemarkBox, 4);
 
             var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
             groups.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
@@ -553,12 +564,16 @@ namespace Lazy_App_Codex_Core
 
         private Control BuildSequenceEditor()
         {
-            var panel = new TableLayoutPanel { Name = "sequenceEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
+            var panel = new TableLayoutPanel
+            {
+                Name = "sequenceEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false,
+                MinimumSize = new Size(0, SequenceInfoPanelHeight + 44 + 166 + 26)
+            };
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, SequenceInfoPanelHeight));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 6, Padding = new Padding(0, 4, 0, 4) };
+            var namePanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 8, Margin = Padding.Empty, Padding = new Padding(0, 4, 0, 4) };
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
             namePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
@@ -595,6 +610,7 @@ namespace Lazy_App_Codex_Core
             namePanel.Controls.Add(_sequenceTagBox, 2, 3);
             namePanel.Controls.Add(Label("Enforce Min"), 3, 2);
             namePanel.Controls.Add(_sequenceEnforceMinBox, 3, 3);
+            AddRemarkField(namePanel, _sequenceRemarkBox, 6);
             var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_addScriptItemButton, "Add Script", (_, _) => AddSequenceItem("script"), 100);
             ConfigureButton(_addActionItemButton, "Add Action", (_, _) => AddSequenceItem("action"), 102);
@@ -616,23 +632,40 @@ namespace Lazy_App_Codex_Core
 
         private Control BuildRunPlanEditor()
         {
-            var panel = new TableLayoutPanel { Name = "runPlanEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false };
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+            var panel = new TableLayoutPanel
+            {
+                Name = "runPlanEditor", Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Visible = false,
+                MinimumSize = new Size(0, RunPlanInfoPanelHeight + 44 + 166 + 26)
+            };
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, RunPlanInfoPanelHeight));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
 
-            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, Padding = new Padding(0, 4, 0, 4) };
+            var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 6, Margin = Padding.Empty, Padding = new Padding(0, 4, 0, 4) };
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
             info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             info.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            info.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             AddTextField(info, "Name", _runPlanNameBox, 0);
             _runPlanTagBox.DropDownStyle = ComboBoxStyle.DropDownList;
             info.Controls.Add(Label("Tag"), 1, 0);
             info.Controls.Add(_runPlanTagBox, 1, 1);
             info.Controls.Add(CreateHelpButton("Run Plans execute existing Scripts and Sequences in this exact item order. Item repeat counts override the target duration for that item only."), 2, 0);
+            _runPlanDefaultOffsetEnabledBox.Text = "Enable Default Offset";
+            _runPlanDefaultOffsetEnabledBox.AutoSize = true;
+            _runPlanDefaultOffsetEnabledBox.Dock = DockStyle.Fill;
+            _runPlanDefaultOffsetEnabledBox.Margin = new Padding(0, 4, 4, 2);
+            _runPlanDefaultOffsetEnabledBox.CheckedChanged += (_, _) => _runPlanDefaultOffsetBox.Enabled = _runPlanDefaultOffsetEnabledBox.Checked;
+            _runPlanDefaultOffsetBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            _runPlanDefaultOffsetBox.Items.AddRange(OffsetOptions.Cast<object>().ToArray());
+            info.Controls.Add(_runPlanDefaultOffsetEnabledBox, 0, 2);
+            info.Controls.Add(Label("Default Offset"), 1, 2);
+            info.Controls.Add(_runPlanDefaultOffsetBox, 1, 3);
+            AddRemarkField(info, _runPlanRemarkBox, 4);
 
             var itemTools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = false, Padding = new Padding(0, 2, 0, 2) };
             ConfigureButton(_addRunPlanScriptButton, "Add Script", (_, _) => AddRunPlanItem("script"), 100);
@@ -917,6 +950,7 @@ namespace Lazy_App_Codex_Core
             else if (_selectedScript != null)
             {
                 _scriptNameBox.Text = _selectedScript.Name;
+                _scriptRemarkBox.Text = _selectedScript.Remark;
                 _loopBox.Value = ClampNumeric(_selectedScript.Duration);
                 _intervalMinBox.Value = ClampNumeric(_selectedScript.Interval_Min);
                 _intervalMaxBox.Value = ClampNumeric(_selectedScript.Interval_Max);
@@ -932,6 +966,7 @@ namespace Lazy_App_Codex_Core
             else if (_selectedSequence != null)
             {
                 _sequenceNameBox.Text = _selectedSequence.Name;
+                _sequenceRemarkBox.Text = _selectedSequence.Remark;
                 _sequenceLoopBox.Value = ClampNumeric(_selectedSequence.Duration);
                 _sequenceIntervalMinBox.Value = ClampNumeric(_selectedSequence.Interval_Min);
                 _sequenceIntervalMaxBox.Value = ClampNumeric(_selectedSequence.Interval_Max);
@@ -946,14 +981,18 @@ namespace Lazy_App_Codex_Core
             else if (_selectedRunPlan != null)
             {
                 _runPlanNameBox.Text = _selectedRunPlan.Name;
+                _runPlanRemarkBox.Text = _selectedRunPlan.Remark;
                 RefreshTagCombo(_runPlanTagBox, _selectedRunPlan.Tag);
+                _runPlanDefaultOffsetEnabledBox.Checked = _selectedRunPlan.DefaultOffsetEnabled;
+                _runPlanDefaultOffsetBox.Enabled = _runPlanDefaultOffsetEnabledBox.Checked;
+                SelectOffsetValue(_runPlanDefaultOffsetBox, _selectedRunPlan.DefaultOffset);
                 RefreshRunPlanGrid();
             }
 
             _dirty = false;
             _loading = false;
             SetCurrentEditorAvailability();
-            SetStatus("Ready.");
+            SetStatus(_targetDetailsDirty ? "Modified." : "Ready.");
         }
 
         private void SetCurrentEditorAvailability()
@@ -990,6 +1029,9 @@ namespace Lazy_App_Codex_Core
             _scriptNameBox.Clear();
             _sequenceNameBox.Clear();
             _runPlanNameBox.Clear();
+            _scriptRemarkBox.Clear();
+            _sequenceRemarkBox.Clear();
+            _runPlanRemarkBox.Clear();
             _offsetNameBox.Clear();
             _hotkeyStartBox.Clear();
             _hotkeyStopBox.Clear();
@@ -1024,6 +1066,9 @@ namespace Lazy_App_Codex_Core
             _sequenceTagBox.Items.Clear();
             _sequenceHiddenBox.Checked = false;
             _runPlanTagBox.Items.Clear();
+            _runPlanDefaultOffsetEnabledBox.Checked = false;
+            _runPlanDefaultOffsetBox.Enabled = false;
+            SelectOffsetValue(_runPlanDefaultOffsetBox, "0");
             _groupList.Items.Clear();
             _loadedGroupIndex = -1;
             _stepGrid.Rows.Clear();
@@ -1378,6 +1423,7 @@ namespace Lazy_App_Codex_Core
 
                 SaveCurrentGroupFromGrid();
                 _selectedScript.Name = name;
+                _selectedScript.Remark = _scriptRemarkBox.Text;
                 _selectedScript.Duration = (int)_loopBox.Value;
                 _selectedScript.Interval_Min = (int)_intervalMinBox.Value;
                 _selectedScript.Interval_Max = (int)_intervalMaxBox.Value;
@@ -1411,6 +1457,7 @@ namespace Lazy_App_Codex_Core
                 }
 
                 _selectedSequence.Name = name;
+                _selectedSequence.Remark = _sequenceRemarkBox.Text;
                 _selectedSequence.Duration = (int)_sequenceLoopBox.Value;
                 _selectedSequence.Interval_Min = (int)_sequenceIntervalMinBox.Value;
                 _selectedSequence.Interval_Max = (int)_sequenceIntervalMaxBox.Value;
@@ -1445,7 +1492,10 @@ namespace Lazy_App_Codex_Core
                 }
 
                 _selectedRunPlan.Name = name;
+                _selectedRunPlan.Remark = _runPlanRemarkBox.Text;
                 _selectedRunPlan.Tag = RequireSelectedTag(_runPlanTagBox);
+                _selectedRunPlan.DefaultOffsetEnabled = _runPlanDefaultOffsetEnabledBox.Checked;
+                _selectedRunPlan.DefaultOffset = OffsetDisplayOption.ReadValue(_runPlanDefaultOffsetBox.SelectedItem);
                 _selectedRunPlan.Items = ReadRunPlanItemsFromGrid();
                 return true;
             }
@@ -2655,6 +2705,7 @@ namespace Lazy_App_Codex_Core
             _deviceBaseline = CloneDevices(_workingDevices);
             _deletedDeviceKeys.Clear();
             _workingOffsets = ((JObject)_root["offset"]!).DeepClone() as JObject ?? new JObject();
+            _targetDetailsDirty = false;
             _dirty = false;
             RefreshEntryList();
             ConfigSaved = true;
@@ -3031,7 +3082,7 @@ namespace Lazy_App_Codex_Core
 
         private bool ConfirmCloseSaveDiscardCancel()
         {
-            if (!_dirty)
+            if (!_dirty && !_targetDetailsDirty)
             {
                 return true;
             }
@@ -3078,6 +3129,24 @@ namespace Lazy_App_Codex_Core
                         textBox.TextChanged += (_, _) =>
                         {
                             if (textBox == _deviceNameBox && !_loading) _deviceNameEdited = true;
+                            if (!_loading)
+                            {
+                                if (textBox == _scriptRemarkBox && _selectedScript != null)
+                                {
+                                    _selectedScript.Remark = textBox.Text;
+                                    _targetDetailsDirty = true;
+                                }
+                                if (textBox == _sequenceRemarkBox && _selectedSequence != null)
+                                {
+                                    _selectedSequence.Remark = textBox.Text;
+                                    _targetDetailsDirty = true;
+                                }
+                                if (textBox == _runPlanRemarkBox && _selectedRunPlan != null)
+                                {
+                                    _selectedRunPlan.Remark = textBox.Text;
+                                    _targetDetailsDirty = true;
+                                }
+                            }
                             MarkDirty();
                         };
                         break;
@@ -3112,6 +3181,20 @@ namespace Lazy_App_Codex_Core
             _sequenceTagBox.SelectedIndexChanged += (_, _) => UpdateSelectedSequenceSettings();
             _sequenceHiddenBox.CheckedChanged += (_, _) => UpdateSelectedSequenceSettings();
             _runPlanNameBox.TextChanged += (_, _) => UpdateSelectedListName(_runPlanNameBox.Text.Trim());
+            _runPlanDefaultOffsetEnabledBox.CheckedChanged += (_, _) => UpdateSelectedRunPlanDefaults();
+            _runPlanDefaultOffsetBox.SelectedIndexChanged += (_, _) => UpdateSelectedRunPlanDefaults();
+        }
+
+        private void UpdateSelectedRunPlanDefaults()
+        {
+            if (_loading || _selectedRunPlan == null)
+            {
+                return;
+            }
+
+            _selectedRunPlan.DefaultOffsetEnabled = _runPlanDefaultOffsetEnabledBox.Checked;
+            _selectedRunPlan.DefaultOffset = OffsetDisplayOption.ReadValue(_runPlanDefaultOffsetBox.SelectedItem);
+            _targetDetailsDirty = true;
         }
 
         private void UpdateSelectedSequenceSettings()
@@ -3253,6 +3336,7 @@ namespace Lazy_App_Codex_Core
                 Id = source.Id,
                 Name = source.Name,
                 Tag = source.Tag,
+                Remark = source.Remark,
                 Hidden = source.Hidden,
                 Order = source.Order,
                 Duration = source.Duration,
@@ -3277,6 +3361,7 @@ namespace Lazy_App_Codex_Core
                 Id = source.Id,
                 Name = source.Name,
                 Tag = source.Tag,
+                Remark = source.Remark,
                 Hidden = source.Hidden,
                 Order = source.Order,
                 Duration = source.Duration,
@@ -3304,7 +3389,10 @@ namespace Lazy_App_Codex_Core
                 Id = source.Id,
                 Name = source.Name,
                 Tag = source.Tag,
+                Remark = source.Remark,
                 Order = source.Order,
+                DefaultOffsetEnabled = source.DefaultOffsetEnabled,
+                DefaultOffset = source.DefaultOffset,
                 Items = source.Items.Select(item => new RunPlanItem
                 {
                     Type = item.Type,
@@ -3487,6 +3575,25 @@ namespace Lazy_App_Codex_Core
             input.Dock = DockStyle.Fill;
             layout.Controls.Add(Label(label), column, 0);
             layout.Controls.Add(input, column, 1);
+        }
+
+        private static void AddRemarkField(TableLayoutPanel layout, TextBox input, int labelRow)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkLabelRowHeight));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkTextRowHeight));
+            var label = Label("Remark");
+            layout.Controls.Add(label, 0, labelRow);
+            layout.SetColumnSpan(label, layout.ColumnCount);
+            input.Dock = DockStyle.Fill;
+            input.Multiline = true;
+            input.WordWrap = true;
+            input.ScrollBars = ScrollBars.Vertical;
+            input.AcceptsReturn = true;
+            input.MaxLength = 0;
+            input.AccessibleName = "Remark";
+            input.Margin = new Padding(3, 0, 3, 4);
+            layout.Controls.Add(input, 0, labelRow + 1);
+            layout.SetColumnSpan(input, layout.ColumnCount);
         }
 
         private static void AddReadOnlyTextField(TableLayoutPanel layout, string label, TextBox input, int column, int row)

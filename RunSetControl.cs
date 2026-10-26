@@ -11,6 +11,7 @@ namespace Lazy_App_Codex_Core
         private const int TimelineChipCount = 6;
 
         private readonly FlowLayoutPanel _timelinePanel = new();
+        private readonly TableLayoutPanel _timelineRemarkLayout = new();
         private readonly CountdownProgressControl _countdownBar = new();
         private readonly Label[] _timelineLabels = CreateTimelineLabels();
         private Bitmap? _restoreIcon;
@@ -34,6 +35,7 @@ namespace Lazy_App_Codex_Core
         public ComboBox DeviceBox => ddlDevice;
         public Button RunButton => btnRun;
         public Button ResetButton => btnReset;
+        public RemarkTextControl RemarkDisplay => remarkText;
         public Button? ConfigButton => ShowSharedButtons ? btnConfig : null;
         public Button? WirelessAdbButton => ShowSharedButtons ? btnWirelessAdb : null;
         public Panel? StatusDot => ShowStatusDots ? statusDot : null;
@@ -92,12 +94,12 @@ namespace Lazy_App_Codex_Core
             btnReset.Size = new Size(34, 32);
             btnReset.Text = "";
             btnReset.Padding = Padding.Empty;
-            btnReset.AccessibleName = "Reset count and offset";
+            btnReset.AccessibleName = "Reset cycle count";
             btnReset.Enabled = false;
             _restoreIcon = RestoreIcon.Create();
             btnReset.Image = _restoreIcon;
             btnReset.ImageAlign = ContentAlignment.MiddleCenter;
-            controlToolTip.SetToolTip(btnReset, "Reset count and offset");
+            controlToolTip.SetToolTip(btnReset, "Reset cycle count");
             ConfigureRemainingControls();
             ConfigureCombo(ddlOffset, ActionRowHeight * 2, 20, 28, new Padding(0, 3, 0, 3));
             ConfigureCombo(ddlTagFilter, ActionRowHeight * 3, 20, 28, new Padding(0, 3, 0, 3));
@@ -124,9 +126,34 @@ namespace Lazy_App_Codex_Core
             contentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
             contentLayout.Controls.Add(selectorLayout, 0, 0);
             contentLayout.Controls.Add(liveStatusLayout, 0, 1);
-            contentLayout.Controls.Add(_timelinePanel, 0, 2);
+            _timelineRemarkLayout.Name = "timelineRemarkLayout";
+            _timelineRemarkLayout.Dock = DockStyle.Fill;
+            _timelineRemarkLayout.Margin = Padding.Empty;
+            _timelineRemarkLayout.ColumnCount = 1;
+            _timelineRemarkLayout.ColumnStyles.Clear();
+            _timelineRemarkLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _timelineRemarkLayout.RowCount = 2;
+            _timelineRemarkLayout.RowStyles.Clear();
+            _timelineRemarkLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _timelineRemarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
+            _timelineRemarkLayout.Controls.Clear();
+            _timelineRemarkLayout.Controls.Add(_timelinePanel, 0, 0);
+            _timelineRemarkLayout.Controls.Add(remarkText, 0, 1);
+            remarkText.Dock = DockStyle.Fill;
+            remarkText.Margin = new Padding(0, 0, 0, 4);
+            remarkText.Font = Font;
+            remarkText.FontChanged += (_, _) => LayoutRemark();
+            remarkText.TextChanged += (_, _) => controlToolTip.SetToolTip(remarkText, remarkText.Text);
+            LayoutRemark();
+            contentLayout.Controls.Add(_timelineRemarkLayout, 0, 2);
             contentLayout.Controls.Add(_countdownBar, 0, 3);
             contentLayout.ResumeLayout(false);
+        }
+
+        private void LayoutRemark()
+        {
+            // Two plain text lines and bottom separation; no textbox border or scrollbar.
+            _timelineRemarkLayout.RowStyles[1].Height = remarkText.Font.Height * 2 + 4;
         }
 
         private void ConfigureLiveStatusLayout()

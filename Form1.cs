@@ -147,6 +147,7 @@ namespace Lazy_App_Codex_Core
                 set1Control.TimelineLabels)
             {
                 ContentPanel = set1Control,
+                RemarkDisplay = set1Control.RemarkDisplay,
                 ActionPanel = set1Control
             };
 
@@ -173,6 +174,7 @@ namespace Lazy_App_Codex_Core
                 set2Control.TimelineLabels)
             {
                 ContentPanel = set2Control,
+                RemarkDisplay = set2Control.RemarkDisplay,
                 ActionPanel = set2Control
             };
 
@@ -204,7 +206,6 @@ namespace Lazy_App_Codex_Core
                 if (!slot.IsRunning && !slot.RebuildingTargets && !_refreshingConfig && !_closing &&
                     slot.ScriptBox.SelectedItem is RunTarget)
                 {
-                    ApplySelectedDefaultOffset(slot);
                     RefreshRemainingCount(slot, reset: true);
                 }
             };
@@ -218,7 +219,16 @@ namespace Lazy_App_Codex_Core
             }
 
             ApplySelectedDefaultOffset(slot);
+            UpdateSelectedRemark(slot);
             RefreshRemainingCount(slot);
+        }
+
+        private static void UpdateSelectedRemark(RunSlot slot)
+        {
+            if (!slot.IsRunning)
+            {
+                slot.RemarkDisplay.Text = (slot.ScriptBox.SelectedItem as RunTarget)?.Remark ?? "";
+            }
         }
 
         protected override void WndProc(ref Message m)
@@ -402,11 +412,11 @@ namespace Lazy_App_Codex_Core
             {
                 var targets = new List<RunTarget>();
                 targets.AddRange(_library.Scripts.Where(s => !s.Hidden && MatchesSelectedTag(s.Tag, selectedTag))
-                    .Select(s => new RunTarget("script", s.Id, s.Name, s.Tag)));
+                    .Select(s => new RunTarget("script", s.Id, s.Name, s.Tag, s.Remark)));
                 targets.AddRange(_library.Sequences.Where(s => !s.Hidden && MatchesSelectedTag(s.Tag, selectedTag))
-                    .Select(s => new RunTarget("sequence", s.Id, s.Name, s.Tag)));
+                    .Select(s => new RunTarget("sequence", s.Id, s.Name, s.Tag, s.Remark)));
                 targets.AddRange(_library.RunPlans.Where(p => MatchesSelectedTag(p.Tag, selectedTag))
-                    .Select(p => new RunTarget("plan", p.Id, p.Name, p.Tag)));
+                    .Select(p => new RunTarget("plan", p.Id, p.Name, p.Tag, p.Remark)));
                 slot.ScriptBox.ClearSelection();
                 slot.ScriptBox.SetItems(targets.Cast<object>());
                 if (!string.IsNullOrEmpty(selectedKey))
@@ -422,11 +432,13 @@ namespace Lazy_App_Codex_Core
             if (slot.ScriptBox.SelectedItem is RunTarget restored &&
                 (!preserveSameTargetOffset || GetRunTargetKey(restored) != selectedKey) &&
                 (restored.Kind == "script" && _library.FindScriptById(restored.Id)?.DefaultOffsetEnabled == true ||
-                 restored.Kind == "sequence" && _library.FindSequenceById(restored.Id)?.DefaultOffsetEnabled == true))
+                 restored.Kind == "sequence" && _library.FindSequenceById(restored.Id)?.DefaultOffsetEnabled == true ||
+                 restored.Kind == "plan" && _library.FindRunPlanById(restored.Id)?.DefaultOffsetEnabled == true))
             {
                 ApplySelectedDefaultOffset(slot);
             }
 
+            UpdateSelectedRemark(slot);
             RefreshRemainingCount(slot);
         }
 
@@ -835,23 +847,17 @@ namespace Lazy_App_Codex_Core
 
         private (int value, string axis) GetRunPlanScriptOffset(RunSlot slot, ScriptModel script)
         {
-            return script.DefaultOffsetEnabled
-                ? ResolveOffset(script.DefaultOffset, script.Name)
-                : GetSelectedOffset(slot, script.Name);
+            return GetSelectedOffset(slot, script.Name);
         }
 
         private (int value, string axis) GetRunPlanSequenceOffset(RunSlot slot, SequenceModel sequence)
         {
-            return sequence.DefaultOffsetEnabled
-                ? ResolveOffset(sequence.DefaultOffset, sequence.Name)
-                : GetSelectedOffset(slot, sequence.Name);
+            return GetSelectedOffset(slot, sequence.Name);
         }
 
         private (int value, string axis) GetRunPlanSequenceScriptOffset(RunSlot slot, SequenceModel sequence, ScriptModel script)
         {
-            return sequence.DefaultOffsetEnabled
-                ? ResolveOffset(sequence.DefaultOffset, script.Name)
-                : GetSelectedOffset(slot, script.Name);
+            return GetSelectedOffset(slot, script.Name);
         }
 
         private (int value, string axis) ResolveOffset(string raw, string scriptName)
@@ -1483,6 +1489,12 @@ namespace Lazy_App_Codex_Core
                 var sequence = _library.FindSequenceById(target.Id);
                 enabled = sequence?.DefaultOffsetEnabled == true;
                 defaultOffset = sequence?.DefaultOffset ?? "0";
+            }
+            else if (target.Kind == "plan")
+            {
+                var plan = _library.FindRunPlanById(target.Id);
+                enabled = plan?.DefaultOffsetEnabled == true;
+                defaultOffset = plan?.DefaultOffset ?? "0";
             }
             else
             {
@@ -2386,6 +2398,7 @@ namespace Lazy_App_Codex_Core
             public CountdownProgressControl CountdownBar { get; }
             public IReadOnlyList<Label> TimelineLabels { get; }
             public Control ContentPanel { get; init; } = null!;
+            public RemarkTextControl RemarkDisplay { get; init; } = null!;
             public Control ActionPanel { get; init; } = null!;
             public CancellationTokenSource? RunCts { get; set; }
             public Task? RunTask { get; set; }
@@ -2403,7 +2416,7 @@ namespace Lazy_App_Codex_Core
             public LiveRunStatus LiveStatus { get; set; } = new LiveRunStatus { Idle = true };
         }
 
-        private sealed record RunTarget(string Kind, string Id, string Name, string Tag)
+        private sealed record RunTarget(string Kind, string Id, string Name, string Tag, string Remark)
         {
             public override string ToString()
             {

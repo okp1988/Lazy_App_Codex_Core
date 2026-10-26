@@ -278,6 +278,7 @@ namespace Lazy_App_Codex_Core
                     script["tag"] = "";
                 }
                 script["hide"] ??= false;
+                script["remark"] ??= "";
                 script["emin"] ??= 0;
                 script["defaultOffsetEnabled"] ??= false;
                 script["defaultOffset"] ??= "0";
@@ -306,6 +307,7 @@ namespace Lazy_App_Codex_Core
                     sequence["tag"] = "";
                 }
                 sequence["hide"] ??= false;
+                sequence["remark"] ??= "";
                 sequence["d"] ??= 1;
                 sequence["imin"] ??= 0;
                 sequence["imax"] ??= 0;
@@ -327,6 +329,9 @@ namespace Lazy_App_Codex_Core
                 runPlan["id"] ??= NewId("plan");
                 runPlan["name"] ??= property.Name;
                 runPlan["order"] ??= order++;
+                runPlan["remark"] ??= "";
+                runPlan["defaultOffsetEnabled"] ??= ReadBool(runPlan, false, "enableDefaultOffset");
+                runPlan["defaultOffset"] ??= "0";
                 if (runPlan["tag"] == null || (runPlan["tag"]!.ToString().Length > 0 && !tagSet.Contains(runPlan["tag"]!.ToString())))
                 {
                     runPlan["tag"] = "";
@@ -417,6 +422,7 @@ namespace Lazy_App_Codex_Core
                 Id = ReadString(scriptObj, null, NewId("scr"), "id"),
                 Name = ReadString(scriptObj, null, key, "name"),
                 Tag = ReadString(scriptObj, null, "", "tag"),
+                Remark = scriptObj["remark"]?.ToString() ?? "",
                 Hidden = ReadBool(scriptObj, false, "hide", "hidden"),
                 Order = ReadInt(scriptObj, null, fallbackOrder, -1, "order"),
                 Duration = ReadInt(scriptObj, scriptObj["defaults"] as JObject, 0, -1, "duration", "d"),
@@ -472,6 +478,7 @@ namespace Lazy_App_Codex_Core
                 Id = ReadString(sequenceObj, null, NewId("seq"), "id"),
                 Name = ReadString(sequenceObj, null, key, "name"),
                 Tag = ReadString(sequenceObj, null, "", "tag"),
+                Remark = sequenceObj["remark"]?.ToString() ?? "",
                 Hidden = ReadBool(sequenceObj, false, "hide", "hidden"),
                 Order = ReadInt(sequenceObj, null, fallbackOrder, -1, "order"),
                 Duration = ReadInt(sequenceObj, null, 1, -1, "duration", "d"),
@@ -510,7 +517,10 @@ namespace Lazy_App_Codex_Core
                 Id = ReadString(runPlanObj, null, NewId("plan"), "id"),
                 Name = ReadString(runPlanObj, null, key, "name"),
                 Tag = ReadString(runPlanObj, null, "", "tag"),
-                Order = ReadInt(runPlanObj, null, fallbackOrder, -1, "order")
+                Remark = runPlanObj["remark"]?.ToString() ?? "",
+                Order = ReadInt(runPlanObj, null, fallbackOrder, -1, "order"),
+                DefaultOffsetEnabled = ReadBool(runPlanObj, false, "defaultOffsetEnabled", "enableDefaultOffset"),
+                DefaultOffset = ReadString(runPlanObj, null, "0", "defaultOffset")
             };
 
             if (runPlanObj["items"] is JArray items)
@@ -554,6 +564,7 @@ namespace Lazy_App_Codex_Core
                 ["id"] = string.IsNullOrWhiteSpace(script.Id) ? NewId("scr") : script.Id,
                 ["name"] = script.Name,
                 ["tag"] = script.Tag,
+                ["remark"] = script.Remark,
                 ["hide"] = script.Hidden,
                 ["order"] = script.Order,
                 ["d"] = script.Duration,
@@ -573,6 +584,7 @@ namespace Lazy_App_Codex_Core
                 ["id"] = string.IsNullOrWhiteSpace(sequence.Id) ? NewId("seq") : sequence.Id,
                 ["name"] = sequence.Name,
                 ["tag"] = sequence.Tag,
+                ["remark"] = sequence.Remark,
                 ["hide"] = sequence.Hidden,
                 ["order"] = sequence.Order,
                 ["d"] = sequence.Duration,
@@ -611,7 +623,10 @@ namespace Lazy_App_Codex_Core
                 ["id"] = string.IsNullOrWhiteSpace(runPlan.Id) ? NewId("plan") : runPlan.Id,
                 ["name"] = runPlan.Name,
                 ["tag"] = runPlan.Tag,
+                ["remark"] = runPlan.Remark,
                 ["order"] = runPlan.Order,
+                ["defaultOffsetEnabled"] = runPlan.DefaultOffsetEnabled,
+                ["defaultOffset"] = string.IsNullOrWhiteSpace(runPlan.DefaultOffset) ? "0" : runPlan.DefaultOffset,
                 ["items"] = new JArray(runPlan.Items.Select(BuildRunPlanItemJson))
             };
         }

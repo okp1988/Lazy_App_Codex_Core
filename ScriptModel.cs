@@ -27,6 +27,7 @@ namespace Lazy_App_Codex_Core
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Tag { get; set; } = "";
+        public string Remark { get; set; } = "";
         public bool Hidden { get; set; }
         public int Order { get; set; }
         public int Duration { get; set; }        // 0 = unlimited, >0 = loop count
@@ -63,6 +64,7 @@ namespace Lazy_App_Codex_Core
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Tag { get; set; } = "";
+        public string Remark { get; set; } = "";
         public bool Hidden { get; set; }
         public int Order { get; set; }
         public int Duration { get; set; }
@@ -89,7 +91,10 @@ namespace Lazy_App_Codex_Core
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Tag { get; set; } = "";
+        public string Remark { get; set; } = "";
         public int Order { get; set; }
+        public bool DefaultOffsetEnabled { get; set; }
+        public string DefaultOffset { get; set; } = "0";
         public List<RunPlanItem> Items { get; set; } = new();
     }
 

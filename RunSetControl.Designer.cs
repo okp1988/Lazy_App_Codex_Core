@@ -59,6 +59,7 @@ namespace Lazy_App_Codex_Core
             lblRemaining = new Label();
             numRemaining = new CenteredNumericUpDown();
             chkInfinite = new CheckBox();
+            remarkText = new RemarkTextControl();
             controlToolTip = new ToolTip(components);
             ddlOffset = new ComboBox();
             ddlTagFilter = new ComboBox();
@@ -443,7 +444,7 @@ namespace Lazy_App_Codex_Core
             //
             // btnReset
             //
-            btnReset.AccessibleName = "Reset count and offset";
+            btnReset.AccessibleName = "Reset cycle count";
             btnReset.Dock = DockStyle.Fill;
             btnReset.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnReset.Margin = new Padding(0, 1, 0, 1);
@@ -506,6 +507,14 @@ namespace Lazy_App_Codex_Core
             chkInfinite.TabIndex = 1;
             chkInfinite.Text = "∞";
             chkInfinite.UseVisualStyleBackColor = true;
+            //
+            // remarkText
+            //
+            remarkText.AccessibleName = "Selected target remark";
+            remarkText.Name = "remarkText";
+            remarkText.Size = new Size(398, 30);
+            remarkText.TabIndex = 2;
+            remarkText.TabStop = false;
             // 
             // ddlOffset
             // 
@@ -621,6 +630,7 @@ namespace Lazy_App_Codex_Core
         private Label lblRemaining;
         private CenteredNumericUpDown numRemaining;
         private CheckBox chkInfinite;
+        private RemarkTextControl remarkText;
         private ToolTip controlToolTip;
         private ComboBox ddlOffset;
         private ComboBox ddlTagFilter;
